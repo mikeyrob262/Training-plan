@@ -50397,22 +50397,101 @@ function showWeatherHistory(){
     body.appendChild(resultsList);
     scr.appendChild(body);
 
-    // All GPS rides as searchable routes
+    // All GPS rides as searchable routes.
+    //
+    // TOMBSTONES ARE NOT ROUTES. st.rides is mostly deleted records (3,774 raw against 826 live),
+    // and this filter never excluded them: measured on the real library, **1,106 of the 1,217
+    // "saved routes" it offered were deleted rides**. It is also the reason the one route that
+    // looked like it worked was a 2020 tombstone ("Pinellas Trail Run", deleted, still listed).
+    //
+    // GPS LIVES IN TWO FIELDS AND THIS READ ONLY ONE. ensureRideStreams populates r.lats/r.lons;
+    // only legacy records carry inline gpsLats. Reading gpsLats alone saw 313 of the 566 live
+    // rides that actually have a resident track — including Tampa Bay rides sitting on 1,531
+    // points of r.lats and zero gpsLats. renderDatePicker below already reads
+    // route.lats||route.gpsLats, so it could always draw these; only the search could not see them.
+    //
+    // Sport comes from rideSport_ because ~232 legacy imports carry only .type, not .sportType.
     var allRoutes=(st.rides||[]).filter(function(r){
-      var s=r.sportType||r.type||'';
-      return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5;
+      if(!r || r.deleted) return false;
+      var s=(typeof rideSport_==='function')?rideSport_(r):(r.sportType||r.type||'');
+      if(/virtual|weight|strength|walk/i.test(s)) return false;
+      return (r.gpsLats&&r.gpsLats.length>5)||(r.lats&&r.lats.length>5);
     }).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+
+    // ── PLACE SEARCH ─────────────────────────────────────────────────────────────────────────
+    // A text match can never answer "tarpon springs". Measured on the real library: 33 rides sit
+    // inside the Pinellas box and EVERY ONE is auto-named "Morning Ride"/"Lunch Ride"/"Afternoon
+    // Ride", because Strava names them and nothing renames them. There is no city field on a ride
+    // either (checked across the whole key union) — the route's own GPS is the only thing that
+    // knows where it went. So a place query is answered by geocoding the words once and asking
+    // which tracks pass near the answer.
+    //
+    // Name matching stays INSTANT and unchanged. This runs only when the text match finds nothing,
+    // debounced, and every query is cached: Nominatim asks for at most one request per second and
+    // firing on each keystroke would be abusive.
+    var PLACE_RADIUS_MI=10, _geoCache={}, _geoSeq=0, _placeTimer=null;
+    function milesBetween_(la1,lo1,la2,lo2){
+      var R=3958.8, p=Math.PI/180;
+      var dLa=(la2-la1)*p, dLo=(lo2-lo1)*p;
+      var a=Math.sin(dLa/2)*Math.sin(dLa/2)
+           +Math.cos(la1*p)*Math.cos(la2*p)*Math.sin(dLo/2)*Math.sin(dLo/2);
+      return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));
+    }
+    // Closest approach of a route to a point. The track is SAMPLED rather than walked in full: a
+    // 1,500-fix ride answers this the same way from ~60 samples, and this runs over the whole
+    // library on one keystroke. Reads lats first, then gpsLats — the same pair renderDatePicker uses.
+    function routeNearMi_(r, la, lo){
+      var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
+      if(!lats||!lons||!lats.length||!lons.length) return Infinity;
+      var n=Math.min(lats.length,lons.length), step=Math.max(1,Math.floor(n/60)), best=Infinity;
+      for(var i=0;i<n;i+=step){
+        var la2=lats[i], lo2=lons[i];
+        if(la2==null||lo2==null) continue;
+        var d=milesBetween_(la2,lo2,la,lo);
+        if(d<best) best=d;
+      }
+      return best;
+    }
+    function placeSearch(q){
+      var seq=++_geoSeq;
+      var done=function(pt){
+        if(seq!==_geoSeq) return;                       // a later keystroke already won this race
+        if(!pt){ renderResults([], {placeTried:q}); return; }
+        var near=allRoutes.map(function(r){ return {r:r, mi:routeNearMi_(r, pt.lat, pt.lon)}; })
+          .filter(function(x){ return x.mi<=PLACE_RADIUS_MI; })
+          .sort(function(a,b){ return a.mi-b.mi; });
+        if(!near.length){ renderResults([], {placeTried:q, place:pt.label}); return; }
+        renderResults(near.map(function(x){ return x.r; }), {place:pt.label, near:near});
+      };
+      if(Object.prototype.hasOwnProperty.call(_geoCache,q)){ done(_geoCache[q]); return; }
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q),
+        {headers:{'Accept-Language':'en'}})
+      .then(function(res){ return res.json(); })
+      .then(function(j){
+        var hit=(j&&j.length)?{lat:parseFloat(j[0].lat), lon:parseFloat(j[0].lon),
+                               label:String(j[0].display_name||q).split(',').slice(0,2).join(', ')}:null;
+        _geoCache[q]=hit; done(hit);
+      })
+      .catch(function(){ _geoCache[q]=null; done(null); });
+    }
 
     var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56'};
     var rideIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
     var runIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
 
-    function renderResults(rides){
+    function renderResults(rides, opts){
+      opts=opts||{};
       resultsList.innerHTML='';
       if(!rides.length){
         var q2=inp.value.trim();
+        // Say which of the two searches actually ran, so an empty result is a fact and not a shrug.
+        var miss=opts.place
+          ? ('No routes within '+PLACE_RADIUS_MI+' miles of '+opts.place+'.')
+          : (opts.placeTried
+              ? ('No saved routes matching "'+q2+'", and that is not a place we could find either.')
+              : ('No saved routes matching "'+q2+'" with GPS data.'));
         resultsList.innerHTML='<div style="padding:16px 0;text-align:center">'
-          +'<div style="color:var(--t3);font-size:13px;margin-bottom:12px">No saved routes matching "'+q2+'" with GPS data.</div>'
+          +'<div style="color:var(--t3);font-size:13px;margin-bottom:12px">'+miss+'</div>'
           +'<div style="background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:left" id="geocode-btn">'
           +'<div style="width:34px;height:34px;border-radius:8px;background:rgba(55,138,221,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
           +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>'
@@ -50440,8 +50519,15 @@ function showWeatherHistory(){
       }
       var lbl=document.createElement('div');
       lbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px';
-      lbl.textContent=rides.length+' route'+(rides.length!==1?'s':'')+(inp.value?' matching "'+inp.value+'"':'');
+      lbl.textContent=rides.length+' route'+(rides.length!==1?'s':'')
+        +(opts.place ? (' near '+opts.place) : (inp.value?' matching "'+inp.value+'"':''));
       resultsList.appendChild(lbl);
+
+      // How close each route came, when this was a place search — otherwise "near Tarpon Springs"
+      // is a claim the row does not back up. Held in a Map keyed on the record: these ARE st.rides
+      // objects and stamping a scratch field on them would be a write into the ride library.
+      var miBy=(opts.near && typeof Map==='function')
+        ? new Map(opts.near.map(function(x){ return [x.r, x.mi]; })) : null;
 
       rides.forEach(function(r){
         var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
@@ -50452,7 +50538,8 @@ function showWeatherHistory(){
         card.innerHTML='<div style="width:34px;height:34px;border-radius:8px;background:'+c+';display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+actName_(r)+'</div>'
-          +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+r.date+(r.distance?' · '+r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+'</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+r.date+(r.distance?' · '+r.distance+'mi':'')+(r.duration?' · '+r.duration:'')
+          +(miBy&&miBy.has(r)?(' · '+(miBy.get(r)<0.6?'starts here':(Math.round(miBy.get(r)*10)/10)+' mi away')):'')+'</div>'
           +'</div>'
           +'<div style="color:var(--t3);font-size:16px">›</div>';
         card.onclick=function(){renderDatePicker(r);};
@@ -50465,13 +50552,23 @@ function showWeatherHistory(){
 
     inp.oninput=function(){
       var q=inp.value.trim().toLowerCase();
+      if(_placeTimer){ clearTimeout(_placeTimer); _placeTimer=null; }
+      _geoSeq++;                                   // invalidate any lookup still in flight
       if(!q){renderResults(allRoutes.slice(0,20));return;}
+      // actName_ as well as the raw name: the card DISPLAYS actName_, and 54 records resolve to a
+      // different string there, so a name-only match could not find what the row was showing.
       var filtered=allRoutes.filter(function(r){
-        return (r.name||'').toLowerCase().includes(q)
+        return (typeof actName_==='function'?actName_(r):(r.name||'')).toLowerCase().includes(q)
+          || (r.name||'').toLowerCase().includes(q)
           || rideSport_(r).toLowerCase().includes(q)
           || (r.date||'').includes(q);
       });
-      renderResults(filtered);
+      if(filtered.length){ renderResults(filtered); return; }
+      // Nothing in the text. Fall through to the place lookup rather than straight to the empty
+      // state — "tarpon springs" matches no ride name and is still a perfectly good question.
+      resultsList.innerHTML='<div style="padding:16px 0;text-align:center;color:var(--t3);font-size:13px">'
+        +'Looking up &ldquo;'+q.replace(/[<>&]/g,'')+'&rdquo;&hellip;</div>';
+      _placeTimer=setTimeout(function(){ placeSearch(q); }, 600);
     };
     setTimeout(function(){inp.focus();},200);
   }

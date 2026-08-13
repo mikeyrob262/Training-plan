@@ -755,6 +755,20 @@ try {
     fail('a personal-best row links to the wrong run, or to nothing (see above).');
   }
 
+  // STEP 45 - Ride Planner route search. Three stacked defects, none of which raised an error:
+  //           tombstones counted as saved routes (1,106 of 1,217), GPS read from only one of the
+  //           two fields it lives in, and a name-only match asked to answer a place question when
+  //           every ride in the area is auto-named "Morning Ride".
+  console.log(`${D}. checking Ride Planner route search...${X}`);
+  try {
+    const so = execSync('node scripts/route-search-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('route search offers deleted rides, or cannot find real ones (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
