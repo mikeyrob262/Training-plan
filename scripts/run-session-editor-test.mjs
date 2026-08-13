@@ -130,19 +130,24 @@ console.log('\n' + Y + '=== the 173 stale sessions are repaired, and only those 
     ] },
     '2026-11-11': { sessions: [
       { intent: 'run10k', type: 'ride', name: '10k-pace Run' },
-      { intent: 'easyRun', type: 'ride', name: 'Easy Run', _edited: { type: 1 } },   // set by hand
+      // swap:true is the ONLY thing that means the athlete chose this. The _edited mask was tried
+      // as the gate and it skipped a real defect: it carries 'type' on any session an ordinary
+      // save touched, so it records that a field was WRITTEN, never that it was chosen.
+      { intent: 'easyRun', type: 'ride', name: 'Easy Run', swap: true },              // athlete's choice
+      { intent: 'easyRun', type: 'ride', name: 'Easy Run', _edited: { type: 1 } },    // mere residue
       { intent: 'easyRun', type: 'ride', deleted: true },
       { intent: 'unknownIntent', type: 'ride' }
     ] }
   };
   const n = M.migrateSessionTypes_();
-  eq('two stale rows corrected', n, 2);
+  eq('three stale rows corrected', n, 3);
   eq('...the easy run is now a run', st.plan['2026-08-05'].sessions[0].type, 'run');
   eq('...so is the 10k session', st.plan['2026-11-11'].sessions[0].type, 'run');
   eq('a genuine ride is untouched', st.plan['2026-08-05'].sessions[1].type, 'ride');
-  eq('a hand-set type is left alone', st.plan['2026-11-11'].sessions[1].type, 'ride');
-  eq('a tombstone is left alone', st.plan['2026-11-11'].sessions[2].type, 'ride');
-  eq('an intent with no library entry is left alone', st.plan['2026-11-11'].sessions[3].type, 'ride');
+  eq('an explicitly SWAPPED session is left alone', st.plan['2026-11-11'].sessions[1].type, 'ride');
+  eq('...but a row carrying only _edited residue IS corrected', st.plan['2026-11-11'].sessions[2].type, 'run');
+  eq('a tombstone is left alone', st.plan['2026-11-11'].sessions[3].type, 'ride');
+  eq('an intent with no library entry is left alone', st.plan['2026-11-11'].sessions[4].type, 'ride');
   ok('the correction is stamped so it travels cross-device', st.plan['2026-08-05'].sessions[0].editedAt > 0);
   eq('re-running it is a no-op', M.migrateSessionTypes_(), 0);
   // Targets are deliberately NOT backfilled: sessions store identity and the prescription derives
