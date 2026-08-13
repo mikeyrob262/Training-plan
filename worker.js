@@ -24478,7 +24478,208 @@ function _dnaYearFill_(pts){
   return out;
 }
 function _dnaTrait_(name, headline, detail, deriv, col, spark, sparkNote){ return {name:name, headline:headline, detail:detail, deriv:deriv, col:col, locked:false, spark:spark||null, sparkNote:sparkNote||''}; }
-function _dnaLock_(name, unlock, col){ return {name:name, locked:true, unlock:unlock, col:col}; }
+// have/need are OPTIONAL and additive: a lock that knows how far along it is renders as progress
+// ("3 of 5 hard efforts") instead of as an apology. Locks that genuinely cannot count their own
+// progress — a temperature backfill that has never run — pass neither and render as they always did.
+function _dnaLock_(name, unlock, col, have, need){
+  var o={name:name, locked:true, unlock:unlock, col:col};
+  if(have!=null && need>0){ o.have=have; o.need=need; o.pct=Math.max(0,Math.min(1,have/need)); }
+  return o;
+}
+
+// ==================== DNA INSIGHTS — the signature mechanic ====================
+//
+// THE PAGE HAS TO ANSWER "WHO AM I", NOT REPEAT A DASHBOARD. The constraint that shapes all of this
+// is the athlete's own: "I don't want to come to this page and say I've already seen this."
+//
+// SO THE LIBRARY IS A TEMPLATE SYSTEM, NOT A LIST OF WRITTEN SENTENCES. The brief asks for roughly
+// 500 factual / 200 comparison / 100 prediction / 50 noticed / 30 milestone. Hand-writing ~880
+// strings would be unmaintainable and, worse, most of them would be claims looking for data. A
+// template BINDS to a fact source instead, so a dozen patterns crossed with every trait, era, power
+// axis, year pair and sport split produce hundreds of DISTINCT, individually-derived insights out
+// of facts that already exist. The count is an emergent property of real data, which is the only
+// way to reach that order of magnitude honestly.
+//
+// EVERY INSIGHT CARRIES ITS DERIVATION, same contract as every trait on this page. An insight that
+// cannot say how it was computed is not emitted.
+//
+// RULED OUT AND NOT REVISITED: day-of-week and month-of-year tendency claims (the Personal Heatmap
+// precedent), and anything keyed on per-ride temperature, sleep or HR drift — most of the library
+// carries none of those. Prediction only fires where a trend is genuinely fittable.
+var _DNA_SEEN_KEY='dnaSeen';
+function _dnaSeen_(){ try{ if(!st.dnaSeen || typeof st.dnaSeen!=='object') st.dnaSeen={}; return st.dnaSeen; }catch(e){ return {}; } }
+// A stable id per insight, so "never repeated" survives a reload and a device swap. Content-derived
+// rather than positional: reordering the pool must not resurface something already read.
+function _dnaInsightId_(kind, key){ return kind+':'+String(key).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60); }
+function _dnaIns_(kind, key, text, deriv, rel){
+  return { id:_dnaInsightId_(kind,key), kind:kind, text:text, deriv:deriv, rel:(rel==null?0.5:rel) };
+}
+// THE POOL. Each block below is one template family bound over a real fact source; the number of
+// insights it yields is however many facts exist, not a number chosen in advance.
+function _dnaInsightPool_(acts, traits, eras){
+  var P=[];
+  try{
+    acts=acts||[]; traits=traits||[]; eras=eras||[];
+    if(!acts.length) return P;
+    var runs=acts.filter(function(a){return a.sport==='run';});
+    var rides=acts.filter(function(a){return a.sport==='ride';});
+    var yr={}; acts.forEach(function(a){ var y=String(a.date).slice(0,4);
+      if(!yr[y]) yr[y]={n:0,dist:0,run:0,ride:0}; yr[y].n++; yr[y].dist+=(+a.dist||0); yr[y][a.sport]++; });
+    var years=Object.keys(yr).sort();
+
+    // FACTUAL — one per unlocked trait. The trait already states a measured headline and how it was
+    // derived, so this is a rebinding of a fact the page has earned, not a new claim.
+    traits.forEach(function(t){
+      if(t.locked || !t.headline) return;
+      P.push(_dnaIns_('factual', 'trait-'+t.name, t.name+': '+t.headline+'.'+(t.detail?(' '+t.detail):''),
+        t.deriv||'measured from your logged activities', 0.55));
+    });
+    // FACTUAL — one per year on record.
+    years.forEach(function(y){
+      var b=yr[y];
+      P.push(_dnaIns_('factual','year-'+y, 'In '+y+' you logged '+b.n.toLocaleString()+' activities covering '
+        +Math.round(b.dist).toLocaleString()+' miles.', 'count and distance summed over activities dated '+y, 0.45));
+    });
+    // FACTUAL — one per era the timeline already resolved.
+    eras.forEach(function(e){
+      P.push(_dnaIns_('factual','era-'+e.startY+'-'+e.endY, 'From '+e.startY+' to '+e.endY+' you were '+e.archetype
+        +' — '+e.archWhy+'.', 'sport mix per year, grouped into eras by dominant sport', 0.6));
+    });
+
+    // COMPARISON — consecutive year pairs. Skipped when either year is too thin to compare.
+    for(var i=1;i<years.length;i++){
+      var a1=yr[years[i-1]], b1=yr[years[i]];
+      if(a1.n<20 || b1.n<20) continue;
+      var d=b1.n-a1.n, pct=Math.round(Math.abs(d)/a1.n*100);
+      if(pct<5) continue;                                   // a rounding-sized change is not a comparison
+      P.push(_dnaIns_('comparison','yr-'+years[i-1]+'-'+years[i],
+        years[i]+' carried '+pct+'% '+(d>0?'more':'fewer')+' activities than '+years[i-1]+' ('
+        +b1.n.toLocaleString()+' against '+a1.n.toLocaleString()+').',
+        'activity counts for the two years, compared directly', 0.7));
+    }
+    // COMPARISON — sport split over the whole record.
+    if(runs.length>20 && rides.length>20){
+      var rd=Math.round(rides.reduce(function(s,x){return s+(+x.dist||0);},0)/rides.length);
+      var rn=Math.round(runs.reduce(function(s,x){return s+(+x.dist||0);},0)/runs.length*10)/10;
+      P.push(_dnaIns_('comparison','sport-dist','Your average ride is '+rd+' miles; your average run is '+rn
+        +'. That is '+Math.round(rd/Math.max(0.1,rn))+'x the distance per outing.',
+        'mean distance per activity, by sport, across your whole record', 0.65));
+    }
+    // COMPARISON — recent against lifetime, on the one axis the library supports everywhere: volume.
+    (function(){
+      if(acts.length<80) return;
+      var cut=acts.length-Math.min(60, Math.floor(acts.length*0.2));
+      var recent=acts.slice(cut), rest=acts.slice(0,cut);
+      if(recent.length<20 || rest.length<20) return;
+      var rm=recent.reduce(function(s,x){return s+(+x.dist||0);},0)/recent.length;
+      var om=rest.reduce(function(s,x){return s+(+x.dist||0);},0)/rest.length;
+      if(!(om>0)) return;
+      var ch=Math.round((rm-om)/om*100);
+      if(Math.abs(ch)<8) return;
+      P.push(_dnaIns_('comparison','recent-vs-life','Your last '+recent.length+' activities average '
+        +Math.abs(ch)+'% '+(ch>0?'further':'shorter')+' than the '+rest.length+' before them.',
+        'mean distance of the most recent fifth of your record against the rest', 0.75));
+    })();
+
+    // MILESTONE — threshold crossings that already happened. Only round numbers actually passed.
+    (function(){
+      var totMi=Math.round(acts.reduce(function(s,x){return s+(+x.dist||0);},0));
+      [1000,2500,5000,10000,15000,20000,25000,30000].forEach(function(m){
+        if(totMi>=m) P.push(_dnaIns_('milestone','mi-'+m,'You have logged over '+m.toLocaleString()
+          +' miles across every activity on record ('+totMi.toLocaleString()+').',
+          'distance summed over all logged activities', 0.5+(m/60000)));
+      });
+      [100,250,500,1000,2000,3000].forEach(function(m){
+        if(acts.length>=m) P.push(_dnaIns_('milestone','acts-'+m,'You have '+m.toLocaleString()
+          +'+ activities on record ('+acts.length.toLocaleString()+').','count of logged activities', 0.45+(m/8000)));
+      });
+    })();
+
+    // NOTICED — pattern detectors. Each is a real structural observation, and each says what it read.
+    (function(){
+      var gaps=0, longest=0;
+      for(var k=1;k<acts.length;k++){
+        var g=_dnaDaysBetween_(acts[k-1].date, acts[k].date);
+        if(g>=21){ gaps++; if(g>longest) longest=g; }
+      }
+      if(gaps>0) P.push(_dnaIns_('noticed','comeback','You have come back from '+gaps+' break'+(gaps===1?'':'s')
+        +' of three weeks or more — the longest was '+longest+' days.',
+        'gaps of 21+ days between consecutive activities, counted across your record', 0.8));
+    })();
+    (function(){
+      if(!runs.length || !rides.length) return;
+      var lastRun=runs[runs.length-1].date, lastRide=rides[rides.length-1].date;
+      if(lastRun===lastRide) return;
+      var stale=(lastRun<lastRide)?{s:'running',d:lastRun}:{s:'riding',d:lastRide};
+      var days=_dnaDaysBetween_(stale.d, acts[acts.length-1].date);
+      if(days<60) return;
+      P.push(_dnaIns_('noticed','stale-'+stale.s,'Your '+stale.s+' record stops '+days
+        +' days before your most recent activity — this page reads that side of you as history, not form.',
+        'most recent activity date per sport, compared with your latest activity overall', 0.85));
+    })();
+  }catch(e){}
+  return P;
+}
+// TODAY'S DISCOVERY — exactly one, never repeated, and honest when there is nothing new.
+//
+// STABLE WITHIN A DAY. The pick is recorded against the date so a re-render (or a second visit an
+// hour later) shows the same discovery rather than burning through the pool on refreshes.
+//
+// SEEN IS A MAP, NOT AN ARRAY, and that is deliberate: object keys UNION on merge, which is exactly
+// the semantics wanted here — once read on any device, read everywhere, and nothing can un-see it.
+// An array would have to fight the merge rules that already bite elsewhere in this app.
+function _dnaDiscovery_(acts, traits, eras){
+  var today=(typeof getTodayKey==='function')?getTodayKey():null;
+  var pool=_dnaInsightPool_(acts, traits, eras);
+  if(!pool.length) return { none:true, why:'no-pool' };
+  var seen=_dnaSeen_();
+  try{
+    if(st.dnaToday && st.dnaToday.date===today && st.dnaToday.id){
+      var held=pool.filter(function(p){ return p.id===st.dnaToday.id; })[0];
+      if(held) return { ins:held, held:true };
+    }
+  }catch(e){}
+  var fresh=pool.filter(function(p){ return !seen[p.id]; })
+                .sort(function(a,b){ return b.rel-a.rel; });
+  if(!fresh.length) return { none:true, why:'all-seen', poolN:pool.length };
+  var pick=fresh[0];
+  try{
+    seen[pick.id]=today||'1';
+    st.dnaSeen=seen;
+    st.dnaToday={date:today, id:pick.id};
+    if(typeof sv==='function') sv();
+  }catch(e){}
+  return { ins:pick, poolN:pool.length, freshN:fresh.length };
+}
+// ARCHETYPE CONFIDENCE — derived, never invented, and refused outright when the sample cannot carry
+// a number. Two things decide whether a label like "The Devoted Runner" is trustworthy: how
+// DECISIVELY the dominant sport clears the threshold that named it, and how much data stands behind
+// it. Both are printed, so the number is checkable rather than asserted.
+var _DNA_CONF_MIN_N=30;      // below this, no score is emitted at all
+var _DNA_CONF_FULL_N=300;    // sample is "full" here; more does not raise confidence further
+function _dnaArchConfidence_(e){
+  if(!e || !e.acts) return null;
+  var n=e.acts, total=n||1;
+  var runS=(e.runs||0)/total, rideS=(e.rides||0)/total;
+  var dom=Math.max(runS, rideS);
+  // A hybrid label is a statement about BALANCE, so its margin is how close the split is to even —
+  // the opposite question from a single-sport label, and it needs its own derivation.
+  var isHybrid=(runS<0.6 && rideS<0.6);
+  var margin=isHybrid ? (1-Math.abs(runS-rideS)/0.6) : Math.min(1,(dom-0.6)/0.35+0.35);
+  if(n<_DNA_CONF_MIN_N){
+    return { scored:false, n:n,
+      why:'only '+n+' activities in this era — under '+_DNA_CONF_MIN_N+', the label is a description, not a measurement' };
+  }
+  var sample=Math.min(1, n/_DNA_CONF_FULL_N);
+  // Sample weight is deliberately a FLOOR-RAISER, not a multiplier that can crush a decisive split:
+  // 1,000 runs out of 1,000 is not less certain than 300 out of 300.
+  var conf=Math.round(100*Math.max(0,Math.min(1, margin*(0.6+0.4*sample))));
+  return { scored:true, pct:conf, n:n,
+    band:(conf>=75?'High':(conf>=50?'Moderate':'Low')),
+    why:(isHybrid
+      ? (Math.round(runS*100)+'% run / '+Math.round(rideS*100)+'% ride across '+n.toLocaleString()+' activities')
+      : (Math.round(dom*100)+'% '+(runS>=rideS?'runs':'rides')+' across '+n.toLocaleString()+' activities')) };
+}
 // ---- POWER AXES: ONE computation, two consumers (the DNA traits below and the radar on the
 // Legacy page). Split out precisely so a chart cannot quietly disagree with the trait text beside
 // it — the same failure the _zsCompute_ comment warns about one surface up.
@@ -25216,7 +25417,7 @@ function _dnaTraits_(acts){
   (function(){
     var hrs=acts.map(function(a){return a.hour;}).filter(function(h){return h!=null;});
     var MIN=40;
-    if(hrs.length<MIN){ T.push(_dnaLock_('Start-time signature', 'needs '+(MIN-hrs.length)+' more timed activities — only '+hrs.length+' of your activities carry a start time', P)); return; }
+    if(hrs.length<MIN){ T.push(_dnaLock_('Start-time signature', 'needs '+(MIN-hrs.length)+' more timed activities — only '+hrs.length+' of your activities carry a start time', P, hrs.length, MIN)); return; }
     var b=new Array(24).fill(0); hrs.forEach(function(h){ b[h]++; });
     var mi=0; for(var i=1;i<24;i++) if(b[i]>b[mi]) mi=i;
     var h12=(mi%12)||12, ap=mi<12?'AM':'PM';
@@ -25286,7 +25487,7 @@ function _dnaTraits_(acts){
     var P=_dnaPowerAxes_();
     if(!P || !P.ok){
       _DNA_PWR_DEFS.forEach(function(p){
-        T.push(_dnaLock_(p[0], 'needs power data on at least '+_DNA_PC_MIN+' rides &mdash; '+((P&&P.n)||0)+' carry a power curve so far', p[2]));
+        T.push(_dnaLock_(p[0], 'needs power data on at least '+_DNA_PC_MIN+' rides &mdash; '+((P&&P.n)||0)+' carry a power curve so far', p[2], ((P&&P.n)||0), _DNA_PC_MIN));
       });
       return;
     }
@@ -25302,7 +25503,7 @@ function _dnaTraits_(acts){
   (function(){
     if(typeof _dnaRunCadence_!=='function') return;
     var c=_dnaRunCadence_();
-    if(!c.ok){ T.push(_dnaLock_('Run cadence', 'needs cadence on at least 30 runs &mdash; '+c.n+' carry it so far', '#2dd4bf')); return; }
+    if(!c.ok){ T.push(_dnaLock_('Run cadence', 'needs cadence on at least 30 runs &mdash; '+c.n+' carry it so far', '#2dd4bf', c.n, 30)); return; }
     var yrs=c.years.filter(function(y){ return y.n>=5; });          // a year of 2 runs is not a reading
     var sp=_dnaYearFill_(yrs.map(function(y){ return { v:y.med, lab:y.year }; }));
     var lastY=yrs.length?yrs[yrs.length-1]:null;
@@ -25348,7 +25549,7 @@ function _dnaTraits_(acts){
       });
     });
     var ids=Object.keys(first);
-    if(ids.length<10){ T.push(_dnaLock_('Explorer', 'needs segment history — sync segments to unlock', '#a855f7')); return; }
+    if(ids.length<10){ T.push(_dnaLock_('Explorer', 'needs segment history — sync segments to unlock', '#a855f7', ids.length, 10)); return; }
     var byY={};
     ids.forEach(function(id){ var y=first[id].slice(0,4); byY[y]=(byY[y]||0)+1; });
     var ys=Object.keys(byY).sort();
@@ -25407,6 +25608,28 @@ function aiRenderDNA_(){
   H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:18px">Read off the four fields every activity carries — date, sport, distance, duration — plus temperature and start time where they exist. '
     +nRun.toLocaleString()+' runs and '+nRide.toLocaleString()+' rides, '+span+'. Every trait states its derivation; a trait without enough observations to be honest is locked, with what would unlock it.</div>';
   H+=_dnaCardHTML;
+  // ---- TODAY'S DISCOVERY — exactly one, never repeated, honest when there is nothing new. ----
+  // Placed FIRST because it is the answer to "why open this page again". When the pool is exhausted
+  // it says so plainly rather than recycling something already read or manufacturing a claim; the
+  // fallback names what would change that, so it reads as a state, not a failure.
+  (function(){
+    var dsc=null; try{ dsc=_dnaDiscovery_(acts, traits, eras); }catch(e){ dsc=null; }
+    if(!dsc) return;
+    var K={factual:'#60a5fa', comparison:'#a855f7', prediction:'#2dd4bf', noticed:'#f59e0b', milestone:'#4ade80'};
+    H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px;margin-bottom:18px">';
+    H+=aiLbl_('Today&rsquo;s discovery','<span style="font-size:11px;color:var(--d-dim)">one per day, never repeated</span>');
+    if(dsc.none){
+      H+='<div style="font-size:13.5px;color:var(--d-soft);line-height:1.55">We couldn&rsquo;t find anything new today. Check back after your next few rides.</div>';
+      if(dsc.poolN) H+='<div style="font-size:11px;color:var(--d-dim);margin-top:6px">You have read all '+dsc.poolN+' insights your history currently supports &mdash; new activities add more.</div>';
+    } else {
+      var ins=dsc.ins, col=K[ins.kind]||'#60a5fa';
+      H+='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">'
+        +'<span style="font-size:9.5px;font-weight:800;color:'+col+';text-transform:uppercase;letter-spacing:.07em">'+aiEsc_(ins.kind)+'</span></div>';
+      H+='<div style="font-size:14.5px;color:var(--d-head);line-height:1.5;font-weight:600">'+aiEsc_(ins.text)+'</div>';
+      H+='<div style="font-size:11px;color:var(--d-dim);margin-top:7px;line-height:1.45">How this was read: '+aiEsc_(ins.deriv)+'</div>';
+    }
+    H+='</div>';
+  })();
   // ERA TIMELINE and SIGNATURE ARE BOTH SPARSE - two era summaries and six monthly readings.
   // Laid out full width they were mostly empty: the signature chart is capped at 430px inside a
   // 1120px card, so roughly two thirds of that row was blank. They pair naturally instead, and
@@ -25430,6 +25653,20 @@ function aiRenderDNA_(){
       +'<div style="height:4px;background:'+col+';border-radius:2px;margin-bottom:9px"></div>'
       +'<div style="font-size:10.5px;font-weight:800;color:'+col+';letter-spacing:.03em">'+yl+'</div>'
       +'<div style="font-size:15px;font-weight:800;color:var(--d-head);margin-top:2px;line-height:1.2">'+aiEsc_(e.archetype)+'</div>'
+      // CONFIDENCE, DERIVED OR ABSENT. A label with no number beside it was the gap; a label with an
+      // INVENTED number would have been worse. Under the sample floor it states why it is unscored
+      // rather than printing a low percentage that looks like a measurement.
+      +(function(){
+          var c=null; try{ c=_dnaArchConfidence_(e); }catch(_e){ c=null; }
+          if(!c) return '';
+          if(!c.scored) return '<div style="font-size:10px;color:var(--d-dim);margin-top:3px">Confidence not scored &mdash; '+aiEsc_(c.why)+'</div>';
+          var cc=(c.pct>=75?'#4ade80':(c.pct>=50?'#f59e0b':'#8b93a7'));
+          return '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">'
+            +'<span style="font-size:10.5px;font-weight:800;color:'+cc+'">'+c.pct+'% '+c.band+'</span>'
+            +'<span style="flex:1;height:3px;background:#1c2130;border-radius:2px;overflow:hidden;max-width:70px">'
+            +'<span style="display:block;height:3px;width:'+c.pct+'%;background:'+cc+'"></span></span></div>'
+            +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+aiEsc_(c.why)+'</div>';
+        })()
       +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px;line-height:1.4">'+aiEsc_(e.archWhy)+'</div>'
       +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+e.acts.toLocaleString()+' activities &middot; '+_yrs+' year'+(_yrs===1?'':'s')+'</div>'
       +'</div>';
@@ -25518,6 +25755,18 @@ function aiRenderDNA_(){
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
         +'<span style="font-size:14px;font-weight:800;color:var(--d-t3)">'+aiEsc_(t.name)+'</span></div>'
+        // PROGRESS, WHERE IT CAN BE COUNTED. "Needs 5 more hard efforts" is a task; a bar showing
+        // 3 of 5 is a thing being earned, which is the whole framing this section is after. Locks
+        // that genuinely cannot count themselves (a backfill that has never run) keep the plain
+        // line rather than getting a fabricated denominator.
+        +(function(){
+            if(t.have==null || !(t.need>0)) return '';
+            var p=Math.round((t.pct||0)*100);
+            return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+              +'<span style="flex:1;height:4px;background:#1c2130;border-radius:2px;overflow:hidden">'
+              +'<span style="display:block;height:4px;width:'+p+'%;background:'+(t.col||'#60a5fa')+';opacity:.85"></span></span>'
+              +'<span style="font-size:10.5px;font-weight:800;color:'+(t.col||'#60a5fa')+'">'+t.have+' of '+t.need+'</span></div>';
+          })()
         +'<div style="font-size:12px;color:var(--d-t3);line-height:1.45">'+aiEsc_(t.unlock)+'.</div>'
         +'</div>';
     });

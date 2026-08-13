@@ -867,6 +867,21 @@ try {
     fail('adherence is reporting attendance from scores again (see above).');
   }
 
+  // STEP 53 - the DNA Insights signature mechanic. Pins the DISCIPLINE, not the prose: one
+  //           discovery per day, never repeated, an honest empty state instead of a manufactured
+  //           insight, confidence derived or REFUSED, every insight carrying its derivation, and
+  //           none of the ruled-out claim types (day-of-week, month-of-year, temperature, sleep,
+  //           HR drift) reappearing.
+  console.log(`${D}. checking DNA insights...${X}`);
+  try {
+    const so = execSync('node scripts/dna-insights-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('DNA insights repeat, fabricate, or claim something the data cannot back (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
