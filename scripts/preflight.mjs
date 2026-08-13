@@ -812,6 +812,21 @@ try {
     fail('a corrected number can still be reverted by the merge (see above).');
   }
 
+  // STEP 49 - stored plan rows realigned to the block. st.plan persists GENERATED rows; when the
+  //           block changes (the dated Thu/Fri ride swap) nothing regenerates them, so the calendar
+  //           tile read the block and the day detail read the stale row and they named different
+  //           sessions on every Thursday and Friday. The repair must stay narrow: future only,
+  //           generator-owned only, identity only.
+  console.log(`${D}. checking plan realignment to the block...${X}`);
+  try {
+    const so = execSync('node scripts/plan-block-realign-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the stored plan can disagree with the block, or the repair reaches too far (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

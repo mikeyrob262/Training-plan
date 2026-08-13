@@ -7685,6 +7685,10 @@ function applyFirebaseData(data){
   // actually changed anything. Throwing them away is precisely why the type fix never stuck.
   var _mIntents=0, _mTypes=0;
   try{ if(typeof migrateSessionIntents_==='function') _mIntents=migrateSessionIntents_()||0; }catch(e){}
+  // Block realignment runs BEFORE the type repair, because it rewrites intent and the type repair
+  // derives type FROM intent — the other order would leave a corrected intent wearing the old type
+  // for a full load.
+  try{ if(typeof migratePlanIntentsToBlock_==='function') migratePlanIntentsToBlock_(); }catch(e){}
   try{ if(typeof migrateSessionTypes_==='function') _mTypes=migrateSessionTypes_()||0; }catch(e){}
   try{ if(typeof migrateBlockSessions_==='function') migrateBlockSessions_(); }catch(e){}
   // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
@@ -45236,6 +45240,72 @@ function migrateSessionIntents_(){
 // TYPE ONLY. Empty targets are correct and deliberate: sessions store identity, and the
 // prescription derives from SESSION_DEFS at read. A session whose type the athlete set by hand
 // is left alone - the mask is the record of that decision.
+// Repairs FUTURE generated sessions whose stored intent no longer matches what the block prescribes.
+//
+// st.plan PERSISTS rows generated from the block. When the block changes, those rows go stale and
+// nothing regenerates them. The Thu/Fri ride swap is exactly that: from SCHED_THU_FRI_SWAP_FROM,
+// blockPlanFor_ gives Thursday the Threshold and Friday the Z2, while every stored row still
+// carries the pre-amendment pairing. Measured on the live plan: EVERY Thursday and Friday from
+// Aug 20 onward, the calendar tile (which reads the block) and the day detail (which reads the
+// stored row) named different sessions — Thu tile "Threshold" / detail "Z2 Endurance", Fri the
+// exact inverse. One day was reported; it was every one of them, twice a week.
+//
+// FUTURE ONLY. A past row is the record of what was prescribed AT THE TIME and must not be
+// rewritten — that is the entire reason the swap was applied as a dated amendment rather than by
+// editing the phase tables, which are read for past dates too.
+//
+// GENERATED ONLY. _planReplaceable_ is the existing ownership contract: not deleted, not completed,
+// and owned by the generator rather than the athlete. An explicit swap is skipped on top of it, for
+// the same reason migrateSessionTypes_ skips one: only swap:true is a decision.
+//
+// IDENTITY ONLY — intent and name. Targets are NOT written: a session stores what it IS and the
+// prescription derives from SESSION_DEFS at read, so copying targets here would create a second,
+// staler copy of the thing that is already derived correctly.
+//
+// This can only converge because plan session intent now resolves last-write-wins on editedAt
+// (PLAN_LWW_FIELDS_). Before that the correction was merged away on the next sync, which is exactly
+// how the type repair spent weeks reporting the same 49 corrections on every load.
+function migratePlanIntentsToBlock_(){
+  try{
+    if(!st || !st.plan || typeof blockPlanFor_!=='function' || typeof _planReplaceable_!=='function') return 0;
+    var today=(typeof getTodayKey==='function')?getTodayKey():null;
+    if(!today) return 0;
+    var fixed=0, detail={};
+    Object.keys(st.plan).forEach(function(dk){
+      if(String(dk)<today) return;                       // never rewrite the past
+      var day=st.plan[dk]; if(!day || !day.sessions || !day.sessions.length) return;
+      var want=null;
+      try{ want=blockPlanFor_(dk); }catch(e){ return; }
+      if(!want || !want.sessions || !want.sessions.length) return;
+      // Matched by TYPE and in order, so a ride slot is only ever compared against the ride the
+      // block prescribes — a strength slot can never be rewritten into a ride.
+      var byType={};
+      want.sessions.forEach(function(w){ if(w&&w.type) (byType[w.type]=byType[w.type]||[]).push(w); });
+      var seen={};
+      day.sessions.forEach(function(x){
+        if(!_planReplaceable_(x) || x.swap===true || !x.type) return;
+        var pool=byType[x.type]; if(!pool) return;
+        var k=seen[x.type]||0; var w=pool[k]; if(!w) return;
+        seen[x.type]=k+1;
+        if(!w.intent || w.intent===x.intent) return;
+        var was=x.intent;
+        x.intent=w.intent;
+        if(w.name) x.name=w.name;
+        // The mask entries are CLEARED for the fields corrected — residue, not a choice — or
+        // per-field merge would treat the stale remote value as a local edit and revert this.
+        try{ if(x._edited){ delete x._edited.intent; delete x._edited.name; } }catch(e){}
+        x.editedAt=Date.now();                           // stamped so the correction travels
+        fixed++; detail[was+'->'+w.intent]=(detail[was+'->'+w.intent]||0)+1;
+      });
+    });
+    if(fixed){
+      try{ console.log('[planBlockIntent] realigned '+fixed+' future session(s) to the block: '
+        +Object.keys(detail).map(function(k){ return k+' x'+detail[k]; }).join(', ')); }catch(e){}
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+    }
+    return fixed;
+  }catch(e){ try{ console.warn('[planBlockIntent] failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function migrateSessionTypes_(){
   try{
     if(typeof SESSION_DEFS==='undefined' || !st || !st.plan) return 0;
