@@ -7584,6 +7584,12 @@ function applyFirebaseData(data){
   // in yet: measured across three reloads, state returned to 41 foods / 10 meals every time and
   // the migration reported the same 69 records on each load, never settling.
   try{ if(typeof mfEnsureClean_==='function') mfEnsureClean_(); }catch(e){}
+  // The session repairs belong here for the same reason. Run only from the post-pull .then(),
+  // they fix the plan once and the SSE stream then merges the stale copy straight back: measured,
+  // migrateSessionTypes_ returned 49 corrections on EVERY fresh load and today's Easy Run was
+  // type 'ride' again each time. Intent first, so the type follows it.
+  try{ if(typeof migrateSessionIntents_==='function') migrateSessionIntents_(); }catch(e){}
+  try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
   // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
   try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
   // If the collapse soft-deleted duplicates, push ONCE so remote converges instead of re-sending
