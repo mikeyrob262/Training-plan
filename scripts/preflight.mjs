@@ -784,6 +784,19 @@ try {
     fail('a plan session field resolves the wrong way on merge (see above).');
   }
 
+  // STEP 47 - session step cards speak the session's own sport. _sessionSteps_ was bike-only
+  //           language handed to runs, so a prescribed Easy Run read "easy spin" / "Spin down"
+  //           and showed an em dash where a pace or an HR ceiling belongs.
+  console.log(`${D}. checking session step cards by sport...${X}`);
+  try {
+    const so = execSync('node scripts/session-steps-sport-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a session card is using the wrong sport vocabulary (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

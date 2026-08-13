@@ -31920,7 +31920,8 @@ function _calScrollFocus_(){
 }
 
 // ==================== Part 5 — Session detail (step-by-step interval cards) ====================
-// A bike session's step list, built from the structure string the block stored on the session
+// A session's step list — bike OR run, in that sport's own words (see the isRun split inside; it
+// used to be bike-only language on every card). Built from the structure string the block stored
 // (s.block.struct, e.g. "4x4 min, 3 min recovery") and its power band. The band is passed in ALREADY
 // PRICED to the current st.ftp (targets.powerLo/Hi from _planSessionFromDef_), so a changed FTP
 // reprices every step and there is no second FTP. Interval sessions (NxM min) become warm-up + one
@@ -31943,10 +31944,30 @@ function _sessionSteps_(intent, struct, targets){
   var ftp=parseInt(targets.ftp,10)||0;
   var hasBand=(targets.powerLo!=null && targets.powerHi!=null);
   var EN='–';   // en dash for ranges
-  var bandTxt=hasBand?(targets.powerLo+EN+targets.powerHi+'W'):'—';
+  // SPORT DECIDES THE VOCABULARY. This built ONE step list in bike language and handed it to runs
+  // as well, so a prescribed Easy Run read "Warm-up · easy spin" and "Cool-down · Spin down, easy"
+  // — wording from a template the session has nothing to do with, and watts as an em dash where a
+  // pace belongs. The sport comes from the library definition of the intent; a pace band is the
+  // fallback signal, since only a run carries one.
+  var _def=(typeof SESSION_DEFS!=='undefined' && intent)?SESSION_DEFS[intent]:null;
+  var isRun=!!((_def && _def.type==='run') || targets.paceLo!=null || targets.paceHi!=null);
+  var _pc=function(v){ return (typeof _paceStr_==='function')?_paceStr_(v):null; };
+  var paceBand=(targets.paceLo!=null && targets.paceHi!=null && _pc(targets.paceLo) && _pc(targets.paceHi))
+    ? (_pc(targets.paceLo)+EN+_pc(targets.paceHi)+' /mi') : null;
+  // What counts as "the session has a target" differs by sport: watts on a bike, pace on a run.
+  var hasTgt=isRun?!!paceBand:hasBand;
+  // A run judged on an HR ceiling rather than a pace band still has a real prescription to show —
+  // that is what an easy run IS — so it is used before falling back to an em dash.
+  var bandTxt=isRun
+    ? (paceBand || (targets.hrCap!=null?('under '+targets.hrCap+' bpm'):'—'))
+    : (hasBand?(targets.powerLo+EN+targets.powerHi+'W'):'—');
   var zone=targets.zone||'';
-  // Easy = a recovery-zone ceiling off FTP (50-55%); a warm-up prescription, not a data claim.
-  var easyTxt=ftp?(Math.round(ftp*0.5)+EN+Math.round(ftp*0.55)+'W'):'easy spin';
+  // Easy = a recovery-zone ceiling off FTP (50-55%) on the bike; a warm-up prescription, not a data
+  // claim. A run has no FTP to price it from, so it gets language rather than a fabricated number.
+  var easyTxt=isRun?'easy jog':(ftp?(Math.round(ftp*0.5)+EN+Math.round(ftp*0.55)+'W'):'easy spin');
+  var wuSub=isRun?'Easy jog, then a few strides to prime the legs.'
+                 :'Easy spin, then a couple of short openers to prime the legs.';
+  var cdSub=isRun?'Jog down, easy.':'Spin down, easy.';
   var steps=[];
   // Leading "NxM" = N intervals of M minutes. No mandatory "min" so a progression struct
   // ("4x4 progressing to 5x4", "2x20 to 3x15") still breaks into its base prescription — the full
@@ -31956,17 +31977,19 @@ function _sessionSteps_(intent, struct, targets){
   // out of _sessionSteps_ and takes the whole session-detail sheet with it.
   var _si=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
   var iv=_si?[null,String(_si.n),String(_si.workMin)]:null;
-  var recTxt=(_si&&_si.recMin!=null)?(_si.recMin+' min easy'):'recover, easy spin';
-  if(iv && hasBand){
+  var recTxt=(_si&&_si.recMin!=null)?(_si.recMin+' min easy'):(isRun?'recover, easy jog':'recover, easy spin');
+  // Gated on hasTgt, not hasBand: a run with a pace band and an interval struct is just as
+  // structured as a bike session and was being flattened into one continuous block.
+  if(iv && hasTgt){
     var n=_si.n, work=_si.workMin;
-    steps.push({kind:'warmup', title:'Warm-up', meta:'15 min · '+easyTxt, sub:'Easy spin, then a couple of short openers to prime the legs.'});
+    steps.push({kind:'warmup', title:'Warm-up', meta:'15 min · '+easyTxt, sub:wuSub});
     for(var i=1;i<=n;i++){
       steps.push({kind:'work', title:'Interval '+i+' of '+n,
         workMin:work, bandLo:targets.powerLo, bandHi:targets.powerHi, n:n,   // structured targets for the post-ride debrief matcher
         meta:work+' min @ '+bandTxt+(zone?(' · '+zone):''),
         sub:(i<n?('Then '+recTxt+'.'):'Last one — hold the band to the end, then stop. No junk after.')});
     }
-    steps.push({kind:'cooldown', title:'Cool-down', meta:'10 min · '+easyTxt, sub:'Spin down, easy.'});
+    steps.push({kind:'cooldown', title:'Cool-down', meta:'10 min · '+easyTxt, sub:cdSub});
   } else {
     // Continuous ride: no interval pattern in the struct. Warm-up / main / cool-down, the main block
     // carrying the real duration (from the struct range, else the def's durationMin).
@@ -31975,7 +31998,7 @@ function _sessionSteps_(intent, struct, targets){
     var durTxt=dm?(dm[1]+EN+dm[2]+' min'):(one?(one[1]+' min'):(targets.durationMin!=null?(targets.durationMin+' min'):null));
     steps.push({kind:'warmup', title:'Warm-up', meta:easyTxt, sub:'Ease in — build to the working effort over the first few minutes.'});
     steps.push({kind:'work', title:'Main effort', meta:(durTxt?(durTxt+' @ '):'')+bandTxt+(zone?(' · '+zone):''), sub:''});
-    steps.push({kind:'cooldown', title:'Cool-down', meta:easyTxt, sub:'Spin down, easy.'});
+    steps.push({kind:'cooldown', title:'Cool-down', meta:easyTxt, sub:cdSub});
   }
   return steps;
 }
