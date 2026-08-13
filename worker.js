@@ -7599,16 +7599,25 @@ function applyFirebaseData(data){
   // If the collapse soft-deleted duplicates, push ONCE so remote converges instead of re-sending
   // them every poll. Self-terminating: once remote is clean, no further collapse -> no push.
   //
-  // A TYPE/INTENT REPAIR NEEDS THE SAME PUSH, and the absence of it is why the run editor still
-  // drew the bike template. The repair itself is correct — it clears the residue mask, stamps
-  // editedAt so the change can travel, and saves LOCALLY — but only the collapse could reach
-  // fbPush, so the stale rows stayed in the cloud, the next pull merged them straight back, and
-  // [planTypes] reported the IDENTICAL 49 corrections on every load. Measured across two
-  // consecutive loads of the deployed app: same 49, same intent breakdown, both times. A migration
-  // that reports the same work forever is not a migration, it is a band-aid re-applied at boot.
-  // Self-terminating in exactly the same way as the collapse: once remote is clean the migrations
-  // return 0 and nothing pushes.
-  try{ if(_planDidCollapse_ || _mIntents || _mTypes){ _planDidCollapse_=false; if(typeof fbPush==='function') fbPush(true); } }catch(e){}
+  // THE TYPE/INTENT REPAIR DELIBERATELY DOES NOT PUSH HERE, AND ADDING A PUSH DOES NOT FIX IT.
+  //
+  // Measured on the deployed app: [planTypes] reports the IDENTICAL 49 corrections on every load
+  // (easyRun x35, run10k x4, alpe x2, optional x4, tenk x1, chalet x1, ventop x2) — and roughly
+  // eight times WITHIN a single session, once per remote merge. The repair itself is correct: it
+  // clears the residue mask, stamps editedAt, and in-memory state after settle is clean (0 run
+  // intents left on type 'ride'). It is the persistence that fails, and not for want of a push.
+  //
+  // Wiring fbPush in here was tried and REVERTED, because fbPush re-reads remote and merges it
+  // into st BEFORE it writes. The stale type:'ride' is therefore merged back over the correction
+  // in the same call that was meant to save it, and the PUT then writes the stale value out again.
+  // The only effect was an extra ~13 MB PUT on every single load, feeding the boot write-storm for
+  // nothing. The guarded push cannot carry it either — it writes ONLY rides and runs, by design.
+  //
+  // The real fix is at the MERGE layer: a plan session's type field needs to resolve last-write-wins
+  // off editedAt, the way the rides per-field allowlist already does, so a stamped correction beats
+  // an older remote value. Until that lands, this stays a per-load in-memory repair — correct on
+  // screen, never converging in the cloud. Do not "fix" it by pushing.
+  try{ if(_planDidCollapse_){ _planDidCollapse_=false; if(typeof fbPush==='function') fbPush(true); } }catch(e){}
   if(_durLogN<4){ _durLogN++; try{ var _la=(function(a){ var n=0; (a||[]).forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; })(st.rides); console.log('[dur] merge remote-null-tomb='+Number(_rn)+' local-before='+Number(_ln)+' local-after='+Number(_la)); }catch(e){} }
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}

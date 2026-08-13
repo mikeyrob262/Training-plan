@@ -187,10 +187,14 @@ console.log('\n' + Y + '=== a repair that cannot reach the cloud is not a repair
   ok('the repairs still run in applyFirebaseData, not at boot', /migrateSessionTypes_\(\)/.test(afd));
   ok('...and their counts are captured rather than discarded',
      /_mTypes=migrateSessionTypes_\(\)\|\|0/.test(afd) && /_mIntents=migrateSessionIntents_\(\)\|\|0/.test(afd));
-  ok('...so a correction PUSHES instead of only saving locally',
-     /if\(_planDidCollapse_ \|\| _mIntents \|\| _mTypes\)/.test(afd));
-  ok('...through the same fbPush the collapse uses', /fbPush\(true\)/.test(afd));
-  ok('...and it still saves locally too', /saveLocal_\(\)/.test(afd));
+  ok('...and it still saves locally', /saveLocal_\(\)/.test(afd));
+  // Pushing was TRIED and reverted. fbPush re-reads remote and merges it into st before writing,
+  // so the stale type is merged back over the correction inside the very call meant to save it -
+  // buying nothing but a ~13 MB PUT on every load. Pinned so it is not "fixed" that way again.
+  ok('a repair does NOT trigger a push (it would merge the stale value back)',
+     !/if\(_planDidCollapse_ \|\| _mIntents \|\| _mTypes\)/.test(afd));
+  ok('...and the reason is recorded next to it', /merged back over the correction/.test(afd));
+  ok('...naming the merge layer as where the real fix belongs', /resolve last-write-wins/.test(afd));
   // Self-termination is the property that stops this becoming a push on every poll forever.
   const mt = exFn('migrateSessionTypes_');
   ok('the migration returns a COUNT, so the push self-terminates', /return fixed;/.test(mt));
