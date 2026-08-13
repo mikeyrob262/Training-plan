@@ -44455,7 +44455,11 @@ function migrateSessionIntents_(){
         if(!wd || !cd) return;
         if(wd.type===cd.type) return;                      // same sport - not this defect
         var was=x.intent;
-        x.intent=want; x.type=wd.type; x.editedAt=Date.now();
+        x.intent=want; x.type=wd.type;
+        // Same reason as the type repair: a masked field wins the merge, so a correction that
+        // leaves the mask in place is undone by the next sync.
+        try{ if(x._edited){ delete x._edited.intent; delete x._edited.type; } }catch(e){}
+        x.editedAt=Date.now();
         fixed++; detail[was+'->'+want]=(detail[was+'->'+want]||0)+1;
       });
     });
@@ -44494,6 +44498,11 @@ function migrateSessionTypes_(){
         // that a field was WRITTEN, never that it was chosen.
         if(x.swap===true) return;
         x.type=def.type;
+        // The mask must be CLEARED, not just ignored. Per-field merge treats a masked field as
+        // a local edit, so leaving _edited.type set lets the remote's stale 'ride' win the next
+        // sync and the correction is reverted on every load. Clearing it declares the value
+        // what it is: residue, not an edit.
+        try{ if(x._edited) delete x._edited.type; }catch(e){}
         x.editedAt=Date.now();                             // stamped so the correction travels
         fixed++; byIntent[x.intent]=(byIntent[x.intent]||0)+1;
       });
