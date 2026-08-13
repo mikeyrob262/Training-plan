@@ -148,5 +148,63 @@ console.log('\n' + Y + '=== the cached block is actually replaced ===' + X);
   eq('the block stamps that version', tb.v, v);
 }
 
+// ONE EVENT, ONE DATE. The retest is prescribed as a dated ftpTest session keyed off
+// _FTP_RETEST_DATE (which never moves) AND flagged as a milestone. The milestone carried
+// slidable:true, so with slideWeeks=2 the calendar showed "FTP Retest" twice — Aug 27 for the
+// session and Sep 10 for the slid milestone, one event two weeks apart with nothing telling the
+// reader which was real. Mikey's call: the retest date is a commitment and stays put.
+console.log('\n' + Y + '=== the retest is pinned, and the gate still slides ===' + X);
+{
+  const retest = M.MS.filter((m) => m.slug === 'ftp-retest')[0];
+  const gate = M.MS.filter((m) => m.slug === 'four-weeks')[0];
+  ok('the retest milestone exists', !!retest);
+  ok('...and is NOT slidable', !retest.slidable);
+  eq('...and sits on the shared constant', retest.date, M.tb ? retest.date : null);
+  // The session and the milestone must read the same date, which is the whole point.
+  const retestDays = Object.keys(dated).filter((d) => (dated[d] || []).indexOf('ftpTest') >= 0);
+  eq('exactly one ftpTest session is prescribed', retestDays.length, 1);
+  eq('...on the same day the milestone claims', retestDays[0], retest.date);
+
+  // Do not over-fix: a missed week genuinely does push out when four clean weeks are banked.
+  ok('the four-weeks gate DOES still slide', gate.slidable === true);
+  // And the real-world events were never slidable and must stay that way.
+  ['chalet', 'alpe', 'tenk', 'ventop'].forEach((s) => {
+    ok('"' + s + '" does not move', !M.MS.filter((m) => m.slug === s)[0].slidable);
+  });
+  eq('exactly one milestone is slidable now', M.MS.filter((m) => m.slidable).length, 1);
+}
+
+console.log('\n' + Y + '=== a slide moves the gate and leaves the retest alone ===' + X);
+{
+  // Run the real effective-list mapper with a forced slide, rather than trusting the flag alone.
+  const eff = new Function(asServed(
+    exVar('_FTP_RETEST_DATE') + exArr('_BLOCK_MILESTONES') +
+    'function _blockDay_(s){ return new Date(s+"T00:00:00"); }\n' +
+    'function _tbDK_(d){ var m=d.getMonth()+1, y=d.getDate(); return d.getFullYear()+"-"+(m<10?"0":"")+m+"-"+(y<10?"0":"")+y; }\n' +
+    'function _blockSlideWeeks_(){ return 2; }\n' +
+    exFn('_blockMilestonesEffective_') +
+    'return _blockMilestonesEffective_(new Date());'
+  ))();
+  const base = (s) => M.MS.filter((m) => m.slug === s)[0].date;
+  const now = (s) => eff.filter((m) => m.slug === s)[0].date;
+  ok('with a 2-week slide the gate moves', now('four-weeks') !== base('four-weeks'));
+  eq('...by exactly two weeks', now('four-weeks'), addDays(base('four-weeks'), 14));
+  eq('the retest does NOT move', now('ftp-retest'), base('ftp-retest'));
+  eq('...and the mountain still does not move', now('ventop'), base('ventop'));
+  // The duplicate the athlete actually saw: two different dates carrying the retest.
+  const retestDates = eff.filter((m) => m.slug === 'ftp-retest').map((m) => m.date);
+  eq('the retest resolves to ONE date', retestDates.length, 1);
+  const sessionDay = Object.keys(dated).filter((d) => (dated[d] || []).indexOf('ftpTest') >= 0)[0];
+  eq('...and it is the session day, even mid-slide', retestDates[0], sessionDay);
+}
+
+console.log('\n' + Y + '=== the reset copy no longer promises a move it will not make ===' + X);
+{
+  const copy = src.slice(src.indexOf('A week was missed, so the clock reset'), src.indexOf('A week was missed, so the clock reset') + 400);
+  ok('it no longer says the retest moves with the gate', !/the retest and every date behind it move with it/.test(copy));
+  ok('...it says the retest is fixed', /The retest stays on/.test(copy));
+  ok('...and still reports the slid gate', /The gate has slid to/.test(copy));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'block structure: all checks passed' + X));
 process.exit(fails ? 1 : 0);

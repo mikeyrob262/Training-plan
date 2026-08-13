@@ -30070,7 +30070,19 @@ var _BLOCK_MILESTONES=[
   // below (chalet/alpe/tenk/ventop) have no slidable flag — the mountain does not move.
   {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest', road:true, slidable:true,
    icon:'M20 6L9 17l-5-5', sTitle:'Consistent week', sSub:'All 4 sessions, on 3 separate days', benefit:'Unlocks the retest'},
-  {slug:'ftp-retest', date:_FTP_RETEST_DATE, label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true, slidable:true,
+  // THE RETEST IS PINNED, BY DECISION — no slidable flag, so the slide never reaches it.
+  //
+  // It carried one, and that put the SAME event on the calendar twice on two different dates: the
+  // prescribed ftpTest session sits on _FTP_RETEST_DATE via a dated amendment and never moves,
+  // while the milestone slid with the streak. With slideWeeks=2 the calendar showed "FTP Retest"
+  // on Aug 27 (P2 wk1, the session) AND on Sep 10 (the milestone) — one event, two flags, two
+  // weeks apart, and no way for a reader to tell which was real.
+  //
+  // The gate above still slides: a missed week genuinely does push out when four clean weeks are
+  // banked, and hiding that would be the lie the slide exists to prevent. What does NOT follow is
+  // moving the test itself. The date is a commitment, so the two now read off one constant and
+  // agree permanently.
+  {slug:'ftp-retest', date:_FTP_RETEST_DATE, label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true,
    icon:'M3 17l6-6 4 4 8-8 M15 7h6v6', sTitle:'FTP retest', sSub:'Establish a new baseline', benefit:'Targets updated'},
   {slug:'chalet', date:'2026-10-31', label:'Chalet Reynard', note:'', road:true,
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
@@ -30337,11 +30349,12 @@ function _blockSlideWeeks_(now){
   }catch(e){ return 0; }
 }
 // THE effective milestone list — the single source both the Plan roadmap and the calendar flags
-// read, so a slide can never show two different dates. Only milestones flagged slidable (the
-// four-weeks gate and the retest window) move, and only by whole weeks the streak has lost. The
-// real-world events (Chalet, Alpe, 10k, Ven-Top) are returned unchanged, always — the mountain does
-// not move because a Tuesday was missed. Each slid entry carries baseDate + slidWeeks so a reader
-// can say "moved from X".
+// read, so a slide can never show two different dates. Only milestones flagged slidable move, and
+// only by whole weeks the streak has lost. That is now the four-weeks gate ALONE: the retest was
+// slidable too, which put one event on the calendar twice (the fixed ftpTest session on Aug 27 and
+// the slid milestone on Sep 10). The real-world events (Chalet, Alpe, 10k, Ven-Top) are returned
+// unchanged, always — the mountain does not move because a Tuesday was missed. Each slid entry
+// carries baseDate + slidWeeks so a reader can say "moved from X".
 function _blockMilestonesEffective_(now){
   var slide=_blockSlideWeeks_(now);
   return _BLOCK_MILESTONES.map(function(m){
@@ -33667,7 +33680,10 @@ function renderBlockPlan_(container){
     +'<div style="flex:1"><div style="font-size:10.5px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Clean weeks banked</div>'
     +'<div style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1.1">'+stk.streak+' of '+stk.target+'</div>'
     +'<div style="font-size:11.5px;color:'+(stk.reset?'#f59e0b':'#94a3b8')+';line-height:1.5;margin-top:2px">'
-    +(stk.reset?('A week was missed, so the clock reset. The gate has slid to '+_blockFmtDateD_(stk.projected)+', and the retest and every date behind it move with it.')
+    // The retest no longer moves with the gate, so this no longer says it does — the copy was the
+    // other half of the same duplicate: it told the athlete the date had shifted while the
+    // prescribed session sat unmoved on the original day.
+    +(stk.reset?('A week was missed, so the clock reset. The gate has slid to '+_blockFmtDateD_(stk.projected)+'. The retest stays on '+_blockFmtDate_(_FTP_RETEST_DATE)+' — that date is fixed.')
       :(stk.streak>=stk.target?'Four clean weeks banked — the retest gate is open.'
         :(stk.need+' more clean week'+(stk.need===1?'':'s')+' to '+_blockFmtDateD_(stk.base)+'. Miss one and the clock resets to zero — that reset is the whole point of the rule.')))+'</div></div></div>';
   H+=_blockCard_(twInner);
