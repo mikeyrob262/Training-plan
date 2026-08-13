@@ -55,7 +55,8 @@ console.log('\n' + Y + '=== the clinical register is gone, and named so it canno
 
 console.log('\n' + Y + '=== the five character notes from the brief are all present ===' + X);
 {
-  ok('leads with warmth on real findings', /LEAD WITH WHAT IS TRUE AND GOOD/.test(VOICE));
+  ok('leads with warmth on real findings', /WARMTH IS WHO YOU ARE/.test(VOICE));
+  ok('...as identity, not a concession bolted to the end', /NOT A CONCESSION YOU MAKE/.test(VOICE));
   ok('...with the reference phrasing to anchor it', /well-executed hilly run with smart pace/.test(VOICE));
   ok('self-corrects out loud', /CHANGE YOUR MIND OUT LOUD/.test(VOICE) && /let me revise/.test(VOICE));
   ok('...and revises rather than appending', /not bolt an addendum onto a verdict/.test(VOICE));
@@ -64,6 +65,25 @@ console.log('\n' + Y + '=== the five character notes from the brief are all pres
   ok('closes with real momentum', /CLOSE WITH MOMENTUM/.test(VOICE) && /14 days to the FTP retest/.test(VOICE));
   ok('...explicitly not a generic sign-off', /never a generic sign-off/.test(VOICE));
   ok('reaction is scaled to the size of the thing', /SCALE YOUR REACTION TO THE SIZE/.test(VOICE));
+  ok('...and asks for real clarifying questions by example', /which leg\?/i.test(VOICE));
+}
+
+// The fourth pass failed with every one of those notes already present. What was missing was a
+// character to imitate rather than a list of rules to satisfy, and a section for warmth to live in.
+console.log('\n' + Y + '=== he is a person, not a compliance target ===' + X);
+{
+  ok('opens on who he is and how he feels about the athlete', /glad to see them/.test(VOICE));
+  ok('...with a concrete setting, not an abstraction', /car park/.test(VOICE));
+  ok('...and is allowed to be funny', /allowed to be funny/.test(VOICE));
+  ok('credits the good decision the athlete already made',
+     /NAME THE GOOD DECISION THEY ALREADY MADE/.test(VOICE));
+  ok('...called out as the line a report always misses', /a report always leaves out/.test(VOICE));
+  // The old ban list included the softeners of ordinary speech. Banning "seems" and "appears to" is
+  // itself a push toward clinical prose - the target was analytical non-commitment, never softness.
+  ok('the hedge ban no longer bans human speech',
+     !/"seems"/.test(VOICE) && !/"appears to"/.test(VOICE) && !/"somewhat"/.test(VOICE));
+  ok('...and it still bans hiding', /BANNED, because every one is a way of not committing/.test(VOICE));
+  ok('...explicitly permitting a coach to sound like one', /not a ban on sounding human/.test(VOICE));
 }
 
 console.log('\n' + Y + '=== voice carries NO formatting - that was the self-contradiction ===' + X);
@@ -107,6 +127,37 @@ console.log('\n' + Y + '=== every surface gets voice; only the right ones get sh
   const reply = src.slice(src.indexOf('function fetchSmurkelReply_('), src.indexOf('function fetchSmurkelReply_(') + 3000);
   ok('Ask Coach no longer bans all markdown while being asked for tables',
      /No section headings and no asterisk-bolding/.test(reply) && !/Plain text, no markdown asterisks/.test(reply));
+}
+
+// THE BUG THAT SURVIVED THREE REWRITES OF THE VOICE. The voice/format split fixed the prompt arguing
+// with itself about SHAPE. Nobody checked the same seam for TONE: the debrief call site opened its
+// rule list with "Rules that override any instinct to be encouraging", sitting below the persona in
+// the same prompt and therefore winning. A warm persona cannot survive a call site that instructs
+// the model to override warmth - so the call site is asserted here, not just the persona.
+console.log('\n' + Y + '=== no call site countermands the voice ===' + X);
+{
+  const i = src.indexOf('function fetchSmurkelDebrief_(');
+  const debrief = src.slice(i, src.indexOf('var key=_ciHash_(prompt);', i));
+
+  ok('the encouragement override is GONE', !/override any instinct to be encouraging/.test(debrief));
+  ok('...replaced by a rule that binds figures, not warmth', /never bind the warmth/.test(debrief));
+  ok('no surface tells him to harden his tone', !/Do not soften it/.test(debrief));
+  ok('...the HR ceiling rule now guards the FIGURE instead', /Never fudge the figure/.test(debrief));
+
+  // Section 2 was literally called "The Verdict". A section named Verdict gets a verdict written
+  // into it however warm the persona is, and there was nowhere for affirmation to go at all.
+  ok('the mandated structure no longer opens on a "Verdict"', !/The Verdict/.test(debrief));
+  ok('...it opens on a Headline that leads with what went right',
+     /The Headline/.test(debrief) && /Lead with what went right/.test(debrief));
+  ok('...and warmth has a section of its own, from the reference character',
+     /The Smart Move You Already Made/.test(debrief));
+  ok('...which is skipped only when there is genuinely no good call to name',
+     /not because the session was ordinary/.test(debrief));
+
+  // The renderer draws "**Name**" and "## Name" as headings but leaves mid-sentence asterisks as
+  // literal text, so a flat "no asterisk-bolding" banned the one bold form that actually works.
+  ok('bold is allowed where the renderer supports it', !/No asterisk-bolding\./.test(debrief));
+  ok('...and refused where it would print literal asterisks', /Never bold inside a sentence/.test(debrief));
 }
 
 console.log('\n' + Y + '=== the panel can actually DRAW what the prompt asks for ===' + X);

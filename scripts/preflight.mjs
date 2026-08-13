@@ -741,6 +741,20 @@ try {
     fail('the layout override can strand the user silently (see above).');
   }
 
+  // STEP 44 - Personal Bests / 10k pace click-through. Three silent ways to break: a reference that
+  //           resolves to a TOMBSTONE (83% of st.rides are tombstones), position 0 refused because
+  //           it is falsy, and a handle written unquoted into a double-quoted onclick - which
+  //           throws ReferenceError on click, with nothing catching it and nothing logged.
+  console.log(`${D}. checking the PB -> run links...${X}`);
+  try {
+    const so = execSync('node scripts/run-pb-link-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a personal-best row links to the wrong run, or to nothing (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

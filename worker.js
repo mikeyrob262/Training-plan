@@ -32711,34 +32711,53 @@ function _smurkelFacts_(C){
 // specced direct, confrontational, Type-A-by-name, and the rename to Dr. Smurkel introduced a fresh
 // persona reading "warm and funny / generous about real work", which is what produced a hedged
 // clinical summary. Warmth is not the job here; the athlete already knows the numbers were fine.
-// PERSONA — rewritten as a CONVERSATIONAL spec, not a verdict spec.
+// PERSONA — rebuilt as a CHARACTER, after four tone passes failed.
 //
-// The previous version mandated the opposite of what was wanted, which is why three wording passes
-// could not fix it. It said "lead with the verdict, never open with a data recap", "instructions as
-// instructions - imperative", and "one emoji maximum". The reference voice does the reverse: it
-// opens by walking the data in named sections, uses emoji freely as punctuation, asks the athlete
-// questions back, and cheerfully corrects itself when caught out. Those are not tone adjustments on
-// top of a verdict — they are a different deliverable. Editing adjectives inside the old spec could
-// never get there.
-//
-// What is KEPT from the old spec, because it was right: second person, no hedging vocabulary, no
-// scolding, scale the reaction to the size of what happened, and update the read when the athlete
-// gives a good reason.
 // WHO HE IS. This goes to every surface Dr. Smurkel speaks on - the Plan-page debrief, Ask Coach,
-// the activity-page answers, the year insight. It carries NO formatting instructions, because the
-// surfaces disagree about shape and agree completely about character. Format layers are below.
+// the activity-page answers, the year insight, the ride analysis. It carries NO formatting
+// instructions, because the surfaces disagree about shape and agree completely about character.
+// Format layers are below.
 //
-// The register this replaces produced lines like "you are a person who reads a ceiling as a target
-// and a target as a floor, and this has your fingerprints on it" - a character verdict delivered
-// about good news. The old prompt asked for exactly that: it told him the athlete "is Type A" and
-// to "name the tendency". He did. The fix is not a softer adjective, it is deleting the instruction
-// to diagnose the person at all.
-var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has followed this athlete all block. '
-  +'You are talking WITH them, not filing a report on them. '
-  +'LEAD WITH WHAT IS TRUE AND GOOD. Most real findings are good news, so deliver them as good news '
-  +'and deliver them FIRST: "that is not a bad run, that is a well-executed hilly run with smart pace '
-  +'adjustment", "you are already managing this correctly". Affirm plainly and without a hedge '
-  +'attached. If there is also something to flag, it comes after, and it is a note, not a verdict. '
+// WHY THE FOURTH PASS FAILED, AND IT WAS NOT THE WORDING. The previous version already carried every
+// character note from the brief - lead with what is good, self-correct, ask and use the answer, close
+// with momentum - and the debrief still came back clinical. Two reasons, both structural:
+//
+//   1. The prompt argued with itself again, on VOICE this time. The voice/format split fixed the
+//      shape contradiction (a persona demanding headings at four sites that ban them). Nobody
+//      checked the same seam for tone. The debrief call site opened its rules with "Rules that
+//      override any instinct to be encouraging" - a direct instruction to suppress warmth, sitting
+//      BELOW the persona in the same prompt and therefore winning. The persona said affirm; the call
+//      site said override the instinct to affirm. Same bug class, different axis.
+//   2. The persona was a list of BANS. Roughly two thirds of it was prohibition, and the sections
+//      the debrief mandated had nowhere for warmth to live - section 2 was literally called "The
+//      Verdict". A model handed mostly prohibitions and a section named Verdict writes carefully and
+//      coldly, and stays clinical no matter which individual sentences are banned. Banning one
+//      clinical sentence buys a different clinical sentence.
+//
+// So this version leads with who he is and how he feels about the athlete, carries the reference
+// character lines as exemplars to imitate rather than rules to comply with, and keeps only the bans
+// that are load-bearing: no psychoanalysis (the flagged register, quoted so an edit cannot quietly
+// reintroduce it) and no fabrication.
+//
+// THE HEDGE BAN IS NARROWER ON PURPOSE. The old list banned "seems", "appears to", "may be",
+// "somewhat", "fairly" - those are the softeners of ordinary spoken coaching, and banning them is
+// itself a push toward clinical prose. The real target was never softness, it was analytical
+// non-commitment. It now bans hiding, and explicitly permits sounding like a person.
+var _SM_PERSONA='You are Dr. Smurkel. You have coached this athlete all block, you know their training '
+  +'inside out, and you are glad to see them. You are talking WITH them - the way a coach talks in the '
+  +'car park five minutes after a session - not filing a report on them. You are allowed to be funny, '
+  +'and a light touch where one genuinely lands is part of who you are. '
+  +'WARMTH IS WHO YOU ARE, NOT A CONCESSION YOU MAKE. You are on their side and it shows in the FIRST '
+  +'line, not in a compliment bolted onto the end. Most real findings are good news, so deliver them as '
+  +'good news and deliver them first. This is your register: "that is not a bad run - that is a '
+  +'well-executed hilly run with smart pace adjustment". "You are already managing this correctly." '
+  +'Affirm plainly, with the number that earns it, and with no hedge hanging off it. If something also '
+  +'needs flagging it comes after, and it is a note between two people who trust each other, not a '
+  +'judgement handed down. '
+  +'NAME THE GOOD DECISION THEY ALREADY MADE. When the numbers show them doing something right - '
+  +'holding a ceiling, easing off a climb, keeping easy miles easy, stopping a session for a real '
+  +'reason - say so, and tell them it was the right call. That is usually the most useful line in the '
+  +'whole debrief, and it is the one a report always leaves out. '
   +'NEVER PSYCHOANALYSE THEM. Describe what happened in the session; never diagnose what kind of '
   +'person they are. This exact register is banned: "you are a person who reads a ceiling as a target '
   +'and a target as a floor, and this has your fingerprints on it". It is clinical, it is a character '
@@ -32748,21 +32767,24 @@ var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has followed this 
   +'CHANGE YOUR MIND OUT LOUD. If something cuts against what you assumed, say so in the moment '
   +'- "got it, that is the opposite of what I assumed, let me revise" - and then actually revise. Do '
   +'not bolt an addendum onto a verdict you are quietly keeping. Being visibly wrong and fixing it in '
-  +'the room is the job, not a climbdown. '
-  +'ASK REAL QUESTIONS, THEN USE THE ANSWER. When the data implies something you cannot see - travel, '
-  +'heat, a bad night, unfamiliar roads, an odd hour - say what you notice and ask about it. When they '
-  +'answer, fold it into a genuinely NEW read rather than a recap with a footnote. Never re-ask or '
-  +'re-argue something they have already answered. '
-  +'SCALE YOUR REACTION TO THE SIZE OF THE THING. A 2 bpm overrun on an easy run is a small '
-  +'correction. Never scold, and never imply a session was wasted or that they have lost ground unless '
-  +'the numbers actually say so. When you do correct something, give the reason and the fix in the same '
-  +'breath. '
+  +'front of them is the job, not a climbdown. '
+  +'ASK REAL QUESTIONS, THEN USE THE ANSWER. When the data implies something you cannot see - a niggle, '
+  +'travel, heat, a bad night, unfamiliar roads, an odd hour - say what you noticed and ask about it '
+  +'plainly: "which leg?", "how long has that been going on?", "was that before or after the week off?". '
+  +'When they answer, fold it into a genuinely NEW read rather than a recap with a footnote. Never '
+  +'re-ask or re-argue something they have already answered. '
+  +'SCALE YOUR REACTION TO THE SIZE OF THE THING. A 2 bpm overrun on an easy run is a small correction '
+  +'and should sound like one. Never scold, and never imply a session was wasted or that they have lost '
+  +'ground unless the numbers actually say so. When you do correct something, give the reason and the '
+  +'fix in the same breath. '
   +'CLOSE WITH MOMENTUM. End on what this feeds into - the concrete next thing and its date where you '
   +'have been given one, "14 days to the FTP retest, running is on track" - never a generic sign-off '
   +'and never a summary of what you just said. '
-  +'BANNED, because every one is a way of not committing: "worth noting", "I am judging this on", '
-  +'"it is worth", "that said", "somewhat", "fairly", "arguably", "may be", "might be", '
-  +'"seems", "appears to", "one could". Say the thing. '
+  +'COMMIT TO YOUR READ. Analyst filler is BANNED, because every one is a way of not committing: '
+  +'"worth noting", "it is worth", "that said", "arguably", "one could", "I am judging this on". Say '
+  +'the thing and stand behind it. This is not a ban on sounding human: a coach who says "I think" or '
+  +'"that looks like" is committing and sounds like a person, while a coach who says "it is worth '
+  +'noting this may arguably be somewhat elevated" is hiding. '
   +'Only ever use the numbers you are given. If a figure is not in the facts you do not have it '
   +'- do not estimate it, and do not name a place, a segment or a result you were not told.';
 // LONG-FORM ONLY: the Plan-page debrief, the one surface with room to breathe. Tables earn their
@@ -32793,7 +32815,9 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
   var NL=String.fromCharCode(10);
   var prompt=_SM_PERSONA+NL+NL+_SM_FORMAT_LONG+NL+NL
     +'Here is everything known about the session just completed and the week around it.'+NL+facts+NL+NL
-    +'Write the post-session debrief. Rules that override any instinct to be encouraging:'+NL
+    +'Write the post-session debrief. These rules are about ACCURACY. They bind the FIGURES and they '
+    +'never bind the warmth - being generous about a good session is not a licence to fudge a number, '
+    +'and getting the numbers right is not a reason to sound like a report:'+NL
     +'- Use ONLY the figures above. Never invent one, never round a "not recorded" to zero, never infer '
       +'a number from another number. If something was not recorded, either say so or leave it out.'+NL
     +'- Do not describe terrain, weather or how it felt. You were not there and none of that is above.'+NL
@@ -32801,28 +32825,36 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
       +'prescribed effort — never call the session short because the whole-ride average sits under the band.'+NL
     +'- Be specific. "Solid effort" is worthless; "47 minutes at 135W is real aerobic base work" is the job.'+NL
     +'- If a HR CEILING is given, that is the line the session is judged on. Say whether it was held or '
-      +'blown, by how many bpm, and what that means. Do not soften it.'+NL
+      +'blown, by how many bpm, and what that means. Never fudge the figure - and a 2 bpm overrun is '
+      +'both a real number and a small thing, so say both.'+NL
     +'- If a LAST COMPARABLE SESSION is given, say what MOVED against it, with both numbers. That '
       +'comparison is the point of the debrief; today in isolation is a receipt, not coaching.'+NL+NL
     +'Structure, with short headings on their own lines. Skip any section you have no data for:'+NL
     +'1. Title line: the activity name and one line of riff.'+NL
-    +'2. The Verdict — two or three sentences. What this session WAS, whether it was executed, and the '
-      +'one thing that decides that. This comes FIRST and is not a list.'+NL
-    +'3. What Moved — today against the last comparable session, both numbers on every claim, and what '
+    +'2. The Headline — two or three sentences. What this session WAS, whether it was executed, and the '
+      +'one thing that decides that. Lead with what went right, because on most sessions that IS the '
+      +'true reading. Not a list, and never an assessment of the person.'+NL
+    +'3. The Smart Move You Already Made — the good decision the numbers show them making: a ceiling '
+      +'held, a climb paced, easy miles kept easy, a session stopped for a real reason. Name it, say it '
+      +'was the right call, and give the figure that proves it. Skip this only when there genuinely is '
+      +'not one - not because the session was ordinary.'+NL
+    +'4. What Moved — today against the last comparable session, both numbers on every claim, and what '
       +'the change means. Say plainly if nothing moved.'+NL
-    +'4. The Numbers That Matter — only the figures that support or undercut the verdict. Not an inventory. '
-      +'If a number is unremarkable, leave it out.'+NL
-    +'5. The Week — Fitness/Fatigue/Form and where the week stands, in prose, two or three sentences.'+NL
-    +'6. Do This Next — imperative, specific, one or two instructions. Not advice, instructions.'+NL+NL
+    +'5. The Numbers That Matter — only the figures that support or undercut the headline. Not an '
+      +'inventory. If a number is unremarkable, leave it out.'+NL
+    +'6. The Week — Fitness/Fatigue/Form and where the week stands, in prose, two or three sentences.'+NL
+    +'7. Do This Next — imperative, specific, one or two instructions. Not advice, instructions.'+NL+NL
     +'PROPORTION. Judge the cost of this session against the numbers actually given, not against how '
     +'the deviation sounds. If TSS is low or not recorded, an easy session did not put the athlete in a '
     +'hole and you must not imply tomorrow is compromised. Only say a following session is at risk when '
     +'Form and the load figures above actually support it, and quote the figure you are reasoning from. '
     +'A small overrun on an easy day is a correction to make, not a setback to recover from.'+NL+NL
-    +'No asterisk-bolding. A compact markdown table is right for the comparison in What Moved, and for '
-    +'any other place two sets of numbers sit side by side. Up to 600 words - use them where the '
-    +'reasoning earns it and stop '
-    +'when it does not. Depth on the one thing that matters beats a paragraph on each of six.';
+    +'Put each section heading on its own line, as either "## Name" or "**Name**" - both are drawn as '
+    +'headings. Never bold inside a sentence: mid-sentence asterisks are not rendered and reach the '
+    +'panel as literal asterisks. A compact markdown table is right for the comparison in What Moved, '
+    +'and for any other place two sets of numbers sit side by side. Up to 600 words - use them where '
+    +'the reasoning earns it and stop '
+    +'when it does not. Depth on the one thing that matters beats a paragraph on each of seven.';
   var key=_ciHash_(prompt);
   var hit=_ciGet_(key);
   if(hit!=null){ callback(null, hit); return; }
@@ -42703,6 +42735,57 @@ function _prFmtGap_(s){
   s=Math.round(Math.abs(s||0)); var m=Math.floor(s/60), ss=s%60;
   return m>0 ? (m+':'+(ss<10?'0':'')+ss) : (ss+'s');
 }
+// ---- click-through from a stat to the run that set it -------------------------------------------
+// A board row naming a time and a year is a dead end otherwise: the run behind it is sitting in the
+// library and nothing on the page could reach it. Two jobs, deliberately kept apart.
+//
+// _runRefFor_ resolves a getRuns() PROJECTION back to a real st.rides record. The durable handle is
+// tried first; the fallback is a direct stravaId scan, which is the same fallback the run card's
+// delete button carries and is needed for the same reason — the k: handle form reads
+// movingSecs/duration, and the projection does not carry either.
+//
+// Returns a handle STRING, a POSITION, or '' when the run is no longer in the library. Test the
+// result with rideRefOk_ and never with truthiness: position 0 is a valid reference.
+function _runRefFor_(r){
+  if(!r) return '';
+  try{
+    if(typeof rideHandle_==='function' && typeof rideResolveIdx_==='function'){
+      var h=rideHandle_(r);
+      if(h){
+        var hi=rideResolveIdx_(h);
+        // A TOMBSTONE MUST NEVER WIN A CLICK. rideHandleIndex_ prefers a live record only when two
+        // records COLLIDE on a handle — a handle whose only record is deleted still resolves — so
+        // the liveness check belongs here. 83% of st.rides are tombstones, so this is the common
+        // case, not a defensive edge. The stravaId fallback below already skips them.
+        if(hi>=0 && typeof st!=='undefined' && st && st.rides && st.rides[hi] && !st.rides[hi].deleted) return h;
+      }
+    }
+  }catch(e){}
+  try{
+    // String()-coerced on BOTH sides: stravaId is a string on some records and a number on others.
+    if(r.stravaId!=null && typeof st!=='undefined' && st && st.rides){
+      var want=String(r.stravaId);
+      for(var i=0;i<st.rides.length;i++){
+        var x=st.rides[i];
+        if(x && !x.deleted && String(x.stravaId)===want) return i;
+      }
+    }
+  }catch(e){}
+  return '';
+}
+// ONE opener for every run reference on this page, so the PB board and the 10k card cannot drift
+// apart on the surface split (desktop reveals the right-hand panel; mobile opens the overlay).
+function _runOpenRef_(ref){
+  if(typeof rideRefOk_!=='function' || !rideRefOk_(ref)) return;
+  try{
+    if(typeof isDesktop==='function' && isDesktop() && typeof openDesktopRideDetail==='function'){
+      var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='flex';
+      openDesktopRideDetail(ref);
+    } else if(typeof openRideDetail==='function'){ openRideDetail(ref); }
+  }catch(e){}
+}
+// Both cards build HTML strings with inline onclick, so the opener has to be reachable by name.
+try{ if(typeof window!=='undefined'){ window._runOpenRef_=_runOpenRef_; window._runRefFor_=_runRefFor_; } }catch(e){}
 function _prCompute_(){
   var cov=(typeof _covFor_==='function')?_covFor_('run'):null;
   if(!cov) return null;                                    // unprimed or run cannot be ranked
@@ -42718,12 +42801,16 @@ function _prCompute_(){
     runs.forEach(function(r){
       var d=parseFloat(r&&r.distance)||0, t=(typeof _durSec_==='function')?_durSec_(r):0;
       var day=String((r&&r.date)||''); if(day.length<7) return;
+      // The run itself rides along so a picked entry can be resolved back to the library record.
+      // Resolution is deferred to the three picks below rather than done here: _runRefFor_ can fall
+      // back to a linear st.rides scan, and running that per candidate would be thousands of scans
+      // per render to keep at most three answers.
       if(ev.kind==='time'){
         if(d<ev.lo || d>ev.hi || t<=0) return;
-        pool.push({date:day, val:t, mi:d});
+        pool.push({date:day, val:t, mi:d, run:r});
       }else{
         if(d<=0) return;
-        pool.push({date:day, val:d, mi:d, secs:t});
+        pool.push({date:day, val:d, mi:d, secs:t, run:r});
       }
     });
     if(!pool.length) return;
@@ -42734,6 +42821,11 @@ function _prCompute_(){
     // THE OMISSION. No band entry means no rung on this event, so the event does not appear.
     if(!band) return;
     var season=pick(pool.filter(function(p){ return p.date.slice(0,4)===thisYear; }));
+    // Resolve link targets for the picked entries only. Guarded on undefined because the three
+    // picks are frequently the SAME object (a career best set this year is all three at once).
+    [career, band, season].forEach(function(p){
+      if(p && p.ref===undefined) p.ref=(typeof _runRefFor_==='function')?_runRefFor_(p.run):'';
+    });
     // Which tier carries the live target. The career best is reachable only if the band best is
     // within a plausible margin of it; otherwise the career best is history and the band best is
     // the thing to beat. Judged on the gap between two of HIS OWN results, so it is a statement
@@ -42754,6 +42846,16 @@ function _prSection_(){
   var c=g.cov;
   var fmt=function(ev,p){ return ev.kind==='time' ? _prFmtTime_(p.val) : (Math.round(p.val*10)/10+' mi'); };
   var yr=function(p){ return p.date.slice(0,4); };
+  // A value becomes a link ONLY when its run is still in the library — a dead click is worse than
+  // plain text, and a career best from 2015 is exactly the row most likely to have no record left.
+  // rideRefAttr_ quotes a handle and leaves a position bare, so both forms are safe in the
+  // double-quoted attribute. The dotted underline marks it as a link without adding a button.
+  var link=function(p, inner){
+    if(!p || typeof rideRefOk_!=='function' || !rideRefOk_(p.ref)) return inner;
+    return '<span onclick="_runOpenRef_('+rideRefAttr_(p.ref)+')" title="Open this run" '
+      +'style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px">'
+      +inner+'</span>';
+  };
   var html='';
   g.rows.forEach(function(r){
     var ev=r.ev;
@@ -42769,7 +42871,7 @@ function _prSection_(){
     html+='<div style="padding:11px 0;border-bottom:1px solid var(--d-edge)">'
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">'
       +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+ev.name+'</span>'
-      +'<span style="font-size:15px;font-weight:800;color:#FC4C02">'+fmt(ev,target)+'</span>'
+      +'<span style="font-size:15px;font-weight:800;color:#FC4C02">'+link(target, fmt(ev,target))+'</span>'
       +'</div>'
       +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px">'
       +(r.reachable
@@ -42785,13 +42887,13 @@ function _prSection_(){
     //     the only number in front of him is from an athlete he no longer is.
     if(!r.reachable){
       html+='<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'
-        +'career best '+fmt(ev,r.career)+' &middot; '+yr(r.career)+' &middot; history</div>';
+        +'career best '+link(r.career, fmt(ev,r.career)+' &middot; '+yr(r.career))+' &middot; history</div>';
     }else if(!r.careerIsBand){
       html+='<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'
-        +'best since '+_PR_BAND_LABEL+' '+fmt(ev,r.band)+' &middot; '+yr(r.band)+'</div>';
+        +'best since '+_PR_BAND_LABEL+' '+link(r.band, fmt(ev,r.band)+' &middot; '+yr(r.band))+'</div>';
     }
     if(r.season && r.season!==target){
-      html+='<div style="font-size:11px;color:var(--d-t4);margin-top:2px">this year '+fmt(ev,r.season)
+      html+='<div style="font-size:11px;color:var(--d-t4);margin-top:2px">this year '+link(r.season, fmt(ev,r.season))
         +(gap!==null ? (' &middot; beat by '+(ev.kind==='time'?_prFmtGap_(gap):(Math.round(gap*10)/10+' mi'))) : ' &middot; ahead')
         +'</div>';
     }
@@ -42961,16 +43063,19 @@ function _runPaceStr_(secPerMi){
 function _runCurrentPace_(nRuns){
   // Current form from the most recent runs that actually carry a pace. Distance/time, never the
   // stored pace string, so one formatting convention cannot skew it.
-  var runs=_runAll_(), tot=0, sec=0, used=0, oldest=null;
+  var runs=_runAll_(), tot=0, sec=0, used=0, oldest=null, newest=null;
   for(var i=0;i<runs.length && used<(nRuns||6);i++){
     var r=runs[i];
     var mi=parseFloat(r.distance)||0;
     var ss=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs)||0);
     if(!(mi>0.5) || !(ss>60)) continue;
     tot+=mi; sec+=ss; used++; oldest=String(r.date).slice(0,10);
+    // _runAll_ is newest-first, so the FIRST run that qualifies is the most recent of the set.
+    // Carried so the card can open one real run behind an average that has no single source.
+    if(!newest) newest=r;
   }
   if(!used || !(tot>0)) return null;
-  return { secPerMi:sec/tot, runs:used, oldest:oldest };
+  return { secPerMi:sec/tot, runs:used, oldest:oldest, newest:newest };
 }
 function _run10kPlan_(){
   var out={ race:RUN_RACE, refs:[], current:null, daysOut:null };
@@ -42986,16 +43091,21 @@ function _run10kPlan_(){
     var board=(typeof _prCompute_==='function')?_prCompute_():null;
     var row=board && board.rows ? board.rows.filter(function(x){ return x.ev && x.ev.id==='10k'; })[0] : null;
     if(row){
+      // ref rides along from the board so both cards open the SAME run for the same stat.
       if(row.career && row.career.val>0)
-        out.refs.push({ label:'Career best', sec:row.career.val, year:String(row.career.date||'').slice(0,4), tier:'career' });
+        out.refs.push({ label:'Career best', sec:row.career.val, year:String(row.career.date||'').slice(0,4), tier:'career', ref:row.career.ref });
       if(row.band && row.band.val>0 && (!row.career || row.band.val!==row.career.val))
-        out.refs.push({ label:'Best since 60', sec:row.band.val, year:String(row.band.date||'').slice(0,4), tier:'band' });
+        out.refs.push({ label:'Best since 60', sec:row.band.val, year:String(row.band.date||'').slice(0,4), tier:'band', ref:row.band.ref });
     }
   }catch(e){}
   var cur=_runCurrentPace_(6);
   if(cur){
+    // Current form is an AVERAGE, so it has no single run behind it. It still links — to the most
+    // recent of the runs averaged — and the card says so on the row rather than implying the
+    // opened run is the source of the number.
     out.current={ secPerMi:cur.secPerMi, runs:cur.runs, since:cur.oldest,
-                  sec:cur.secPerMi*RUN_RACE.miles };
+                  sec:cur.secPerMi*RUN_RACE.miles,
+                  ref:(typeof _runRefFor_==='function')?_runRefFor_(cur.newest):'' };
   }
   out.refs.forEach(function(x){ x.secPerMi=x.sec/RUN_RACE.miles; });
   return out;
@@ -43068,11 +43178,15 @@ function _runShinCardHTML_(){
 function _run10kCardHTML_(){
   var pl=_run10kPlan_();
   if(!pl.refs.length && !pl.current) return '';
-  var line=function(label, prov, secPerMi, total){
+  var line=function(label, prov, secPerMi, total, ref){
     var pace=_runPaceStr_(secPerMi);
     if(!pace) return '';
     var tm=total>0?(Math.floor(total/60)+':'+('0'+Math.round(total%60)).slice(-2)):null;
-    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-top:1px solid var(--b1)">'
+    // The whole row is the click target here (unlike the PB board, where only the value is), because
+    // the row already carries its provenance line and there is nothing else on it to click.
+    var open=(typeof rideRefOk_==='function' && rideRefOk_(ref));
+    return '<div '+(open?('onclick="_runOpenRef_('+rideRefAttr_(ref)+')" title="Open this run" '):'')
+      +'style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-top:1px solid var(--b1)'+(open?';cursor:pointer':'')+'">'
       +'<div style="min-width:0"><div style="font-size:12.5px;font-weight:700;color:var(--t1)">'+label+'</div>'
       +'<div style="font-size:10.5px;color:var(--t3)">'+prov+'</div></div>'
       +'<div style="text-align:right;flex-shrink:0"><div style="font-size:14px;font-weight:800;color:var(--orange)">'+pace+' /mi</div>'
@@ -43082,11 +43196,16 @@ function _run10kCardHTML_(){
   pl.refs.forEach(function(r){
     // The year is not decoration. A 2015 personal best is not current fitness and must never be
     // presented as a target without saying when it was set.
-    body+=line(r.label, 'set in '+r.year+(r.tier==='career'?' \u00b7 career best':' \u00b7 best since 60'), r.secPerMi, r.sec);
+    body+=line(r.label, 'set in '+r.year+(r.tier==='career'?' \u00b7 career best':' \u00b7 best since 60'), r.secPerMi, r.sec, r.ref);
   });
   if(pl.current){
-    body+=line('Current form', 'average of your last '+pl.current.runs+' runs, back to '+pl.current.since,
-               pl.current.secPerMi, pl.current.sec);
+    // The provenance line names what the click opens. Without it the row reads as though the run it
+    // opens is the run that set the number, and it is not \u2014 the number is an average of six.
+    var curOpen=(typeof rideRefOk_==='function' && rideRefOk_(pl.current.ref));
+    body+=line('Current form',
+               'average of your last '+pl.current.runs+' runs, back to '+pl.current.since
+                 +(curOpen?(' \u00b7 opens the most recent of the '+pl.current.runs):''),
+               pl.current.secPerMi, pl.current.sec, pl.current.ref);
   }
   var sub='Oct 18 2026'+(pl.daysOut!=null?(' &middot; '+pl.daysOut+' days out'):'');
   return _runCard_('10k race pace', sub, body);
@@ -43306,7 +43425,21 @@ function renderRunInto_(scr, surface){
     var yearStr=new Date().getFullYear()+'-01-01';
     var sorted=runs.filter(function(r){return r.date&&r.date>=yearStr;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
     var runList=document.createElement('div');
-    runList.style.cssText='margin:0 16px 16px;height:380px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)';
+    // THE INNER SCROLLER IS DESKTOP-ONLY. A fixed 380px box with its own overflow-y is fine on
+    // desktop, where the cards are wide-and-short and _balCols_ wants a bounded height to measure.
+    // On a touch surface it produced both halves of the reported iPad bug: in a ~810px column the
+    // stat grids wrap and a single card is taller than 380px, so exactly ONE run is visible, and a
+    // nested scroller captures the touch gesture, so the page itself will not scroll.
+    //
+    // iPad is the MOBILE surface here, which is why today's #ds-content fix could not reach it:
+    // isDesktop() is innerWidth>=1024, and iPad portrait is 810-834px. Landscape (>=1080px) does
+    // take the desktop path and was already fixed. This branch covers portrait.
+    //
+    // Mobile therefore lets the list flow at its natural height and scroll with the page - one
+    // scroller, no gesture trap, every run reachable.
+    runList.style.cssText=(surface==='desktop')
+      ? 'margin:0 16px 16px;height:380px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)'
+      : 'margin:0 16px 16px;border-radius:14px;border:1px solid var(--b1)';
     sorted.forEach(function(r,ri){
       var rcard=document.createElement('div');
       rcard.style.cssText='background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden;margin-bottom:8px;padding:14px';
@@ -43400,6 +43533,17 @@ function renderRunInto_(scr, surface){
           if(glats && glats.length>5 && glons && glons.length>5){
             var mapWrap=document.createElement('div');
             mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1);height:160px';
+            // THIS IS WHY THE RUN MAP WAS AN EMPTY BOX. showScreen() sweeps every
+            // .leaflet-container in the document (see the sweep and its data-keep-map opt-out),
+            // and buildRouteMap hands Leaflet its OWN div — so the map element itself carries the
+            // class and the sweep deletes it, leaving this 160px bordered wrapper standing empty.
+            // The run card loses the race in a way the ride detail map does not: this map is drawn
+            // from ensureRideStreams().then(), which resolves a second or more after render —
+            // squarely inside the window where the store_v2 tail load calls showHomeDash() no
+            // matter which surface is showing. Same root cause the desktop Segment Map hit.
+            // The card owns this map's lifecycle (renderRun rebuilds the list, and showScreen
+            // removes RUN-SCREEN wholesale), so opting out of the sweep leaks nothing.
+            try{ mapWrap.setAttribute('data-keep-map','1'); }catch(e){}
             try{
               mapWrap.innerHTML=buildRouteMap(glats, glons, [], 0).replace('height:260px','height:160px');
               slot.appendChild(mapWrap);
