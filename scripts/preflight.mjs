@@ -713,6 +713,20 @@ try {
     fail('Run Training phase 2 is misreporting (see above).');
   }
 
+  // STEP 42 - the Thu/Fri ride swap. Two properties carry it: only the RIDE moves, so Friday
+  //           keeps its strength slot and the A/B/C/D rotation is untouched; and it is DATED,
+  //           because the phase tables are read for PAST dates too and rewriting them would
+  //           re-grade completed sessions against a plan that did not exist at the time.
+  console.log(`${D}. checking the Thu/Fri ride swap...${X}`);
+  try {
+    const so = execSync('node scripts/thu-fri-swap-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Thu/Fri swap is not behaving (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

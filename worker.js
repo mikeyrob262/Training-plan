@@ -30154,6 +30154,37 @@ function _tbPhaseFor_(d){
 // _planSessionFromDef_. Returns null outside the block. weekInPhase is 1-based for the "P1 · Week 2"
 // label. A day with no slot (a gap in a date-window phase) resolves to an empty session list, not a
 // fabricated one.
+// ---- dated schedule amendment: Thursday and Friday exchange their RIDE ---------------------------
+//
+// Thursday was Z2 and Friday was Threshold in every phase, which put a hard Thursday, a hard Friday
+// and the Saturday group ride back to back. From the date below, Thursday takes the Threshold and
+// Friday becomes a genuine easy day directly before the group ride.
+//
+// ONLY the ride moves. Friday's strength slot stays on Friday, and the A/B/C/D rotation that
+// resolves which group it is is untouched.
+//
+// Applied as a DATED amendment rather than by editing the phase tables, because those tables are
+// read for past dates too: rewriting them would change what the coach believes was prescribed on
+// every Thursday and Friday already ridden, and re-grade completed sessions against a plan that did
+// not exist at the time. The tables keep describing the block as authored; this records the change.
+var SCHED_THU_FRI_SWAP_FROM = '2026-08-13';   // the first Thursday after the decision
+function _blockSwapThuFri_(p, mon, dateKey, slots){
+  try{
+    if(!p || !p.week) return slots;
+    if(mon!==3 && mon!==4) return slots;                       // 0=Mon .. 3=Thu, 4=Fri
+    if(String(dateKey) < SCHED_THU_FRI_SWAP_FROM) return slots;
+    if(typeof SESSION_DEFS==='undefined') return slots;
+    var isRide=function(sl){
+      var d2=sl && SESSION_DEFS[sl.i];
+      return !!d2 && (d2.type==='ride' || d2.type==='attempt');
+    };
+    var mine=slots||[], theirs=p.week[mon===3?4:3]||[];
+    var incoming=theirs.filter(isRide);
+    if(!incoming.length) return slots;                          // nothing to exchange
+    // Ride first, then this day's own non-ride slots, so Friday still reads ride-then-strength.
+    return incoming.concat(mine.filter(function(sl){ return !isRide(sl); }));
+  }catch(e){ return slots; }
+}
 function blockPlanFor_(dateKey){
   var d=_blockDay_(dateKey); if(!d) return null;
   var pf=_tbPhaseFor_(d); if(!pf) return null;
@@ -30161,7 +30192,7 @@ function blockPlanFor_(dateKey){
   var mon=(d.getDay()+6)%7;   // 0=Mon .. 6=Sun
   var slots=null, via='week';
   if(p.dates && p.dates[dateKey]){ slots=p.dates[dateKey]; via='date'; }
-  else if(p.week){ slots=p.week[mon]||[]; }
+  else if(p.week){ slots=_blockSwapThuFri_(p, mon, dateKey, p.week[mon]||[]); }
   else slots=[];
   var weekInPhase=Math.floor(Math.max(0,_blockDaysBetween_(_blockDay_(p.start), d))/7)+1;
   var sessions=(slots||[]).map(function(sl){
