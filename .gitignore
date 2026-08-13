@@ -1,1 +1,4 @@
 .persona-build/
+node_modules/
+.syntax-check/
+.sc/
