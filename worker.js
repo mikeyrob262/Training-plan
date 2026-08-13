@@ -6415,7 +6415,19 @@ function applyRideSync_(existing, incoming){
 // stravaId fast path) with a ride-specific field list; sessions have no stravaId
 // and no such list, so they get this generic-mask merge via mergeArrays_'s
 // id-cluster path (itemsMatch_ buckets them by their stable session id).
-function _isSession_(x){ return !!(x && typeof x==='object' && x.id!=null && typeof x.type==='string' && /^(ride|strength|mobility)$/.test(x.type)); }
+// WHICH OBJECTS GET SESSION-AWARE MERGING. This gate decides whether mergeArrays_ resolves a pair
+// through mergeSession_ (mask, per-field LWW, the recency rule for 'deleted') or drops it into the
+// generic union. It listed three of the SEVEN types the plan actually stores, so a run, rest,
+// optional or attempt session got NONE of that — no mask honoured, no deleted-recency, no
+// allowlist. Read off the deployed SESSION_DEFS: strength, mobility, ride, rest, run, optional,
+// attempt.
+//
+// This is load-bearing for the type repair specifically. mergeArrays_ calls this with OR across
+// both sides, so while the correction was in flight (local 'run' vs remote 'ride') the remote side
+// still qualified and the pair reached mergeSession_. The moment the fix converges and BOTH sides
+// read 'run', an incomplete list here would drop run sessions out of session merging altogether —
+// the repair would land and then quietly disable the machinery protecting it.
+function _isSession_(x){ return !!(x && typeof x==='object' && x.id!=null && typeof x.type==='string' && /^(ride|run|strength|mobility|rest|optional|attempt)$/.test(x.type)); }
 // Returns 0-100, or null when there's nothing meaningful to score against.
 // Volume-weighted (sets x reps) for strength; duration ratio for mobility.
 // Overshoot capped at 100. Strength reads the log off the session (sess.strengthLog);
@@ -6520,6 +6532,37 @@ function markPlanEdited_(sess, fields){
   sess.editedAt=Date.now();
   return sess;
 }
+// PER-FIELD ALLOWLIST for a plan session, resolved LAST-WRITE-WINS on editedAt.
+//
+// The plan-side counterpart of RIDE_LWW_FIELDS_, and it exists for the same reason: mergeSession_
+// resolved ONLY the fields named in the _edited mask and left every other field to mergeState_'s
+// generic union. A field nobody hand-edited therefore had NO CLOCK ordering it — whichever value
+// the union happened to pick won, permanently, however recently the other side was stamped.
+//
+// That is precisely why migrateSessionTypes_ never converged. It repairs a run stored as type
+// 'ride', DELETES _edited.type (correctly — the mask records that a field was WRITTEN, not that it
+// was chosen, so leaving it would assert an edit the athlete never made) and stamps editedAt. With
+// type outside the mask and outside any allowlist, the merge had no reason to prefer the stamped
+// local value, so every sync restored the stale remote 'ride'. Measured on the deployed app:
+// [planTypes] reported the IDENTICAL 49 corrections on every load, and ~8 times within a single
+// session, once per remote merge. The repair was never wrong; it had nothing to win on.
+//
+// These three are IDENTITY, not payload: what the session IS. They are exactly the fields the two
+// repair migrations correct, and the fields a stale device is most likely to hold an old answer
+// for. intent and name are listed with type because migrateSessionIntents_ corrects those and
+// would otherwise hit this same wall next.
+//
+// DELIBERATELY NOT HERE: targets, exercises, completed and block. Those are structured objects
+// that must keep merging field-by-field — replacing one wholesale from the later-stamped side
+// would throw away a real edit made on the other device — and the mask still covers a hand-edit to
+// any of them. 'deleted' is excluded too: it has its own recency rule below, which is subtler than
+// this one (a tie falls back to the mask so an untracked collapse-tombstone cannot kill a fresh
+// save), and putting it here would override that.
+//
+// SAME DOCUMENTED LIMIT AS RIDES: editedAt is per SESSION, not per field, so an unrelated edit on
+// one device carries that device's identity fields with it. With NEITHER side stamped there is no
+// clock at all and the generic union still decides. A correction must stamp editedAt to travel.
+var PLAN_LWW_FIELDS_=['type','intent','name'];
 function mergeSession_(a, b){
   if(a==null) return b; if(b==null) return a;
   if(!isPlainObj_(a) || !isPlainObj_(b)) return mergeState_(a, b);
@@ -6527,10 +6570,18 @@ function mergeSession_(a, b){
   var aM=(a._edited&&typeof a._edited==='object')?a._edited:{}, bM=(b._edited&&typeof b._edited==='object')?b._edited:{};
   var mask=Object.assign({}, aM, bM), mk=Object.keys(mask);
   var aEdit=a.editedAt||0, bEdit=b.editedAt||0;
-  if(mk.length){
+  // The gate is A STAMP **OR** A MASK, where it used to be the mask alone. That was the defect in
+  // one line: a session carrying a fresh editedAt and no mask entered none of this and kept the
+  // generic union's answer.
+  if(aEdit || bEdit || mk.length){
     var win=(aEdit>=bEdit)?a:b;            // later edit wins a tie
-    mk.forEach(function(f){ var src=(aM[f]&&bM[f])?win:(aM[f]?a:b); if(src[f]!==undefined) merged[f]=src[f]; });
-    merged._edited=mask;
+    // Allowlist FIRST, mask SECOND — the same order as the rides merge, and the order is the
+    // contract: a field the athlete explicitly edited must still beat plain recency.
+    PLAN_LWW_FIELDS_.forEach(function(f){ if(win[f]!==undefined) merged[f]=win[f]; });
+    if(mk.length){
+      mk.forEach(function(f){ var src=(aM[f]&&bM[f])?win:(aM[f]?a:b); if(src[f]!==undefined) merged[f]=src[f]; });
+      merged._edited=mask;
+    }
   }
   if(aEdit||bEdit) merged.editedAt=Math.max(aEdit,bEdit);
   // 'deleted' resolves by RECENCY, ALWAYS — never an unconditional OR. When the two sides
@@ -7613,10 +7664,12 @@ function applyFirebaseData(data){
   // The only effect was an extra ~13 MB PUT on every single load, feeding the boot write-storm for
   // nothing. The guarded push cannot carry it either — it writes ONLY rides and runs, by design.
   //
-  // The real fix is at the MERGE layer: a plan session's type field needs to resolve last-write-wins
-  // off editedAt, the way the rides per-field allowlist already does, so a stamped correction beats
-  // an older remote value. Until that lands, this stays a per-load in-memory repair — correct on
-  // screen, never converging in the cloud. Do not "fix" it by pushing.
+  // THE REAL FIX LANDED AT THE MERGE LAYER (PLAN_LWW_FIELDS_ in mergeSession_): a plan session's
+  // type/intent/name now resolve last-write-wins off editedAt, the way the rides allowlist already
+  // does, so the stamped correction wins the merge instead of losing it. No push is needed here
+  // and none should be added — the repair stamps editedAt and saves locally, and the next ORDINARY
+  // push carries it, because that push's own pre-write merge now keeps the corrected value rather
+  // than reverting it. Adding a push back would only re-create the ~13 MB PUT per load.
   try{ if(_planDidCollapse_){ _planDidCollapse_=false; if(typeof fbPush==='function') fbPush(true); } }catch(e){}
   if(_durLogN<4){ _durLogN++; try{ var _la=(function(a){ var n=0; (a||[]).forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; })(st.rides); console.log('[dur] merge remote-null-tomb='+Number(_rn)+' local-before='+Number(_ln)+' local-after='+Number(_la)); }catch(e){} }
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});

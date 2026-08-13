@@ -769,6 +769,21 @@ try {
     fail('route search offers deleted rides, or cannot find real ones (see above).');
   }
 
+  // STEP 46 - plan session merge, per-field LWW. Shared merge machinery, so this pins the new
+  //           behaviour AND what must not move: the _edited mask still outranks plain recency,
+  //           targets/completed/exercises still merge structurally, and 'deleted' keeps its own
+  //           subtler recency rule. Also pins that all SEVEN plan session types reach
+  //           mergeSession_ at all — run/rest/optional/attempt never did.
+  console.log(`${D}. checking the plan session merge...${X}`);
+  try {
+    const so = execSync('node scripts/plan-merge-lww-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a plan session field resolves the wrong way on merge (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

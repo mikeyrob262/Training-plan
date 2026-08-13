@@ -194,7 +194,10 @@ console.log('\n' + Y + '=== a repair that cannot reach the cloud is not a repair
   ok('a repair does NOT trigger a push (it would merge the stale value back)',
      !/if\(_planDidCollapse_ \|\| _mIntents \|\| _mTypes\)/.test(afd));
   ok('...and the reason is recorded next to it', /merged back over the correction/.test(afd));
-  ok('...naming the merge layer as where the real fix belongs', /resolve last-write-wins/.test(afd));
+  // The merge-layer fix has landed, so the note must say so rather than describing it as pending -
+  // a comment that still reads "until that lands" sends the next reader to re-do finished work.
+  ok('...and points at the merge fix that actually solved it', /PLAN_LWW_FIELDS_/.test(afd));
+  ok('...which is what makes an ordinary push carry the repair', /next ORDINARY\s+\/\/ push carries it|next ORDINARY/.test(afd));
   // Self-termination is the property that stops this becoming a push on every poll forever.
   const mt = exFn('migrateSessionTypes_');
   ok('the migration returns a COUNT, so the push self-terminates', /return fixed;/.test(mt));
