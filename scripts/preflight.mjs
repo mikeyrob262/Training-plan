@@ -727,6 +727,20 @@ try {
     fail('the Thu/Fri swap is not behaving (see above).');
   }
 
+  // STEP 43 - the layout override. isDesktop() consults localStorage BEFORE the width check and
+  //           returns early, and localStorage survives Ctrl+Shift+R - so a stale override renders
+  //           a 480px column in a 1600px window with no indication why. It stays a feature; what
+  //           is pinned is that a CONTRADICTING override announces itself.
+  console.log(`${D}. checking the layout override...${X}`);
+  try {
+    const so = execSync('node scripts/layout-override-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the layout override can strand the user silently (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

@@ -33742,8 +33742,49 @@ var _layoutApplied=null;
 // first time we enter desktop, so resizing within desktop doesn't re-render.
 function applyLayout_(){
   var d=syncLayoutClass_();
+  // Announced on every layout pass, so it appears on load AND the moment a resize makes the
+  // override contradict the window.
+  try{ _renderLayoutOverrideBar_(); }catch(e){}
   if(d && _layoutApplied!==true){ try{ dsInitProfile(); dsNav((typeof _dsCurView!=='undefined'&&_dsCurView)||'dashboard'); }catch(e){} }
   _layoutApplied=d;
+}
+// A STRANDING override announces itself.
+//
+// aiq_layout is a real feature, but it beats the width check outright and it survives a reload -
+// localStorage is not cleared by Ctrl+Shift+R. So a maximised 1600px desktop window renders a
+// 480px phone column with no indication of why, and every instinct (hard refresh, reopen the tab)
+// fails. Reported as a rendering bug, which is exactly what it looks like from the outside.
+//
+// The override is kept. What changes is that it stops being SILENT when it contradicts the window.
+var _LAYOUT_BANNER_ID='aiq-layout-override-bar';
+function _layoutOverrideMismatch_(){
+  var o=null; try{ o=localStorage.getItem('aiq_layout'); }catch(e){}
+  if(o!=='desktop' && o!=='mobile') return null;
+  var auto=window.innerWidth >= (window.AIQ_DESKTOP_MIN||1024);
+  if((o==='desktop')===auto) return null;      // the override agrees with the window: nothing to say
+  return { forced:o, autoWouldBe:auto?'desktop':'mobile', width:window.innerWidth };
+}
+function _renderLayoutOverrideBar_(){
+  try{
+    var old=document.getElementById(_LAYOUT_BANNER_ID); if(old) old.remove();
+    var m=_layoutOverrideMismatch_(); if(!m) return;
+    var bar=document.createElement('div');
+    bar.id=_LAYOUT_BANNER_ID;
+    bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9000;background:#FC4C02;color:#fff;font-family:inherit;font-size:12.5px;padding:7px 12px;display:flex;align-items:center;gap:10px;justify-content:center';
+    var txt=document.createElement('span');
+    txt.textContent='Display mode is locked to '+m.forced+'. Your window is '+m.width+'px wide.';
+    var go=document.createElement('button');
+    go.textContent='Use '+m.autoWouldBe;
+    go.style.cssText='font-family:inherit;font-size:12px;font-weight:700;padding:4px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.14);color:#fff;cursor:pointer;flex-shrink:0';
+    go.onclick=function(){ try{ setLayoutOverride_('auto'); }catch(e){} };
+    var x=document.createElement('button');
+    x.textContent='\u00d7';
+    x.setAttribute('aria-label','Dismiss');
+    x.style.cssText='font-family:inherit;font-size:17px;line-height:1;padding:0 4px;border:none;background:none;color:#fff;cursor:pointer;opacity:.8;flex-shrink:0';
+    x.onclick=function(){ bar.remove(); };
+    bar.appendChild(txt); bar.appendChild(go); bar.appendChild(x);
+    document.body.appendChild(bar);
+  }catch(e){ try{ console.error('[layout-bar]', e && e.message); }catch(_e){} }
 }
 // Manual override: 'auto' clears it, 'desktop'/'mobile' force it. Persisted so
 // the choice survives reloads. Applies immediately (no reload needed).
