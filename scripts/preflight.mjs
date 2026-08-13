@@ -827,6 +827,20 @@ try {
     fail('the stored plan can disagree with the block, or the repair reaches too far (see above).');
   }
 
+  // STEP 50 - week-to-week progression. The block had none by construction (p.week is indexed by
+  //           DAY OF WEEK only, so every week of a phase was identical). Pins that the ramp is real
+  //           and monotonic, that week 4 backs off, that TSS follows the intervals rather than being
+  //           typed in beside them, and that a completed week is never re-graded.
+  console.log(`${D}. checking block progression...${X}`);
+  try {
+    const so = execSync('node scripts/block-progression-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the block progression is flat, runs away, or re-grades a completed week (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

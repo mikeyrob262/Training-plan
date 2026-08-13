@@ -30336,8 +30336,12 @@ function blockPlanFor_(dateKey){
     // and the sequence cannot drift when a phase boundary moves.
     var _int=sl.i;
     if(typeof strengthForSlot_==='function' && /^strength/.test(String(sl.i||''))) _int=strengthForSlot_(dateKey);
-    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_int, weekInPhase):null;
-    return { intent:_int, struct:sl.s||'', when:sl.t||null, rx:rx };
+    // Week-to-week progression, date-gated. The phase table's struct is the week-1 rung; from
+    // SCHED_PROGRESSION_FROM the rung for this week-in-phase replaces it, so the displayed struct
+    // and the derived TSS come from the SAME source and cannot drift apart.
+    var _pw=(typeof _blockProgWeekFor_==='function')?_blockProgWeekFor_(dateKey, weekInPhase):0;
+    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_int, weekInPhase, _pw):null;
+    return { intent:_int, struct:((rx&&rx.progStruct)||sl.s||''), when:sl.t||null, rx:rx, progWeek:_pw };
   });
   // A session the athlete has CLAIMED (source 'user' — a swap or a day-editor change) overrides the
   // template for that date.
@@ -44903,9 +44907,74 @@ function _planTssFromStruct_(struct, durationMin, pctFtp){
   return { tss:Math.round(tss), workMin:workMin, restMin:restMin,
            ifWork:Math.round(ifWork*100)/100, ifEasy:Math.round(ifEasy*100)/100 };
 }
-function _planSessionFromDef_(intent, blockWeek){
+// ==================== WEEK-TO-WEEK PROGRESSION ====================
+//
+// THE BLOCK HAD NONE, BY CONSTRUCTION. A phase's template is p.week[dayOfWeek] — one array per
+// weekday, reused for every week of the phase — so week 1, week 2 and week 3 were structurally
+// identical. Confirmed on the athlete rather than read off the spec: three weeks into the block,
+// the same 2x20 threshold, the same 4x4 VO2 and the same 90-minute Z2 every week.
+//
+// The progression is therefore a LAYER over the template, keyed on week-in-phase, not an edit to
+// the tables. Same reasoning as the Thu/Fri swap: the tables are read for PAST dates, so building
+// the ramp into them would re-grade every completed session against a prescription that did not
+// exist when it was ridden. Hence the date gate below.
+//
+// FOUR-WEEK CYCLE, week 4 RECOVERY. Weeks 1-3 build and week 4 cuts back — which is already the
+// contract elsewhere in this file (_planExercises_ deloads strength on week 4), so the bike and the
+// barbell now back off in the same week instead of disagreeing. A phase longer than four weeks
+// cycles rather than running away: week 5 is another week 1.
+//
+// TSS IS NOT LISTED AND IS NOT HAND-WRITTEN. _planSessionFromDef_ derives it from struct + duration
+// + band via _planTssFromStruct_, so lengthening the intervals raises the week's TSS by itself. A
+// typed-in TSS ladder would be a second copy of the same fact, free to drift from the intervals it
+// is supposed to describe.
+var SCHED_PROGRESSION_FROM='2026-08-17';   // the Monday after the decision; before this, flat as ridden
+var _BLOCK_PROG={
+  // 2x20 -> 3x15 -> 2x25, then a cut-back week. Work minutes 40 -> 45 -> 50 -> 30.
+  threshold:{ 1:{struct:'2x20 min, 5 min recovery', durationMin:60},
+              2:{struct:'3x15 min, 4 min recovery', durationMin:65},
+              3:{struct:'2x25 min, 6 min recovery', durationMin:70},
+              4:{struct:'2x15 min, 5 min recovery', durationMin:50} },
+  // 4x4 -> 5x4 -> 4x5: rep COUNT climbs first, then rep LENGTH. 'flat' is kept on every rung — it
+  // is part of the prescription, not decoration (see the flat-route note on the VO2 session).
+  vo2:      { 1:{struct:'4x4 min, 3 min recovery, flat', durationMin:60},
+              2:{struct:'5x4 min, 3 min recovery, flat', durationMin:65},
+              3:{struct:'4x5 min, 3 min recovery, flat', durationMin:70},
+              4:{struct:'3x4 min, 3 min recovery, flat', durationMin:50} },
+  // Z2 builds by DURATION, which is the only lever an endurance ride has — the band is fixed by
+  // definition. The week-3 rung is the one that starts rehearsing Ven-Top's ~90 min of continuous
+  // climbing; the Saturday group ride is the intended long-term home for that, and is untouched here.
+  z2:       { 1:{durationMin:90}, 2:{durationMin:100}, 3:{durationMin:110}, 4:{durationMin:75} }
+};
+// Week-in-phase -> the rung, cycling every 4 weeks. Returns null when the intent does not
+// progress (strength periodizes through _planExercises_, mobility deliberately does not periodize
+// at all, and an attempt is a fixed event).
+function _blockProgFor_(intent, weekInPhase){
+  var table=_BLOCK_PROG[intent]; if(!table) return null;
+  var w=parseInt(weekInPhase,10); if(!(w>0)) return null;
+  return table[((w-1)%4)+1]||null;
+}
+// Does progression apply on this date? Gated so a completed week keeps the prescription it was
+// actually given. Callers that have no date (a bare def lookup) get the unprogressed base.
+function _blockProgWeekFor_(dateKey, weekInPhase){
+  if(!dateKey || String(dateKey)<SCHED_PROGRESSION_FROM) return 0;
+  var w=parseInt(weekInPhase,10);
+  return (w>0)?w:0;
+}
+function _planSessionFromDef_(intent, blockWeek, progWeek){
   var def=SESSION_DEFS[intent]; if(!def) return null;
+  // The rung REPLACES struct/duration for this week. progWeek is 0 (or absent) everywhere the date
+  // gate said no, and on every caller that has no date at all — so the base def is the default and
+  // nothing progresses by accident.
+  var prog=(progWeek>0)?_blockProgFor_(intent, progWeek):null;
+  if(prog){
+    var d2={}; for(var pk in def) if(Object.prototype.hasOwnProperty.call(def,pk)) d2[pk]=def[pk];
+    if(prog.durationMin!=null) d2.durationMin=prog.durationMin;
+    if(prog.struct) d2.struct=prog.struct;
+    def=d2;
+  }
   var s={ type:def.type, intent:(def.type==='rest'?'':intent), name:def.name, status:'planned', targets:{} };
+  if(prog && prog.struct) s.progStruct=prog.struct;   // what the week actually prescribes, for display
   if(def.exGroup && typeof _planExercises_==='function'){
     s.exercises=_planExercises_(def.exGroup, blockWeek||1);
     // §3.6/§3.7 CONSUMPTION: derive the prescribed WEIGHT per strength lift from 1RM + block week +
@@ -44945,7 +45014,13 @@ function planResolve_(s){
   var src=(typeof _planSource_==='function')?_planSource_(s):(s.source||'user');
   if(src==='user') return s;                       // user overrides are authoritative — as stored
   var key=(s.type==='rest')?'rest':s.intent;
-  var def=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(s.block&&s.block.week)||1):null;
+  // progWeek is read from the STORED block, never recomputed here. planResolve_ has no date, and a
+  // session that predates the progression carries no progWeek — so it derives the flat prescription
+  // it was actually given, while a future row stamped by migratePlanIntentsToBlock_ derives its
+  // rung. That is what keeps the day detail agreeing with the calendar tile without re-grading
+  // anything already ridden.
+  var _pw=(s.block&&s.block.progWeek)||0;
+  var def=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(s.block&&s.block.week)||1,_pw):null;
   if(!def) return s;                               // unknown intent — nothing to derive
   var out={}; for(var k in def) out[k]=def[k];     // derived prescription (targets/exercises/note)
   ['id','source','status','block','completedRideKey','executionScore','strengthLog','editedAt','_edited','deleted','gen','migrated','actualDurationMin','completed'].forEach(function(f){ if(s[f]!==undefined) out[f]=s[f]; });
@@ -45287,6 +45362,18 @@ function migratePlanIntentsToBlock_(){
         var pool=byType[x.type]; if(!pool) return;
         var k=seen[x.type]||0; var w=pool[k]; if(!w) return;
         seen[x.type]=k+1;
+        // PROGRESSION WEEK, stamped on the stored row. planResolve_ has no date, so this is how a
+        // future session learns which rung of the ramp it is on; without it the day detail would
+        // derive the flat week-1 prescription while the tile showed the progressed one — the exact
+        // tile-vs-detail split this migration exists to close.
+        if(w.progWeek!=null && (!x.block || x.block.progWeek!==w.progWeek)){
+          x.block=x.block||{};
+          if(x.block.progWeek!==w.progWeek){
+            x.block.progWeek=w.progWeek;
+            x.editedAt=Date.now();
+            fixed++; detail['progWeek->'+w.progWeek]=(detail['progWeek->'+w.progWeek]||0)+1;
+          }
+        }
         if(!w.intent || w.intent===x.intent) return;
         var was=x.intent;
         x.intent=w.intent;
