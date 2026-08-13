@@ -841,6 +841,19 @@ try {
     fail('the block progression is flat, runs away, or re-grades a completed week (see above).');
   }
 
+  // STEP 51 - the VO2 flat-route proxy (a DENSITY now, not an absolute ft cap that tested length as
+  //           much as terrain) and the Ven-Top climb-duration rehearsal on Saturday, which must
+  //           reach 90 min BEFORE the first attempt and must not reset at a phase boundary.
+  console.log(`${D}. checking VO2 flatness + climb rehearsal...${X}`);
+  try {
+    const so = execSync('node scripts/vo2-flat-climb-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the flat proxy is length-biased again, or the climb rehearsal does not reach 90 (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

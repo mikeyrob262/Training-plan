@@ -30145,6 +30145,36 @@ var _BLOCK_MILESTONES=[
 ];
 var _BLOCK_RETEST_YM='2026-08';                // the FTP-retest month — the TSS/zone discontinuity
 var _BLOCK_Z2_HR=135, _BLOCK_THR_W=181, _BLOCK_VO2_FLAT_FT=650;
+// FLATNESS IS A DENSITY, NOT A TOTAL — the VO2 session is prescribed "flat" and the only way to
+// check it is the route profile, because no ride carries a location or a route name (confirmed
+// while building the Ride Planner search: there is no such field anywhere in the library).
+//
+// The proxy existed already but capped ABSOLUTE feet, which tests length as much as terrain: a
+// genuinely flat 60-mile ride climbs more than a hilly 15-mile one, so the longer the session the
+// harder it was to pass a question about the ground. ft/mi is the unit the rest of the app already
+// speaks for climbing — the DNA card gates Climber at >=50 ft/mi and the library average is 32 —
+// so the proxy now speaks it too.
+//
+// 35 is chosen to CARRY THE OLD CALIBRATION ACROSS, not to retighten it: 650 ft over the ~18 miles
+// of an hour-long VO2 ride is ~36 ft/mi, so a typical session keeps its previous verdict and only
+// the length bias is removed.
+//
+// STILL ONLY A FALLBACK. When the work intervals can be read they ARE the evidence and terrain is
+// not consulted at all — that decision is deliberate and older than this change. Flatness only ever
+// answers "was this rideable as 4x4" when there is no interval data to answer it directly.
+var _BLOCK_VO2_FLAT_FPM=35;
+function _blockFlatFpm_(r){
+  var mi=parseFloat(r&&r.distance)||0;
+  if(!(mi>0)) return null;                       // no distance: no density to compute
+  return Math.round(_blockElev_(r)/mi);
+}
+function _blockRideIsFlat_(r){
+  var fpm=_blockFlatFpm_(r);
+  // Degrades to the absolute cap rather than guessing when distance is missing. An indoor ride with
+  // no elevation at all reads 0 ft/mi and is flat, which is correct — a trainer has no gradient.
+  if(fpm==null) return _blockElev_(r)<_BLOCK_VO2_FLAT_FT;
+  return fpm<=_BLOCK_VO2_FLAT_FPM;
+}
 var _BLOCK_TSS_LO=200, _BLOCK_TSS_HI=280;
 var _BLOCK_WEEKS_TARGET=4;
 // Risks are the block's KNOWN structural failure modes, each mapped to a real rule — not a data-mined
@@ -30341,7 +30371,14 @@ function blockPlanFor_(dateKey){
     // and the derived TSS come from the SAME source and cannot drift apart.
     var _pw=(typeof _blockProgWeekFor_==='function')?_blockProgWeekFor_(dateKey, weekInPhase):0;
     var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_int, weekInPhase, _pw):null;
-    return { intent:_int, struct:((rx&&rx.progStruct)||sl.s||''), when:sl.t||null, rx:rx, progWeek:_pw };
+    var _st=((rx&&rx.progStruct)||sl.s||'');
+    // The Ven-Top climb rehearsal rides ALONG WITH the Saturday session rather than replacing it —
+    // the group ride keeps being a group ride, with a named sustained block inside it. Only the
+    // long-form Saturday intents carry it; a VO2 or threshold day is already structured.
+    var _cl=(typeof _climbRehearsalFor_==='function' && (_int==='group'||_int==='long'))
+      ? _climbRehearsalFor_(dateKey) : null;
+    if(_cl){ _st=(_st?(_st+' · '):'')+_cl+' min sustained climbing block'; }
+    return { intent:_int, struct:_st, when:sl.t||null, rx:rx, progWeek:_pw, climbMin:_cl||null };
   });
   // A session the athlete has CLAIMED (source 'user' — a swap or a day-editor change) overrides the
   // template for that date.
@@ -31640,11 +31677,15 @@ function _blockWeekAssess_(rides, ftp, now){
     { key:'vo2', label:'VO2', desc:'Lift the aerobic ceiling and efficiency', ride:vo2Ride, done:!!vo2Ride,
       src:vo2M?vo2M.source:'ride',
       cond:vo2M?('work intervals reaching '+vo2M.lo+'W')
-               :('flat route, under '+_BLOCK_VO2_FLAT_FT+' ft (elevation proxy - no interval data)'),
+               :('flat route, under '+_BLOCK_VO2_FLAT_FPM+' ft/mi (elevation proxy - no interval data)'),
       ok:vo2M?(_blockWorkHit_(vo2M)>=_BLOCK_IV_MIN_HIT)
-             :!!(vo2Ride && _blockElev_(vo2Ride)<_BLOCK_VO2_FLAT_FT),
-      miss:vo2M?('short of the '+vo2M.lo+'W floor'):('over the '+_BLOCK_VO2_FLAT_FT+' ft cap'),
-      val:vo2M?ivVal(vo2M):(vo2Ride?(_blockElev_(vo2Ride).toLocaleString()+' ft'):'') },
+             :!!(vo2Ride && _blockRideIsFlat_(vo2Ride)),
+      miss:vo2M?('short of the '+vo2M.lo+'W floor'):('over the '+_BLOCK_VO2_FLAT_FPM+' ft/mi cap'),
+      // Reported as the DENSITY with the raw climb behind it, so "142 ft/mi" is checkable against
+      // the ride rather than being a number the athlete has to take on trust.
+      val:vo2M?ivVal(vo2M):(vo2Ride?((function(){ var f=_blockFlatFpm_(vo2Ride);
+            return (f!=null)?(f+' ft/mi ('+_blockElev_(vo2Ride).toLocaleString()+' ft)')
+                            :(_blockElev_(vo2Ride).toLocaleString()+' ft, no distance'); })()):'') },
     // Z2 is prescribed as a continuous ride, so it normally HAS no work intervals and the whole
     // ride genuinely is the effort — avg HR is the right measure there, not a diluted one. It is
     // graded on intervals only when the block actually prescribes a structured Z2 session.
@@ -44946,6 +44987,46 @@ var _BLOCK_PROG={
   // climbing; the Saturday group ride is the intended long-term home for that, and is untouched here.
   z2:       { 1:{durationMin:90}, 2:{durationMin:100}, 3:{durationMin:110}, 4:{durationMin:75} }
 };
+// ==================== VEN-TOP CLIMB-DURATION REHEARSAL (Saturday) ====================
+//
+// VEN-TOP IS ~90 MINUTES OF CONTINUOUS CLIMBING AND NOTHING REHEARSED THAT. The longest thing the
+// block prescribed was a 90-minute Z2 ride, which is 90 minutes of RIDING — a different demand from
+// 90 unbroken minutes of sustained effort against gravity, with no coasting, no lulls and no group
+// to sit in with. P6 already carries "sustained tempo blocks", but P6 starts ten days before the
+// first attempt, which is where you find out you have not built it, not where you build it.
+//
+// So Saturday grows into the role, per the decision. It is the only day long enough to hold it.
+//
+// KEYED ON THE ABSOLUTE BLOCK WEEK, not week-in-phase. This is ONE build across the whole block
+// toward a fixed date, so it must not reset at a phase boundary the way _BLOCK_PROG deliberately
+// does — a microcycle repeats, a rehearsal accumulates.
+//
+// The ladder: nothing for the first four weeks (the base is not the place), then 30 -> 40 -> 50
+// with a cut-back, then 60 -> 70 -> 80 with a cut-back, then the full 90 in the last week before
+// the attempt cluster. Cut-back weeks are ABSENT rather than zero so the Saturday ride simply
+// reverts to what the phase table says it is.
+//
+// THESE NUMBERS ARE A STARTING LADDER, not a derived truth — the mechanism is the durable part and
+// the rungs are meant to be adjusted. What is NOT adjustable is the shape: it has to reach 90
+// before the first attempt, and it has to arrive there by building rather than by jumping.
+var _CLIMB_REHEARSAL={ 5:30, 6:40, 7:50, 9:60, 10:70, 11:80, 13:90 };
+// Absolute week of the block, 1-based. _BLOCK_START is a Friday, so this counts from the block's
+// own first day rather than from a Monday - the rehearsal is a Saturday feature and only ever asks
+// "how deep into the block is this".
+function _blockAbsWeek_(dateKey){
+  if(typeof _blockDay_!=='function' || typeof _blockDaysBetween_!=='function') return 0;
+  var d=_blockDay_(dateKey), s=_blockDay_(_BLOCK_START);
+  if(!d || !s || d.getTime()<s.getTime()) return 0;
+  return Math.floor(_blockDaysBetween_(s, d)/7)+1;
+}
+// The sustained-climb block prescribed on this date, or null. Date-gated with the rest of the
+// progression for the same reason: a Saturday already ridden must not acquire a climb block it was
+// never given.
+function _climbRehearsalFor_(dateKey){
+  if(!dateKey || String(dateKey)<SCHED_PROGRESSION_FROM) return null;
+  var w=_blockAbsWeek_(dateKey); if(!(w>0)) return null;
+  return _CLIMB_REHEARSAL[w]||null;
+}
 // Week-in-phase -> the rung, cycling every 4 weeks. Returns null when the intent does not
 // progress (strength periodizes through _planExercises_, mobility deliberately does not periodize
 // at all, and an attempt is a fixed event).
