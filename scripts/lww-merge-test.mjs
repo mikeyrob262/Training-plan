@@ -31,11 +31,14 @@ let code = exVar('_LWW_TOP') + exVar('_LWW_SUB') + 'var _lwwShadow_ = null;\nvar
 // _LWW_ARRAYS and its helpers were NOT in this harness, so the array branch of mergeStateRoot_
 // threw and fell into the catch on every run - the settings-array behaviour was never actually
 // exercised here, only the scalar paths above it.
-code += exVar('_LWW_ARRAYS') + exVar('RIDE_LWW_FIELDS_');
+// _ITEM_LWW_SKIP_/_itemLwwNumbers_ ride along because mergeArrays_ now calls the item-level numeric
+// LWW in its cluster path. Without them the real mergeArrays_ throws on any non-session array item.
+code += exVar('_LWW_ARRAYS') + exVar('RIDE_LWW_FIELDS_') + exVar('PLAN_LWW_FIELDS_') + exVar('_ITEM_LWW_SKIP_');
 for (const f of ['_lwwPaths_','_lwwGet_','_lwwSet_','mergeStateRoot_','_lwwSnapshot_','_lwwTouch_',
                  'mergeState_','isPlainObj_','arrayToIndexObject_','mergeArrays_',
                  '_arrKeyOf_','_arrIsDead_','_lwwMergeArray_','mergeItemFast_','lightFingerprint_',
-                 'itemsMatch_','rideKey','_isSession_','normDate']) code += ex(f);
+                 'itemsMatch_','rideKey','_isSession_','normDate','_itemLwwNumbers_','mergeSession_',
+                 'contentFingerprint_']) code += ex(f);
 const M = new Function(code +
   ';return {mergeState_,mergeStateRoot_,mergeItemFast_,_lwwTouch_,_lwwPaths_,RIDE_LWW_FIELDS_,setSt:function(v){st=v;},getSt:function(){return st;}};')();
 

@@ -40,8 +40,12 @@ function exVar(s, n){ let j=s.indexOf('var '+n+' ='); if(j<0) j=s.indexOf('var '
   return s.slice(j, k+1)+'\n'; }
 
 let lib = exVar(html,'_LWW_TOP') + exVar(html,'_LWW_SUB') + 'var _lwwShadow_=null; var st={};\n';
+// _ITEM_LWW_SKIP_/_itemLwwNumbers_ ride along because mergeArrays_'s cluster path now calls the
+// item-level numeric LWW; without them the real mergeArrays_ throws on any non-session array item.
+lib += exVar(html,'_ITEM_LWW_SKIP_');
 for (const f of ['_lwwPaths_','_lwwGet_','_lwwSet_','mergeStateRoot_','_lwwSnapshot_','_lwwTouch_',
-                 'mergeState_','isPlainObj_','arrayToIndexObject_','mergeArrays_']) lib += ex(html, f);
+                 'mergeState_','isPlainObj_','arrayToIndexObject_','mergeArrays_',
+                 '_itemLwwNumbers_']) lib += ex(html, f);
 console.log('  extracted the merge layer from the LIVE served copy (' + lib.length.toLocaleString() + ' bytes)');
 console.log('  mode: ' + (OLD ? Y+'PRE-FIX (plain mergeState_, max-wins)'+X : G+'SHIPPED (mergeStateRoot_, last-write-wins)'+X));
 

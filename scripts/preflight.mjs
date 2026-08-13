@@ -797,6 +797,21 @@ try {
     fail('a session card is using the wrong sport vocabulary (see above).');
   }
 
+  // STEP 48 - the Math.max merge bug at the root. mergeState_ resolves numbers by magnitude, so any
+  //           stored number could be raised and never lowered; a stamped correction now wins.
+  //           Numbers ONLY - booleans OR and strings resolve locally by design, and the segment
+  //           target list depends on the boolean behaviour. Needs BOTH halves: rule + a stamping
+  //           writer, so the race editor's stamp is pinned here too.
+  console.log(`${D}. checking numeric merge LWW...${X}`);
+  try {
+    const so = execSync('node scripts/numeric-lww-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a corrected number can still be reverted by the merge (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

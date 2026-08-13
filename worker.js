@@ -6038,6 +6038,46 @@ function itemsMatch_(a, b){
      (b.id!=null && !b.deleted && a.id==null && !!a.deleted)) return false;
   return contentFingerprint_(a) === contentFingerprint_(b);
 }
+// ITEM-LEVEL LAST-WRITE-WINS FOR NUMBERS — the general form of the rule that rides and plan
+// sessions each got a bespoke copy of.
+//
+// mergeState_ resolves two numbers with Math.max, so ANY numeric field can be raised and never
+// LOWERED. With no clock that is the RIGHT call: two devices, no way to order them, keep the fuller
+// value. It becomes wrong the moment one side is STAMPED, because a correction is usually a
+// downward write. Confirmed in the field on a race distance corrected 13.1 -> 6.2 that would not
+// persist, and was worked around by tombstoning the race and recreating it.
+//
+// Rides (RIDE_LWW_FIELDS_) and plan sessions (PLAN_LWW_FIELDS_) already solve this with NAMED
+// allowlists, because both carry fields that must never resolve that way — a GPS track, a power
+// curve, a laps array, a structured targets object. Every other array item is plain by comparison,
+// so it gets this general rule rather than a third bespoke list.
+//
+// NUMBERS ONLY, and deliberately. Strings already resolve to the local side and booleans OR, and
+// other designs depend on both — the segment target list is built on targetAt/untargetAt timestamps
+// precisely BECAUSE booleans OR, and flipping that here would silently change membership semantics.
+// This fixes the reported fault (a stored number that can rise but never fall) and nothing else.
+//
+// Nested objects and arrays are untouched: replacing one wholesale from the later-stamped side
+// would discard a real edit made on the other device — this same fault pointing the other way.
+//
+// editedAt/deletedAt are skipped: they ARE the clock and the tombstone, not payload.
+//
+// A WRITER MUST STAMP editedAt FOR ANY OF THIS TO APPLY. That is the documented contract, and it is
+// why the race editor now stamps on save — without it a store has no clock and max still decides.
+var _ITEM_LWW_SKIP_={editedAt:1, deletedAt:1};
+function _itemLwwNumbers_(merged, a, b){
+  if(!isPlainObj_(a) || !isPlainObj_(b)) return merged;
+  var aE=+(a.editedAt)||0, bE=+(b.editedAt)||0;
+  if(aE===bE) return merged;                 // unstamped on both sides, or a tie: nothing orders them
+  var win=(aE>bE)?a:b;
+  Object.keys(win).forEach(function(k){
+    if(_ITEM_LWW_SKIP_[k]) return;
+    var v=win[k];
+    if(typeof v!=='number' || !isFinite(v)) return;
+    merged[k]=v;
+  });
+  return merged;
+}
 function mergeArrays_(a, b){
   a = a || []; b = b || [];
   var sample = null, i, j;
@@ -6084,9 +6124,11 @@ function mergeArrays_(a, b){
     if(item == null) return;
     for(var ci=0; ci<clusters.length; ci++){
       if(itemsMatch_(clusters[ci].rep, item)){
+        // Sessions have their own field-aware merge; everything else gets the generic union and
+        // then the item-level numeric LWW, so a stamped downward correction is not undone by max.
         clusters[ci].rep = (_isSession_(clusters[ci].rep)||_isSession_(item))
           ? mergeSession_(clusters[ci].rep, item)
-          : mergeState_(clusters[ci].rep, item);
+          : _itemLwwNumbers_(mergeState_(clusters[ci].rep, item), clusters[ci].rep, item);
         return;
       }
     }
@@ -43920,7 +43962,12 @@ function openRaceEditor(idx,onSaved){
       target:document.getElementById('re-target').value.trim(),
       location:document.getElementById('re-loc').value.trim(),
       goal:document.getElementById('re-goal').value.trim()||'Finish Strong',
-      status:(document.getElementById('re-status')&&document.getElementById('re-status').value)||'active'
+      status:(document.getElementById('re-status')&&document.getElementById('re-status').value)||'active',
+      // STAMPED, or the merge has no clock and Math.max still decides. This save rebuilt the race
+      // object from the form with no editedAt at all, so a CORRECTED distance was resolved against
+      // the remote copy by magnitude: 13.1 -> 6.2 lost to the bigger number every sync, which is
+      // the bug that had to be worked around by tombstoning the race and recreating it.
+      editedAt:Date.now()
     };
     if(idx!==undefined && idx!==null) st.races[idx]=race;
     else st.races.push(race);
