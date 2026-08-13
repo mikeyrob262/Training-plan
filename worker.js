@@ -7588,14 +7588,27 @@ function applyFirebaseData(data){
   // they fix the plan once and the SSE stream then merges the stale copy straight back: measured,
   // migrateSessionTypes_ returned 49 corrections on EVERY fresh load and today's Easy Run was
   // type 'ride' again each time. Intent first, so the type follows it.
-  try{ if(typeof migrateSessionIntents_==='function') migrateSessionIntents_(); }catch(e){}
-  try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
+  // The counts are CAPTURED, not discarded, because the push below has to know whether a repair
+  // actually changed anything. Throwing them away is precisely why the type fix never stuck.
+  var _mIntents=0, _mTypes=0;
+  try{ if(typeof migrateSessionIntents_==='function') _mIntents=migrateSessionIntents_()||0; }catch(e){}
+  try{ if(typeof migrateSessionTypes_==='function') _mTypes=migrateSessionTypes_()||0; }catch(e){}
   try{ if(typeof migrateBlockSessions_==='function') migrateBlockSessions_(); }catch(e){}
   // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
   try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
   // If the collapse soft-deleted duplicates, push ONCE so remote converges instead of re-sending
   // them every poll. Self-terminating: once remote is clean, no further collapse -> no push.
-  try{ if(_planDidCollapse_){ _planDidCollapse_=false; if(typeof fbPush==='function') fbPush(true); } }catch(e){}
+  //
+  // A TYPE/INTENT REPAIR NEEDS THE SAME PUSH, and the absence of it is why the run editor still
+  // drew the bike template. The repair itself is correct — it clears the residue mask, stamps
+  // editedAt so the change can travel, and saves LOCALLY — but only the collapse could reach
+  // fbPush, so the stale rows stayed in the cloud, the next pull merged them straight back, and
+  // [planTypes] reported the IDENTICAL 49 corrections on every load. Measured across two
+  // consecutive loads of the deployed app: same 49, same intent breakdown, both times. A migration
+  // that reports the same work forever is not a migration, it is a band-aid re-applied at boot.
+  // Self-terminating in exactly the same way as the collapse: once remote is clean the migrations
+  // return 0 and nothing pushes.
+  try{ if(_planDidCollapse_ || _mIntents || _mTypes){ _planDidCollapse_=false; if(typeof fbPush==='function') fbPush(true); } }catch(e){}
   if(_durLogN<4){ _durLogN++; try{ var _la=(function(a){ var n=0; (a||[]).forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; })(st.rides); console.log('[dur] merge remote-null-tomb='+Number(_rn)+' local-before='+Number(_ln)+' local-after='+Number(_la)); }catch(e){} }
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
@@ -37166,14 +37179,24 @@ function getDesktopFitness_(){
 }
 // Desktop ring readiness. Was a FOURTH independent derivation of the same thing — it even
 // documented itself as "mirroring the mobile card's 5 + TSB/6 formula", which is how four copies
-// of one idea end up disagreeing. Now delegates to getReadiness_ and keeps its {score,label,color}
-// shape so existing callers need no change; score is the band's ring step, not a manufactured
-// percentage. The tsb argument is ignored on purpose — the single source reads it itself, so a
-// caller passing a stale value can no longer produce a different verdict from the same moment.
+// of one idea end up disagreeing. It delegates to getReadiness_ and adds nothing of its own. The
+// tsb argument is ignored on purpose — the single source reads it itself, so a caller passing a
+// stale value can no longer produce a different verdict from the same moment.
+//
+// IT NO LONGER RETURNS A SCORE, AND THAT IS THE FIX. It used to return score=Math.round(fill*100),
+// described right here as "the band's ring step, not a manufactured percentage" — which was true
+// only while fill was a per-band CONSTANT (1.00/0.75/0.50/0.25 -> 100/75/50/25). The moment fill
+// became continuous — the fix for every TSB between -10 and +10 rendering as exactly 75 — that
+// same expression quietly went back to manufacturing a percentage. TSB +8 came out as "98/100":
+// the ring's fill FRACTION wearing a score's clothes, which is the exact thing _RDY_BANDS was
+// written to prevent, put back on the desktop beside mobile's banded TSB.
+//
+// So the two halves are named for what they are: fill drives the ARC, value is what the ring
+// PRINTS, and value is the TSB — the same number, with the same band label, that mobile prints.
 function readinessFromTSB_(tsb){
   var r=(typeof getReadiness_==='function')?getReadiness_():null;
-  if(!r || !r.loaded) return {score:0, label:'—', color:'#94a3b8'};
-  return {score:Math.round(r.fill*100), label:r.label, color:r.col};
+  if(!r || !r.loaded) return {loaded:false, value:'—', label:'—', color:'#94a3b8', fill:0, tsb:null};
+  return {loaded:true, value:(r.tsb>0?'+':'')+Math.round(r.tsb), label:r.label, color:r.col, fill:r.fill, tsb:r.tsb};
 }
 // Category W/kg = FTP ÷ bodyweight (kg). This is the metric Chase-1 (3.14 W/kg)
 // is defined by and, unlike per-ride average power, is always available.
@@ -37958,11 +37981,15 @@ function dsShowDashboard(){
   // The ring was the Athlete IQ score, cut for being a weighted blend of hand-picked constants
   // with two of its four parts pinned at their ceiling. Readiness is a real reading off TSB
   // through getFitness_, the same source every other surface uses.
-  var ringPct=(rdy && rdy.score!=null)?rdy.score:0;
-  var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
+  // The arc is the band POSITION and the number is the TSB — the same pair mobile draws, so the
+  // two surfaces can no longer show two different readiness models side by side.
+  var ringC=2*Math.PI*32, ringOff=ringC*(1-(rdy?rdy.fill:0));
+  // Colour comes from the band too. It was hardcoded to ACC.green, so the desktop ring stayed
+  // green through Loaded and Fatigued while mobile turned amber and red on the same TSB.
+  var ringCol=(rdy&&rdy.loaded)?rdy.color:'#94a3b8';
   var iqInner=lbl('READINESS','<span data-teach="tsb" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
   iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
-  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.02em">'+((rdy && rdy.label!=='—')?rdy.score:'—')+'</div><div style="font-size:12px;color:var(--d-dim);margin-top:2px">/100</div></div></div>';
+  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ringCol+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.02em">'+(rdy?rdy.value:'—')+'</div><div style="font-size:12px;font-weight:700;color:'+ringCol+';margin-top:2px">'+(rdy&&rdy.loaded?rdy.label:'Form (TSB)')+'</div></div></div>';
   var trendC=verdict.color;
   // Arrow points up for building/peaking/fresh, flat-ish (right) for easing/detraining.
   var trendArrow=(verdict.phase==='detraining'||verdict.phase==='overreaching')
@@ -38196,7 +38223,11 @@ function dsShowDashboard(){
   var rC=2*Math.PI*30;
   var hrv=(st.hrv!=null)?st.hrv:null, rhr=(st.restingHR!=null)?st.restingHR:null;
   var haveRecovery=(hrv!=null && rhr!=null);
-  var recScore, recLabel, recColor, recTitle, recSub;
+  // recFill drives the ARC (0-1); recBig is what the ring PRINTS. They are separate because the two
+  // branches below are genuinely different KINDS of number: HRV+RHR really is a 0-100 composite of
+  // two measurements, while form readiness is a band on one input and must never be dressed as a
+  // percentage. Collapsing both into one "score" is what put "98/100" on this card.
+  var recScore, recLabel, recColor, recTitle, recSub, recFill, recBig;
   if(haveRecovery){
     // Real recovery from manual HRV + Resting HR, blended against the user's own
     // rolling baseline so the number means something. Higher HRV and lower RHR =
@@ -38213,16 +38244,28 @@ function dsShowDashboard(){
     recColor=recScore>=75?'#4ade80':recScore>=55?'#FFB938':'#e24b4a';
     recTitle='RECOVERY';
     recSub=(bHRV?'From HRV + Resting HR vs your baseline':'From HRV + Resting HR (building baseline)');
+    recFill=recScore/100; recBig=recScore+'%';   // a real composite of two measurements
   } else {
-    // No wearable/manual recovery inputs → honest form-readiness, taper-aware.
-    recScore=rdy.score; recColor=verdict.color;
-    recLabel=verdict.readyLabel;
+    // No wearable/manual recovery inputs → honest form-readiness, from the ONE readiness read.
+    //
+    // The label used to come from taperVerdict_, which carries its OWN band vocabulary and its own
+    // thresholds: at TSB +8 it said "Fresh" while _RDY_BANDS said "Balanced", so the two surfaces
+    // disagreed about the verdict even when they agreed about the number. The band label is the
+    // shared one now.
+    //
+    // The taper-aware line SURVIVES as the sub-line, because it says something the band cannot -
+    // whether the freshness came from a taper, from planned load, or from detraining. That is a
+    // note explaining the reading, not a second verdict competing with it.
+    recColor=(rdy&&rdy.loaded)?rdy.color:'#94a3b8';
+    recLabel=(rdy&&rdy.loaded)?rdy.label:'—';
+    recFill=(rdy&&rdy.loaded)?rdy.fill:0;
+    recBig=(rdy&&rdy.loaded)?rdy.value:'—';
     recTitle='FORM READINESS';
     recSub=verdict.readyNote;
   }
   var rd=lbl(recTitle,'<span data-act="recovery" style="font-size:10px;font-weight:600;color:var(--c-green);cursor:pointer">Edit</span>');
   rd+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">'+recSub+'</div>';
-  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recScore/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:var(--d-t1);line-height:1">'+recScore+'%</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
+  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recFill)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:var(--d-t1);line-height:1">'+recBig+'</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
@@ -50980,9 +51023,16 @@ function showCalendarTab(){
   // the training-load card called the same TSB "Steady state" and the home ring called it 4.2/10.
   // The ring position is now the band's own step and the number beside it is TSB, a real measured
   // quantity, rather than a percentage manufactured from it.
+  // The comment above was HALF true and the untrue half was the visible one: the ring position did
+  // become the band's step, but the number beside it stayed Math.round(fill*100) and was printed
+  // with a % sign. Once fill went continuous that is a manufactured percentage again (TSB +8 read
+  // "98%"), so this surface was still the third answer to one question. readyFill is the ARC;
+  // readyBig is the TSB, exactly as the home ring and the desktop ring now print it.
   var _rdyC=(typeof getReadiness_==='function')?getReadiness_():null;
-  var readiness=Math.round((_rdyC?_rdyC.fill:0)*100);
+  var readyFill=_rdyC?_rdyC.fill:0;
+  var readyBig=(_rdyC&&_rdyC.loaded)?((_rdyC.tsb>0?'+':'')+Math.round(_rdyC.tsb)):'—';
   var readyColor=_rdyC?_rdyC.col:'#94a3b8';
+  var readyBand=(_rdyC&&_rdyC.loaded)?_rdyC.label:'—';
   var readyLabel=_rdyC?_rdyC.head:'—';
 
   // Week model (Mon-anchored), matching the mockup's Mon..Sun strip.
@@ -51245,13 +51295,13 @@ function showCalendarTab(){
   h+='  <div style="font-size:12px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">TODAY &middot; <span style="color:var(--t2)">'+todayStr+'</span></div>';
   h+='  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center">';
   // Readiness ring (SVG)
-  var R=52, C=2*Math.PI*R, off=C*(1-readiness/100);
+  var R=52, C=2*Math.PI*R, off=C*(1-readyFill);
   h+='    <div style="display:flex;flex-direction:column;align-items:center">';
   h+='      <svg width="130" height="130" viewBox="0 0 130 130">';
   h+='        <circle cx="65" cy="65" r="'+R+'" fill="none" stroke="var(--s3)" stroke-width="10"/>';
   h+='        <circle cx="65" cy="65" r="'+R+'" fill="none" stroke="'+readyColor+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 65 65)"/>';
-  h+='        <text x="65" y="62" text-anchor="middle" font-size="30" font-weight="800" fill="var(--t1)">'+readiness+'<tspan font-size="15" fill="'+readyColor+'">%</tspan></text>';
-  h+='        <text x="65" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="var(--t2)">Readiness</text>';
+  h+='        <text x="65" y="62" text-anchor="middle" font-size="30" font-weight="800" fill="var(--t1)">'+readyBig+'</text>';
+  h+='        <text x="65" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="'+readyColor+'">'+readyBand+'</text>';
   h+='      </svg>';
   h+='      <div style="font-size:13px;font-weight:700;color:'+readyColor+';margin-top:2px">'+readyLabel+'</div>';
   h+='    </div>';

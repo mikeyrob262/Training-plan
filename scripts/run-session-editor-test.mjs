@@ -175,5 +175,32 @@ console.log('\n' + Y + '=== a formatted duration is not read as a number ===' + 
   ok('no duration field is read with _num any more', !/duration:_num\(|durationMin:_num\(/.test(src));
 }
 
+// THE REPAIR WAS RIGHT AND NEVER LEFT THE DEVICE. migrateSessionTypes_ clears the residue mask and
+// stamps editedAt, and applyFirebaseData calls it at the correct point — but only a duplicate
+// COLLAPSE could reach fbPush, so the corrections saved locally, the cloud kept the stale rows, the
+// next pull merged them straight back, and [planTypes] reported the identical 49 corrections on
+// every load. Measured across two consecutive loads of the deployed app: same 49 both times.
+console.log('\n' + Y + '=== a repair that cannot reach the cloud is not a repair ===' + X);
+{
+  const afd = src.slice(src.indexOf('function applyFirebaseData('),
+                        src.indexOf('function applyFirebaseData(') + 9000);
+  ok('the repairs still run in applyFirebaseData, not at boot', /migrateSessionTypes_\(\)/.test(afd));
+  ok('...and their counts are captured rather than discarded',
+     /_mTypes=migrateSessionTypes_\(\)\|\|0/.test(afd) && /_mIntents=migrateSessionIntents_\(\)\|\|0/.test(afd));
+  ok('...so a correction PUSHES instead of only saving locally',
+     /if\(_planDidCollapse_ \|\| _mIntents \|\| _mTypes\)/.test(afd));
+  ok('...through the same fbPush the collapse uses', /fbPush\(true\)/.test(afd));
+  ok('...and it still saves locally too', /saveLocal_\(\)/.test(afd));
+  // Self-termination is the property that stops this becoming a push on every poll forever.
+  const mt = exFn('migrateSessionTypes_');
+  ok('the migration returns a COUNT, so the push self-terminates', /return fixed;/.test(mt));
+  ok('...it corrects nothing when types already match', /if\(x\.type===def\.type\) return;/.test(mt));
+  ok('...so a clean remote produces 0 and no push at all', /var fixed=0/.test(mt));
+  // The two guards that make the correction survive a merge at all.
+  ok('the residue mask is CLEARED, not just ignored', /delete x\._edited\.type/.test(mt));
+  ok('...and editedAt is stamped so the change can travel', /x\.editedAt=Date\.now\(\)/.test(mt));
+  ok('an explicit swap is still the athlete decision and is left alone', /if\(x\.swap===true\) return;/.test(mt));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'run session editor: all checks passed' + X));
 process.exit(fails ? 1 : 0);

@@ -84,5 +84,44 @@ console.log('\n' + Y + '=== the verdict still comes from the band, not the fill 
   ok('the old constant is no longer served', !/fill:b\.fill/.test(g));
 }
 
+// THE FILL FIX HAD A SIDE EFFECT NOBODY LOOKED FOR. Three surfaces printed Math.round(fill*100).
+// While fill was a per-band CONSTANT that was a genuine band step (100/75/50/25). The moment fill
+// became continuous, the same expression started manufacturing a percentage again - and a 0-100
+// composite reappeared on desktop and calendar beside mobile's banded TSB. At TSB +8: "98/100" and
+// "98%". A fix in one place quietly reopened the bug it was fixing, in three others.
+console.log('\n' + Y + '=== no surface prints the fill as a score ===' + X);
+{
+  const r = exFn('readinessFromTSB_');
+  ok('readinessFromTSB_ no longer manufactures a score', !/score:\s*Math\.round\(r\.fill\s*\*\s*100\)/.test(r));
+  ok('...it exposes fill for the ARC', /fill:r\.fill/.test(r));
+  ok('...and the TSB for the NUMBER', /value:\(r\.tsb>0\?'\+':''\)\+Math\.round\(r\.tsb\)/.test(r));
+  ok('...carrying the shared band label', /label:r\.label/.test(r));
+
+  // Desktop hero ring + desktop Form Readiness card.
+  const ds = src.slice(src.indexOf('function dsShowDashboard('), src.indexOf('function dsShowDashboard(') + 60000);
+  ok('the desktop hero ring prints the TSB, not a score', /'\+\(rdy\?rdy\.value:'—'\)\+'/.test(ds));
+  ok('...with the band label under it, not "/100"', !/>\/100</.test(ds));
+  ok('...and its arc is driven by fill', /ringOff=ringC\*\(1-\(rdy\?rdy\.fill:0\)\)/.test(ds));
+  // The arc was hardcoded green, so it stayed green through Loaded and Fatigued.
+  ok('...and its colour comes from the band', /ringCol=\(rdy&&rdy\.loaded\)\?rdy\.color/.test(ds));
+  ok('the Form Readiness card prints the TSB too', /recBig=\(rdy&&rdy\.loaded\)\?rdy\.value/.test(ds));
+  ok('...and takes the SHARED band label, not taperVerdict_ own', !/recLabel=verdict\.readyLabel/.test(ds));
+  // HRV+RHR genuinely IS a 0-100 composite of two measurements - that branch must keep its percent.
+  ok('...while a real HRV+RHR recovery score keeps its percentage', /recBig=recScore\+'%'/.test(ds));
+  ok('...and the taper note survives as the sub-line', /recSub=verdict\.readyNote/.test(ds));
+
+  // Calendar ring - the one that printed it outright with a % sign.
+  const cal = src.slice(src.indexOf('function showCalendarTab('), src.indexOf('function showCalendarTab(') + 40000);
+  ok('the calendar ring prints the TSB', /readyBig=\(_rdyC&&_rdyC\.loaded\)/.test(cal));
+  ok('...and no longer renders a % sign', !/\+readiness\+'<tspan/.test(cal));
+  ok('...its arc uses fill directly', /off=C\*\(1-readyFill\)/.test(cal));
+  ok('...and it shows the shared band', /readyBand=\(_rdyC&&_rdyC\.loaded\)\?_rdyC\.label/.test(cal));
+
+  // Mobile is the reference the other two were converged onto - it must not drift either.
+  const home = src.slice(src.indexOf('var _rdyH='), src.indexOf('var _rdyH=') + 2000);
+  ok('mobile home still prints the TSB from the shared read',
+     /readinessNum=\(_rdyH&&_rdyH\.loaded\)\?\(\(_rdyH\.tsb>0\?'\+':''\)\+Math\.round\(_rdyH\.tsb\)\)/.test(home));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'readiness ring: all checks passed' + X));
 process.exit(fails ? 1 : 0);
