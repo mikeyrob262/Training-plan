@@ -44488,7 +44488,11 @@ function migrateSessionTypes_(){
         if(!x || x.deleted || !x.intent) return;
         var def=SESSION_DEFS[x.intent]; if(!def || !def.type) return;
         if(x.type===def.type) return;
-        if(x._edited && x._edited.type) return;            // the athlete set this by hand
+        // Only an explicit swap is the athlete's decision. This gated on _edited.type and
+        // skipped today's Easy Run, whose mask carries type among eight fields written by one
+        // ordinary save - the same residue mistake the intent repair made. The mask records
+        // that a field was WRITTEN, never that it was chosen.
+        if(x.swap===true) return;
         x.type=def.type;
         x.editedAt=Date.now();                             // stamped so the correction travels
         fixed++; byIntent[x.intent]=(byIntent[x.intent]||0)+1;
