@@ -114,5 +114,28 @@ console.log('\n' + Y + '=== degenerate input is survivable ===' + X);
      Array.isArray(M._blockSwapThuFri_(phase, THU, '2026-09-03', [{ i: 'nosuchthing' }])));
 }
 
+
+console.log('\n' + Y + '=== the stored plan is re-synced to the derive ===' + X);
+{
+  // Two readers, one fact. blockPlanFor_ is the block's answer; the Calendar and every
+  // planSessionsForDate_ caller read STORED st.plan rows. Measured after the swap shipped:
+  // Aug 13 stored z2 while the block derived threshold, and every Friday stored strengthA while
+  // the rotation derived D or B. The swap was live and invisible.
+  const fn = exFn('migrateBlockSessions_');
+  ok('a re-sync exists', fn.length > 0);
+  ok('it reads the block derive', fn.indexOf('blockPlanFor_(dk)') > 0);
+  ok('...and matches sessions by TYPE', fn.indexOf('typeOf(want[i].intent)===mine') > 0);
+  ok('an explicit swap is never overwritten', fn.indexOf('x.swap===true') > 0);
+  ok('a completed session is never rewritten', fn.indexOf("x.status==='completed'") > 0);
+  ok('it corrects intent, type and name together', /x\.intent=target\.intent/.test(fn) && /x\.type=def\.type/.test(fn));
+  ok('...and clears the mask it corrects', /delete x\._edited\.intent/.test(fn));
+  ok('it stays inside the block window', fn.indexOf('dk<tb.start || dk>tb.end') > 0);
+  ok('it adds and removes nothing', !/sessions\.push|sessions\.splice/.test(fn));
+  // The rationale sits in the header comment above the function, which exFn does not capture.
+  ok('...and says why', /does not add or remove rows/.test(src));
+  ok('it runs at the sync chokepoint, not only at boot',
+     (src.match(/migrateBlockSessions_\(\); \}catch/g) || []).length >= 2);
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'Thu/Fri swap: all checks passed' + X));
 process.exit(fails ? 1 : 0);

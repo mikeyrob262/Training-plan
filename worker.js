@@ -7590,6 +7590,7 @@ function applyFirebaseData(data){
   // type 'ride' again each time. Intent first, so the type follows it.
   try{ if(typeof migrateSessionIntents_==='function') migrateSessionIntents_(); }catch(e){}
   try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
+  try{ if(typeof migrateBlockSessions_==='function') migrateBlockSessions_(); }catch(e){}
   // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
   try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
   // If the collapse soft-deleted duplicates, push ONCE so remote converges instead of re-sending
@@ -42823,7 +42824,12 @@ function dsShowRun(){
   mc.innerHTML='';
   var wrap=document.createElement('div');
   wrap.id='DS-RUN';
-  wrap.style.cssText='padding:4px 2px 40px';
+  // #ds-content is a flex column with overflow:hidden, so every section supplies its own
+  // scroller. As a fixed overlay this page had overflow-y:auto of its own; that went with the
+  // overlay and nothing replaced it, so 1,493px of content sat clipped inside a 950px box.
+  // min-height:0 is required - without it a flex child will not shrink below its content.
+  wrap.className='aiq-vscroll';
+  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:4px 2px 40px';
   var hdr=document.createElement('div');
   hdr.style.cssText='margin-bottom:16px';
   hdr.innerHTML='<div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
@@ -43126,6 +43132,7 @@ function renderRun(){
 }
 // THE run page. Every card on both surfaces is built here.
 function renderRunInto_(scr, surface){
+  var _rgDefer=null;   // the Running Growth card, mounted at the end (see below)
 
 
 
@@ -43142,8 +43149,11 @@ function renderRunInto_(scr, surface){
   // History exhibit, above the live stats. Renders nothing when the snapshot is unprimed or run
   // cannot be ranked — the same do-not-claim contract _covFor_ returns.
   try{
+    // Built here so its data call keeps its place in the render, but MOUNTED LAST: cumulative
+    // miles by year is context, not a week-to-week decision - it mostly records the move from
+    // running to cycling (1,908 mi in 2019 against 35.9 in 2026). The actionable cards go first.
     var _rg=(typeof _rgSection_==='function')?_rgSection_():'';
-    if(_rg){ var _rgw=document.createElement('div'); _rgw.innerHTML=_rg; scr.appendChild(_rgw); }
+    if(_rg){ _rgDefer=document.createElement('div'); _rgDefer.innerHTML=_rg; }
   }catch(e){ try{ console.error('[run-growth] ' + ((e&&e.message)||e)); }catch(_e){} }
 
   // PR board, below the history exhibit. Same do-not-claim contract: renders nothing when the
@@ -43517,6 +43527,9 @@ function renderRunInto_(scr, surface){
   };
 
   // No auto-seeded demo race — an empty list stays empty until the user adds one.
+
+  // Running Growth goes here, after the actionable cards.
+  try{ if(_rgDefer) scr.appendChild(_rgDefer); }catch(e){}
 
   // Mounting belongs to the CALLER: mobile drops this on the body as a full-screen overlay,
   // desktop nests it inside the desktop shell. The shared renderer only fills the container.
@@ -44777,6 +44790,60 @@ function planUpsertSession_(dateKey, sess, editedFields, source){
 // ONLY what is honestly present — type (classified), name, planned duration — never
 // fabricated power/%1RM/TSS (those come from the Phase 1 generator). Rest -> no
 // session. Overrides win; st.plannedWorkouts is then retired.
+// Re-syncs GENERATOR-OWNED block days to what the block currently derives.
+//
+// Two readers, one fact, and they disagreed. blockPlanFor_ is the block's answer; st.plan holds
+// what generateBlockPlan_ wrote into those days at some earlier point. The Calendar and every
+// planSessionsForDate_ caller read the STORED rows, so a change to the derive - the Thu/Fri ride
+// swap, or the A/B/C/D strength rotation - was invisible on the surfaces the athlete actually
+// reads. Measured: Aug 13 stored z2 while the block derived threshold, and every Friday stored
+// strengthA while the rotation derived D or B.
+//
+// Corrects INTENT in place on same-type sessions. It does not add or remove rows: a missing or
+// extra session is a structural question for the generator, and silently reshaping a day is how a
+// plan loses work someone did on it.
+//
+// NEVER touches a day the athlete owns - an explicit swap, or anything completed.
+function migrateBlockSessions_(){
+  try{
+    if(typeof blockPlanFor_!=='function' || typeof SESSION_DEFS==='undefined' || !st || !st.plan) return 0;
+    var tb=(typeof _trainingBlock_==='function')?_trainingBlock_():null;
+    if(!tb || !tb.start || !tb.end) return 0;
+    var fixed=0, detail={};
+    Object.keys(st.plan).forEach(function(dk){
+      if(dk<tb.start || dk>tb.end) return;
+      var day=st.plan[dk]; if(!day || !day.sessions) return;
+      var bp=null; try{ bp=blockPlanFor_(dk); }catch(e){ return; }
+      var want=(bp&&bp.sessions)||[]; if(!want.length) return;
+      var typeOf=function(intent){ var d=SESSION_DEFS[intent]; return d?d.type:''; };
+      day.sessions.forEach(function(x){
+        if(!x || x.deleted || !x.intent) return;
+        if(x.swap===true) return;                       // the athlete chose this
+        if(x.status==='completed') return;              // already ridden; do not rewrite history
+        var mine=typeOf(x.intent); if(!mine) return;
+        var target=null;
+        for(var i=0;i<want.length;i++){ if(typeOf(want[i].intent)===mine){ target=want[i]; break; } }
+        if(!target || !target.intent || target.intent===x.intent) return;
+        var def=SESSION_DEFS[target.intent]; if(!def) return;
+        var was=x.intent;
+        x.intent=target.intent;
+        x.type=def.type;
+        if(def.name) x.name=def.name;
+        // The mask must be cleared for what is corrected, or per-field merge treats the stale value
+        // as a local edit and the remote copy wins the next sync.
+        try{ if(x._edited){ delete x._edited.intent; delete x._edited.type; delete x._edited.name; } }catch(e){}
+        x.editedAt=Date.now();
+        fixed++; detail[was+'->'+target.intent]=(detail[was+'->'+target.intent]||0)+1;
+      });
+    });
+    if(fixed){
+      try{ console.log('[blockSync] re-synced '+fixed+' stored block session(s) to the derived block: '
+        +Object.keys(detail).map(function(k){ return k+' x'+detail[k]; }).join(', ')); }catch(e){}
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+    }
+    return fixed;
+  }catch(e){ try{ console.warn('[blockSync] failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 // Repairs sessions whose NAME claims one sport and whose intent says another - 'Easy Run' stored
 // with intent 'z2' or 'recovery'. Measured live: 52 such sessions, and today's was one of them,
 // which is why a running day rendered Intent / Power / Target TSS.
@@ -53336,6 +53403,7 @@ window.onload = function(){
         // type repair afterwards has nothing left to disagree about.
         try{ if(typeof migrateSessionIntents_==='function') migrateSessionIntents_(); }catch(e){}
         try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
+        try{ if(typeof migrateBlockSessions_==='function') migrateBlockSessions_(); }catch(e){}
         // Meals stop carrying copies of macros here. Runs after the remote pull for the same
         // reason the others do: before it, st is whatever IndexedDB had, and a migration that
         // measures an empty store measures nothing.
