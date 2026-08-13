@@ -700,6 +700,19 @@ try {
     fail('the strength rotation or the calendar quick-add is broken (see above).');
   }
 
+  // STEP 41 - Run Training Phase 2. Three features, three ways to lie: the shin signal must not
+  //           fire on a thin sample, the 10k pacing must print the YEAR of a 2015 PB, and Why
+  //           must stay deterministic drivers rather than narration.
+  console.log(`${D}. checking Run Training phase 2...${X}`);
+  try {
+    const so = execSync('node scripts/run-phase2-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('Run Training phase 2 is misreporting (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

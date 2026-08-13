@@ -42778,6 +42778,257 @@ function dsShowRun(){
   try{ if(typeof _balCols_==='function') _balCols_(host); }catch(e){}
 }
 try{ if(typeof window!=='undefined'){ window.dsShowRun=dsShowRun; window.renderRunInto_=renderRunInto_; } }catch(e){}
+// ===================== Run Training, Phase 2 =====================================================
+//
+// ONE run source. st.rides carries the recent runs and getRuns() serves the /store_v2 snapshot;
+// reading either alone under-reports. Measured: 200 + 2,206 -> 2,234 distinct.
+function _runAll_(){
+  var out=[], seen={};
+  var isRun=function(r){
+    var sp=(typeof rideSport_==='function')?String(rideSport_(r)||''):String((r&&(r.sportType||r.type))||'');
+    return /run/i.test(sp);
+  };
+  var add=function(r){
+    if(!r || r.deleted || !r.date) return;
+    var k=String(r.date).slice(0,10)+'|'+Math.round((parseFloat(r.distance)||0)*10);
+    if(seen[k]) return; seen[k]=1; out.push(r);
+  };
+  try{ ((typeof st!=='undefined'&&st&&st.rides)||[]).forEach(function(r){ if(isRun(r)) add(r); }); }catch(e){}
+  try{ if(typeof getRuns==='function') (getRuns()||[]).forEach(add); }catch(e){}
+  out.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+  return out;
+}
+function _runZonePct_(r){
+  // Share of the run spent ABOVE the conversational band, from the stored breakdown. Null when the
+  // run carries no breakdown - a run with no zone data is not a run that was all easy.
+  if(!r) return null;
+  var z=[+r.z1pct||0,+r.z2pct||0,+r.z3pct||0,+r.z4pct||0,+r.z5pct||0];
+  var sum=z[0]+z[1]+z[2]+z[3]+z[4];
+  if(!(sum>0)) return null;
+  return Math.round((z[2]+z[3]+z[4])/sum*100);
+}
+// ---- 1. SHIN EARLY WARNING ----------------------------------------------------------------------
+// The pattern that preceded the last flare-up was easy runs quietly becoming tempo runs. This reads
+// the zone breakdown already stored per run and reports it BEFORE it becomes pain.
+//
+// "Planned as Easy" is taken from the PLAN, not from the run's own name: a run named "Morning Run"
+// that was prescribed easyRun is still an easy run that drifted. Falls back to the name only when
+// the day carries no plan session.
+var SHIN_MIN_SAMPLE = 4;    // fewer than this is noise, and the card says so rather than guessing
+var SHIN_DRIFT_PCT  = 50;   // more than half the run above conversational = it was not an easy run
+var SHIN_LOOKBACK   = 8;    // most recent qualifying runs considered
+function _runPlannedEasy_(dateKey){
+  try{
+    var sess=[];
+    if(typeof planSessionsForDate_==='function') sess=planSessionsForDate_(dateKey)||[];
+    if(!sess.length && typeof blockPlanFor_==='function'){
+      var bp=blockPlanFor_(dateKey); sess=(bp&&bp.sessions)||[];
+    }
+    for(var i=0;i<sess.length;i++){
+      var it=sess[i]; if(!it || it.deleted) continue;
+      var intent=String(it.intent||'');
+      if(intent==='easyRun') return true;
+      if(/^(run10k|tenk|long)$/.test(intent)) return false;   // prescribed hard or long: not this signal
+    }
+  }catch(e){}
+  return null;   // no plan answer
+}
+function _runShinWatch_(){
+  var runs=_runAll_(), rows=[];
+  for(var i=0;i<runs.length && rows.length<SHIN_LOOKBACK;i++){
+    var r=runs[i];
+    var above=_runZonePct_(r);
+    if(above==null) continue;                       // no breakdown, nothing to judge
+    var dk=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    var planned=_runPlannedEasy_(dk);
+    var easyByName=/easy|recovery/i.test(String((typeof actName_==='function')?actName_(r):(r.name||'')));
+    var isEasy=(planned===true)||(planned===null && easyByName);
+    if(!isEasy) continue;
+    rows.push({ date:dk, name:(typeof actName_==='function')?actName_(r):(r.name||'Run'),
+                above:above, drifted:above>SHIN_DRIFT_PCT, viaPlan:planned===true });
+  }
+  var n=rows.length, drifted=rows.filter(function(x){ return x.drifted; }).length;
+  return {
+    rows:rows, sample:n, drifted:drifted,
+    enough:n>=SHIN_MIN_SAMPLE,
+    // Only a MAJORITY of a sufficient sample is a signal worth acting on.
+    flag:(n>=SHIN_MIN_SAMPLE && drifted*2>n),
+    minSample:SHIN_MIN_SAMPLE, driftPct:SHIN_DRIFT_PCT
+  };
+}
+// ---- 2. 10K PACING, off the real PB board --------------------------------------------------------
+// Three references, each labelled with the year it came from. The 10k career best is from 2015 and
+// must never be presented as current fitness - a pace calculator that quietly targets an
+// eleven-year-old result is how a plan gets written for an athlete who does not exist any more.
+var RUN_RACE = { id:'10k', name:'10k', dateKey:'2026-10-18', miles:6.2137 };
+function _runPaceStr_(secPerMi){
+  if(!(secPerMi>0)) return null;
+  var m=Math.floor(secPerMi/60), sec=Math.round(secPerMi%60);
+  if(sec===60){ m++; sec=0; }
+  return m+':'+('0'+sec).slice(-2);
+}
+function _runCurrentPace_(nRuns){
+  // Current form from the most recent runs that actually carry a pace. Distance/time, never the
+  // stored pace string, so one formatting convention cannot skew it.
+  var runs=_runAll_(), tot=0, sec=0, used=0, oldest=null;
+  for(var i=0;i<runs.length && used<(nRuns||6);i++){
+    var r=runs[i];
+    var mi=parseFloat(r.distance)||0;
+    var ss=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs)||0);
+    if(!(mi>0.5) || !(ss>60)) continue;
+    tot+=mi; sec+=ss; used++; oldest=String(r.date).slice(0,10);
+  }
+  if(!used || !(tot>0)) return null;
+  return { secPerMi:sec/tot, runs:used, oldest:oldest };
+}
+function _run10kPlan_(){
+  var out={ race:RUN_RACE, refs:[], current:null, daysOut:null };
+  try{
+    var today=(typeof getTodayKey==='function')?getTodayKey():null;
+    if(today){
+      var a=new Date(today+'T00:00:00'), b=new Date(RUN_RACE.dateKey+'T00:00:00');
+      out.daysOut=Math.round((b-a)/86400000);
+    }
+  }catch(e){}
+  // PB board is the authority for the references - the same rows the board renders.
+  try{
+    var board=(typeof _prCompute_==='function')?_prCompute_():null;
+    var row=board && board.rows ? board.rows.filter(function(x){ return x.ev && x.ev.id==='10k'; })[0] : null;
+    if(row){
+      if(row.career && row.career.val>0)
+        out.refs.push({ label:'Career best', sec:row.career.val, year:String(row.career.date||'').slice(0,4), tier:'career' });
+      if(row.band && row.band.val>0 && (!row.career || row.band.val!==row.career.val))
+        out.refs.push({ label:'Best since 60', sec:row.band.val, year:String(row.band.date||'').slice(0,4), tier:'band' });
+    }
+  }catch(e){}
+  var cur=_runCurrentPace_(6);
+  if(cur){
+    out.current={ secPerMi:cur.secPerMi, runs:cur.runs, since:cur.oldest,
+                  sec:cur.secPerMi*RUN_RACE.miles };
+  }
+  out.refs.forEach(function(x){ x.secPerMi=x.sec/RUN_RACE.miles; });
+  return out;
+}
+// ---- 3. WHY -------------------------------------------------------------------------------------
+// Deterministic drivers, same contract as _trDrivers_: every row is a measured delta between two
+// windows over the SAME input. No narration, and a driver with no data does not appear.
+function _runWhy_(days){
+  var w=(+days>0)?Math.round(days):90;
+  var runs=_runAll_();
+  var now=new Date(), a=new Date(now), c=new Date(now);
+  a.setDate(now.getDate()-w); c.setDate(now.getDate()-2*w);
+  var inR=function(r,x,y){ var t=new Date(String(r.date).slice(0,10)+'T00:00:00'); return t>=x && t<y; };
+  var recent=runs.filter(function(r){ return inR(r,a,now); });
+  var prior =runs.filter(function(r){ return inR(r,c,a); });
+  var out=[];
+  var pct=function(x,y){ return y>0?Math.round((x-y)/y*100):null; };
+  var mean=function(arr,f){ var s=0,n=0; arr.forEach(function(r){ var v=f(r); if(v>0){ s+=v; n++; } }); return n?{v:s/n,n:n}:null; };
+  var push=function(key,unit,R,P,invert){
+    if(!R||!P) return;
+    var d=pct(R.v,P.v); if(d==null) return;
+    out.push({ key:key, unit:unit, recent:R.v, prior:P.v, n:R.n+P.n,
+               delta:invert?-d:d, rawDelta:d });
+  };
+  push('Average HR','bpm', mean(recent,function(r){return +r.avgHR;}), mean(prior,function(r){return +r.avgHR;}), true);
+  push('Time above easy','%', mean(recent,function(r){return _runZonePct_(r);}), mean(prior,function(r){return _runZonePct_(r);}), true);
+  push('Cadence','spm', mean(recent,function(r){return +r.cadence;}), mean(prior,function(r){return +r.cadence;}), false);
+  push('Elevation per mile','ft', mean(recent,function(r){ var mi=parseFloat(r.distance)||0; return mi>0?((+r.elev||0)/mi):0; }),
+                                  mean(prior, function(r){ var mi=parseFloat(r.distance)||0; return mi>0?((+r.elev||0)/mi):0; }), true);
+  push('Temperature','F', mean(recent,function(r){return +r.avgTemp;}), mean(prior,function(r){return +r.avgTemp;}), true);
+  var vol=function(arr){ var s=0; arr.forEach(function(r){ s+=parseFloat(r.distance)||0; }); return s>0?{v:s,n:arr.length}:null; };
+  push('Weekly volume','mi', vol(recent), vol(prior), false);
+  out.sort(function(x,y){ return Math.abs(y.delta)-Math.abs(x.delta); });
+  return { drivers:out, window:w, recentRuns:recent.length, priorRuns:prior.length };
+}
+// ---- Phase 2 cards. HTML only; every number comes from the functions above. -----------------------
+function _runCard_(title, sub, bodyHTML){
+  return '<div style="background:var(--s2);border-radius:14px;padding:14px 16px;margin:0 16px 12px;border:1px solid var(--b1)">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">'+title+'</div>'
+    +(sub?('<div style="font-size:11px;color:var(--t3);opacity:.85;margin-top:2px">'+sub+'</div>'):'')
+    +'<div style="margin-top:9px">'+bodyHTML+'</div></div>';
+}
+function _runEsc_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':(c==='<'?'&lt;':'&gt;'); }); }
+// 1. SHIN EARLY WARNING
+function _runShinCardHTML_(){
+  var w=_runShinWatch_();
+  if(!w.sample) return '';
+  if(!w.enough){
+    return _runCard_('Easy-run drift','not enough easy runs with a zone breakdown yet',
+      '<div style="font-size:12.5px;color:var(--t2);line-height:1.5">'
+      +w.sample+' of the last '+w.minSample+' needed. This watches for easy runs creeping into tempo, '
+      +'which is the pattern that ran ahead of the last shin flare-up.</div>');
+  }
+  var rows=w.rows.map(function(r){
+    var col=r.drifted?'var(--c-red)':'var(--c-green)';
+    return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0">'
+      +'<span style="color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_runEsc_(r.date)+' '+_runEsc_(r.name)+'</span>'
+      +'<span style="color:'+col+';font-weight:700;flex-shrink:0">'+r.above+'% above easy</span></div>';
+  }).join('');
+  var head=w.flag
+    ? ('<div style="font-size:13.5px;font-weight:800;color:var(--c-red);margin-bottom:5px">'
+       +w.drifted+' of your last '+w.sample+' easy runs crept into tempo</div>')
+    : ('<div style="font-size:13.5px;font-weight:800;color:var(--c-green);margin-bottom:5px">'
+       +'Easy runs are staying easy &mdash; '+w.drifted+' of '+w.sample+' drifted</div>');
+  return _runCard_('Easy-run drift',
+    'share of each run above the conversational band &middot; drift = over '+w.driftPct+'%',
+    head+rows);
+}
+// 2. 10K PACING
+function _run10kCardHTML_(){
+  var pl=_run10kPlan_();
+  if(!pl.refs.length && !pl.current) return '';
+  var line=function(label, prov, secPerMi, total){
+    var pace=_runPaceStr_(secPerMi);
+    if(!pace) return '';
+    var tm=total>0?(Math.floor(total/60)+':'+('0'+Math.round(total%60)).slice(-2)):null;
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-top:1px solid var(--b1)">'
+      +'<div style="min-width:0"><div style="font-size:12.5px;font-weight:700;color:var(--t1)">'+label+'</div>'
+      +'<div style="font-size:10.5px;color:var(--t3)">'+prov+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div style="font-size:14px;font-weight:800;color:var(--orange)">'+pace+' /mi</div>'
+      +(tm?('<div style="font-size:10.5px;color:var(--t3)">'+tm+' finish</div>'):'')+'</div></div>';
+  };
+  var body='';
+  pl.refs.forEach(function(r){
+    // The year is not decoration. A 2015 personal best is not current fitness and must never be
+    // presented as a target without saying when it was set.
+    body+=line(r.label, 'set in '+r.year+(r.tier==='career'?' \u00b7 career best':' \u00b7 best since 60'), r.secPerMi, r.sec);
+  });
+  if(pl.current){
+    body+=line('Current form', 'average of your last '+pl.current.runs+' runs, back to '+pl.current.since,
+               pl.current.secPerMi, pl.current.sec);
+  }
+  var sub='Oct 18 2026'+(pl.daysOut!=null?(' &middot; '+pl.daysOut+' days out'):'');
+  return _runCard_('10k race pace', sub, body);
+}
+// 3. WHY
+function _runWhyCardHTML_(){
+  var w=_runWhy_(90);
+  if(!w.drivers.length) return '';
+  var rows=w.drivers.slice(0,5).map(function(d){
+    var up=d.delta>0, flat=(d.delta===0);
+    var col=flat?'var(--t3)':(up?'var(--c-green)':'var(--c-red)');
+    var arrow=flat?'&ndash;':(d.rawDelta>0?'&uarr;':'&darr;');
+    var fmt=function(v){ return (Math.round(v*10)/10); };
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;padding:4px 0;border-top:1px solid var(--b1)">'
+      +'<span style="color:var(--t1);font-weight:600">'+_runEsc_(d.key)+'</span>'
+      +'<span style="color:var(--t3);flex-shrink:0">'+fmt(d.prior)+' &rarr; <b style="color:'+col+'">'+fmt(d.recent)+'</b> '+_runEsc_(d.unit)+' '
+      +'<span style="color:'+col+'">'+arrow+' '+Math.abs(d.rawDelta)+'%</span></span></div>';
+  }).join('');
+  return _runCard_('Why',
+    'last '+w.window+' days ('+w.recentRuns+' runs) against the '+w.window+' before ('+w.priorRuns+')',
+    '<div style="font-size:11.5px;color:var(--t3);line-height:1.5;margin-bottom:4px">'
+    +'Every row is a measured change in one input. Ordered by size, not by story.</div>'+rows);
+}
+function _runPhase2Mount_(scr){
+  [_runShinCardHTML_, _run10kCardHTML_, _runWhyCardHTML_].forEach(function(fn){
+    var html='';
+    try{ html=fn()||''; }catch(e){ try{ console.error('[run-p2]', e && e.message); }catch(_e){} }
+    if(!html) return;
+    var d=document.createElement('div');
+    d.innerHTML=html;
+    while(d.firstChild) scr.appendChild(d.firstChild);
+  });
+}
 // Mobile entry point. Owns only its own chrome; every card comes from renderRunInto_.
 function renderRun(){
   var existing=document.getElementById('RUN-SCREEN');
@@ -42937,6 +43188,10 @@ function renderRunInto_(scr, surface){
 
   zoneChartCard.appendChild(barWrap2);
   scr.appendChild(zoneChartCard);
+  // Phase 2 sits between the zone reference above and the per-run detail below: the drift
+  // warning reads against those zones, and the pacing and Why cards read the same runs the
+  // detail list shows.
+  try{ _runPhase2Mount_(scr); }catch(e){ try{ console.error('[run-p2] mount', e && e.message); }catch(_e){} }
 
 
   // Recent runs
@@ -44157,7 +44412,13 @@ function _strMissed2_(intent){ try{ if(typeof st==='undefined' || !st.plan || !i
 // the honest derivation (never a bare number — §6). extra:{isLower, missed}.
 function strengthRx_(exName, pct1RM, topReps, block, extra){
   extra=extra||{};
-  var oneRM=(typeof st!=='undefined'&&st.strength&&st.strength.oneRM&&st.strength.oneRM[exName])?(+st.strength.oneRM[exName]||0):0;
+  var _1rmStore=(typeof st!=='undefined'&&st.strength&&st.strength.oneRM)?st.strength.oneRM:null;
+  var oneRM=(_1rmStore&&_1rmStore[exName])?(+_1rmStore[exName]||0):0;
+  // A renamed movement keeps its stored max. Read-time alias, so the old key stays valid.
+  if(!oneRM && _1rmStore && typeof EX_1RM_ALIAS!=='undefined'){
+    var _alt=EX_1RM_ALIAS[exName];
+    if(_alt && _1rmStore[_alt]) oneRM=+_1rmStore[_alt]||0;
+  }
   if(!oneRM || !pct1RM) return { weight:null, oneRM:(oneRM||null), cue:(oneRM?null:'Log a working set to set your 1RM') };
   var week=(block&&block.week)||1;
   var mult=(week===2)?1.05:(week===3)?1.1025:1.0;   // §3.6 within-block: +5% wk2, +5% wk3 (compounded); wk4 deload holds intensity
@@ -50911,9 +51172,20 @@ var SESSION_PRESETS=(function(){
 //
 // Toe yoga and towel scrunches are deliberately ABSENT. They are a daily one-to-two-minute
 // practice, not gym line items, and listing them here would put them in a scored session.
+// New name -> the key a stored 1RM may still sit under. Read-time only.
+var EX_1RM_ALIAS={
+  'Dumbbell goblet squat':'Goblet squat',
+  'Barbell bench press':'Bench press',
+  'Barbell overhead press':'Overhead press',
+  'Dumbbell single-leg RDL':'Single-leg RDL',
+  'Dumbbell step-ups':'Weighted step-ups',
+  'Dumbbell reverse lunge':'Reverse lunge',
+  'Dumbbell walking lunges':'Walking lunges'
+};
 var EX_LIBRARY=[
   {name:'Back squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
-  {name:'Bench press', sets:3, reps:10, pct1RM:70, group:'strengthA'},
+  {name:'Barbell bench press', sets:3, reps:10, pct1RM:70, group:'strengthA'},
+  {name:'Dumbbell chest press', sets:3, reps:10, pct1RM:70, group:'strengthA'},
   {name:'Bulgarian split squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
   {name:'Standing calf raise', sets:3, reps:12, pct1RM:'', group:'strengthA'},
   {name:'Toe raises', sets:3, reps:15, pct1RM:'', group:'strengthA'},
@@ -50921,23 +51193,25 @@ var EX_LIBRARY=[
   {name:'Plank', sets:3, reps:45, pct1RM:'', group:'strengthA'},
   {name:'Half-kneeling hip flexor stretch', sets:2, reps:45, pct1RM:'', group:'strengthA'},
   {name:'Deadlift', sets:3, reps:10, pct1RM:70, group:'strengthB'},
+  {name:'Dumbbell Romanian deadlift', sets:3, reps:10, pct1RM:70, group:'strengthB'},
   {name:'Pull-ups (or assisted)', sets:3, reps:8, pct1RM:'', group:'strengthB'},
-  {name:'Walking lunges', sets:3, reps:12, pct1RM:'', group:'strengthB'},
+  {name:'Dumbbell walking lunges', sets:3, reps:12, pct1RM:'', group:'strengthB'},
   {name:'Seated calf raise', sets:3, reps:12, pct1RM:'', group:'strengthB'},
   {name:'Deep squat hold', sets:2, reps:60, pct1RM:'', group:'strengthB'},
   {name:'Groin/adductor stretch', sets:2, reps:45, pct1RM:'', group:'strengthB'},
   {name:'Bird-dog', sets:3, reps:10, pct1RM:'', group:'strengthB'},
   {name:'Front squat', sets:3, reps:10, pct1RM:70, group:'strengthC'},
   {name:'Dumbbell row', sets:3, reps:10, pct1RM:70, group:'strengthC'},
-  {name:'Single-leg RDL', sets:3, reps:10, pct1RM:70, group:'strengthC'},
-  {name:'Weighted step-ups', sets:3, reps:10, pct1RM:70, group:'strengthC'},
+  {name:'Dumbbell single-leg RDL', sets:3, reps:10, pct1RM:70, group:'strengthC'},
+  {name:'Dumbbell step-ups', sets:3, reps:10, pct1RM:70, group:'strengthC'},
   {name:'Eccentric heel drops', sets:3, reps:15, pct1RM:'', group:'strengthC'},
   {name:'90/90-to-stand', sets:3, reps:8, pct1RM:'', group:'strengthC'},
   {name:'Side plank', sets:3, reps:40, pct1RM:'', group:'strengthC'},
-  {name:'Trap-bar deadlift', sets:3, reps:10, pct1RM:70, group:'strengthD'},
-  {name:'Overhead press', sets:3, reps:10, pct1RM:70, group:'strengthD'},
+  {name:'Trap-bar deadlift', sets:3, reps:8, pct1RM:70, group:'strengthD'},   // the 3x8 hinge exception
+  {name:'Dumbbell goblet squat', sets:3, reps:10, pct1RM:70, group:'strengthD'},
+  {name:'Barbell overhead press', sets:3, reps:10, pct1RM:70, group:'strengthD'},
   {name:'Box jumps', sets:4, reps:5, pct1RM:'', group:'strengthD'},
-  {name:'Reverse lunge', sets:3, reps:10, pct1RM:70, group:'strengthD'},
+  {name:'Dumbbell reverse lunge', sets:3, reps:10, pct1RM:70, group:'strengthD'},
   {name:'Toe raises', sets:3, reps:15, pct1RM:'', group:'strengthD'},
   {name:'Banded dorsiflexion', sets:3, reps:15, pct1RM:'', group:'strengthD'},
   {name:'T-spine open-book rotation', sets:2, reps:8, pct1RM:'', group:'strengthD'},

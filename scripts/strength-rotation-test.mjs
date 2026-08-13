@@ -127,13 +127,13 @@ console.log('\n' + Y + '=== the groups are what the spec asked for ===' + X);
   const lib = src.slice(src.indexOf('var EX_LIBRARY=['), src.indexOf('];', src.indexOf('var EX_LIBRARY=[')));
   const groupOf = (g) => [...lib.matchAll(new RegExp("\\{name:'([^']+)'[^}]*group:'" + g + "'", 'g'))].map((m) => m[1]);
   eq('Group A', groupOf('strengthA'),
-     ['Back squat', 'Bench press', 'Bulgarian split squat', 'Standing calf raise', 'Toe raises', 'Banded dorsiflexion', 'Plank', 'Half-kneeling hip flexor stretch']);
+     ['Back squat', 'Barbell bench press', 'Dumbbell chest press', 'Bulgarian split squat', 'Standing calf raise', 'Toe raises', 'Banded dorsiflexion', 'Plank', 'Half-kneeling hip flexor stretch']);
   eq('Group B', groupOf('strengthB'),
-     ['Deadlift', 'Pull-ups (or assisted)', 'Walking lunges', 'Seated calf raise', 'Deep squat hold', 'Groin/adductor stretch', 'Bird-dog']);
+     ['Deadlift', 'Dumbbell Romanian deadlift', 'Pull-ups (or assisted)', 'Dumbbell walking lunges', 'Seated calf raise', 'Deep squat hold', 'Groin/adductor stretch', 'Bird-dog']);
   eq('Group C', groupOf('strengthC'),
-     ['Front squat', 'Dumbbell row', 'Single-leg RDL', 'Weighted step-ups', 'Eccentric heel drops', '90/90-to-stand', 'Side plank']);
+     ['Front squat', 'Dumbbell row', 'Dumbbell single-leg RDL', 'Dumbbell step-ups', 'Eccentric heel drops', '90/90-to-stand', 'Side plank']);
   eq('Group D', groupOf('strengthD'),
-     ['Trap-bar deadlift', 'Overhead press', 'Box jumps', 'Reverse lunge', 'Toe raises', 'Banded dorsiflexion', 'T-spine open-book rotation', 'Couch stretch']);
+     ['Trap-bar deadlift', 'Dumbbell goblet squat', 'Barbell overhead press', 'Box jumps', 'Dumbbell reverse lunge', 'Toe raises', 'Banded dorsiflexion', 'T-spine open-book rotation', 'Couch stretch']);
 
   // Every session must hit the weak areas, which is the whole point of the rotation.
   const SHIN = /toe raise|banded dorsiflexion|eccentric heel drop|calf raise|deep squat hold/i;
@@ -193,6 +193,39 @@ console.log('\n' + Y + '=== calendar quick-add: a new entry point, not a new edi
   // actually lands. Measured: 42 controls in the month grid, 0 in the week strip, before this.
   ok('mobile has it on the week strip as well as the month grid',
      (mob.match(/__new__/g)||[]).length >= 2);
+}
+
+
+console.log('\n' + Y + '=== dumbbell work is NAMED, not implied ===' + X);
+{
+  const lib = src.slice(src.indexOf('var EX_LIBRARY=['), src.indexOf('];', src.indexOf('var EX_LIBRARY=[')));
+  const groupOf = (g) => [...lib.matchAll(new RegExp("\\{name:'([^']+)'[^}]*group:'" + g + "'", 'g'))].map((m) => m[1]);
+
+  // Dumbbell as its own named entry in every group, not an implement note on a barbell lift.
+  ['strengthA', 'strengthB', 'strengthC', 'strengthD'].forEach((g) => {
+    const db = groupOf(g).filter((n) => /dumbbell/i.test(n));
+    ok(g + ' names dumbbell work explicitly (' + db.join(', ') + ')', db.length >= 1);
+  });
+
+  // Barbell lifts say so too, so neither implement is left to be guessed.
+  ok('the bench press names its implement', lib.indexOf("'Barbell bench press'") > 0);
+  ok('the overhead press does too', lib.indexOf("'Barbell overhead press'") > 0);
+  ok('no generic "Bench press" survives', lib.indexOf("{name:'Bench press'") < 0);
+  ok('no generic "Overhead press" survives', lib.indexOf("{name:'Overhead press'") < 0);
+  ok('no generic "Weighted step-ups" survives', lib.indexOf("'Weighted step-ups'") < 0);
+  ok('no generic "Single-leg RDL" survives', lib.indexOf("{name:'Single-leg RDL'") < 0);
+  ok('no generic "Reverse lunge" survives', lib.indexOf("{name:'Reverse lunge'") < 0);
+
+  // The trap-bar hinge exception, and that it did NOT leak into the other loaded lifts.
+  ok('trap-bar deadlift is the 3x8 exception', lib.indexOf("{name:'Trap-bar deadlift', sets:3, reps:8,") > 0);
+  ok('...and Back squat keeps the 10-rep default', lib.indexOf("{name:'Back squat', sets:3, reps:10,") > 0);
+  ok('...as does the Deadlift', lib.indexOf("{name:'Deadlift', sets:3, reps:10,") > 0);
+
+  // strengthRx_ prices off st.strength.oneRM keyed by the EXACT name, so a rename would silently
+  // drop a stored max and blank the card. Six 1RMs are on file.
+  ok('renamed movements keep their stored 1RM by alias', src.indexOf('var EX_1RM_ALIAS={') > 0);
+  ok("...including the goblet squat's", src.indexOf("'Dumbbell goblet squat':'Goblet squat'") > 0);
+  ok('...resolved at READ time, not by rewriting stored data', src.indexOf('EX_1RM_ALIAS[exName]') > 0);
 }
 
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'strength rotation + quick-add: all checks passed' + X));
