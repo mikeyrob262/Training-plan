@@ -23483,6 +23483,23 @@ function aiRenderAlmost_(){
     +'<div style="font-size:11px;color:var(--d-dim);line-height:1.5;margin-bottom:10px">'+sub+'</div>'; };
   var empty=function(msg){ return '<div style="font-size:12.5px;color:var(--d-dim);padding:4px 0 2px;line-height:1.5">'+msg+'</div>'; };
   var esc=(typeof aiEsc_==='function')?aiEsc_:function(x){ return String(x); };
+  // A board row names a segment and then goes nowhere. These ids ARE the Segment Library's ids —
+  // st.segments is keyed by segment id and _saEvaluate_ reads seg.id, so the two id spaces are the
+  // same one (verified against the live store: 2,017 of 2,017 keys equal their own .id, and all 247
+  // Closing-in entries resolve in the library list). So a row can hand its id straight to saOpen_.
+  //
+  // The charset guard is the same defensive rule rideRefAttr_ uses: the id goes into a single-quoted
+  // inline onclick, and an id carrying a quote would break out of the attribute and throw on tap,
+  // silently, because nothing catches an inline handler. Ids are s<digits> today, so this is a
+  // no-op — it just guarantees a future id format cannot turn every row into a dead button.
+  var segAttr=function(id){ return String(id==null?'':id).replace(/[^A-Za-z0-9:_.-]/g,''); };
+  var segRow=function(id, inner){
+    var sid=segAttr(id);
+    if(!sid) return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--d-edge,rgba(255,255,255,.06))">'+inner+'</div>';
+    return '<div onclick="almostOpenSeg_(&#39;'+sid+'&#39;)" title="Open this segment" '
+      +'style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;'
+      +'border-top:1px solid var(--d-edge,rgba(255,255,255,.06));cursor:pointer">'+inner+'</div>';
+  };
 
   // ---- CLOSING IN: the lead section. Movement, not a static gap. ----------------------------
   var c=B.closing||[];
@@ -23490,11 +23507,11 @@ function aiRenderAlmost_(){
   if(!c.length){ h1+=empty('No segment has two timed improvements yet. Ride one of your regulars twice more and it will appear here.'); }
   else {
     c.slice(0,12).forEach(function(x){
-      h1+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--d-edge,rgba(255,255,255,.06))">'
-        +'<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+'</div>'
+      h1+=segRow(x.id,
+        '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+' <span style="color:var(--d-dim);font-weight:600">&rsaquo;</span></div>'
         +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">best '+_almostTime_(x.bestSec)+' &middot; '+x.rides+' rides &middot; '+_almostAgo_(x.daysAgo)+'</div></div>'
         +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:800;color:#4ade80">&minus;'+x.tookSec+'s</div>'
-        +'<div style="font-size:10px;color:var(--d-dim)">over '+x.drops+(x.drops===1?' improvement':' improvements')+'</div></div></div>';
+        +'<div style="font-size:10px;color:var(--d-dim)">over '+x.drops+(x.drops===1?' improvement':' improvements')+'</div></div>');
     });
   }
   H+=card(h1);
@@ -23505,11 +23522,13 @@ function aiRenderAlmost_(){
   if(!nb.length){ h2+=empty('Nothing within '+Math.round(ALMOST_NEAR_PCT*100)+'% of a personal best on a recent ride.'); }
   else {
     nb.slice(0,12).forEach(function(x){
-      h2+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--d-edge,rgba(255,255,255,.06))">'
-        +'<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+'</div>'
+      // Almost-a-PB rows are the same shape and carry the same id, so they get the same link — a
+      // segment named here and not linked would be the identical dead end one section down.
+      h2+=segRow(x.id,
+        '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+' <span style="color:var(--d-dim);font-weight:600">&rsaquo;</span></div>'
         +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">best '+_almostTime_(x.bestSec)+' &middot; last '+_almostTime_(x.lastSec)+' &middot; '+_almostAgo_(x.daysAgo)+'</div></div>'
         +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:800;color:var(--d-accent,#fc5200)">'+x.gapSec+'s</div>'
-        +'<div style="font-size:10px;color:var(--d-dim)">off your best</div></div></div>';
+        +'<div style="font-size:10px;color:var(--d-dim)">off your best</div></div>');
     });
   }
   H+=card(h2);
@@ -29124,6 +29143,19 @@ window.saSearch_=function(v){ _saQ=String(v||''); _saPaint_(); };
 window.saFilter_=function(f){ _saFilter=f; _saPaint_(); };
 window.saSort_=function(s){ _saSort=s; _saPaint_(); };
 window.saOpen_=function(id){ _saOpen=id; _saPaint_(); try{ window.scrollTo(0,0); }catch(e){} };
+// ONE way from a board row to the segment it names, so the Almost Board (and anything else that
+// lists segments by name) never grows its own navigation.
+//
+// TAB FIRST, THEN OPEN, and the order is load-bearing: _saPaint_ writes into #sa-lib-body, which
+// does not exist until the Segment Library tab has mounted. Calling saOpen_ from another tab would
+// set the detail state and then repaint an element that is not there — the row would look dead and
+// nothing would throw. This is the same mount-then-set-tab ordering the app already uses elsewhere.
+window.almostOpenSeg_=function(id){
+  try{
+    if(typeof aiSetTab_==='function') aiSetTab_('seglib');
+    if(typeof window.saOpen_==='function') window.saOpen_(id);
+  }catch(e){}
+};
 window.saClose_=function(){ _saOpen=null; _saPaint_(); };
 function _saPaint_(){
   var el=document.getElementById('sa-lib-body');

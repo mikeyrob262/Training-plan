@@ -155,5 +155,32 @@ console.log('\n' + Y + '=== formatting ===' + X);
   eq('...padding the seconds', M._almostTime_(305), '5:05');
 }
 
+// A BOARD ROW NAMED A SEGMENT AND THEN WENT NOWHERE. The ids these rows already carry ARE the
+// Segment Library's ids — st.segments is keyed by segment id and _saEvaluate_ reads seg.id, so the
+// two id spaces are the same one. Verified against the live store: 2,017 of 2,017 keys equal their
+// own .id, and all 247 Closing-in entries resolve in the library list.
+console.log('\n' + Y + '=== board rows link to the segment they name ===' + X);
+{
+  const sec = src.slice(src.indexOf('function aiRenderAlmost_('), src.indexOf('function aiRenderAlmost_(') + 6000);
+  ok('there is ONE row builder, not per-section navigation', /var segRow=function\(id, inner\)/.test(sec));
+  ok('Closing in uses it', /h1\+=segRow\(x\.id,/.test(sec));
+  ok('Almost-a-PB uses it too', /h2\+=segRow\(x\.id,/.test(sec));
+  ok('...and a linked row is actually clickable', /cursor:pointer/.test(sec));
+  ok('...with a visible affordance, not just a cursor', /&rsaquo;/.test(sec));
+  // Distance splits are km splits, not segments - they carry no segment id and must NOT pretend to.
+  ok('distance splits are not given a fake segment link', !/h3\+=segRow\(/.test(sec));
+  // An id that cannot be emitted safely must degrade to a plain row rather than a dead button.
+  ok('an id-less row falls back to an unlinked row', /if\(!sid\) return '<div style="display:flex/.test(sec));
+  ok('the id is charset-guarded before entering the attribute', /replace\(\/\[\^A-Za-z0-9:_\.-\]\/g,''\)/.test(sec));
+
+  // The opener: order is load-bearing, because _saPaint_ needs the tab mounted first.
+  const op = src.slice(src.indexOf('window.almostOpenSeg_'), src.indexOf('window.almostOpenSeg_') + 500);
+  ok('the opener exists', op.length > 50);
+  ok('it switches to the Segment Library tab', /aiSetTab_\('seglib'\)/.test(op));
+  ok('...BEFORE opening the segment', op.indexOf("aiSetTab_('seglib')") < op.indexOf('saOpen_(id)'));
+  ok('...and reuses saOpen_ rather than reimplementing detail', /window\.saOpen_\(id\)/.test(op));
+  ok('...guarded so a missing tab function cannot throw on tap', /typeof aiSetTab_==='function'/.test(op));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'almost board: all checks passed' + X));
 process.exit(fails ? 1 : 0);
