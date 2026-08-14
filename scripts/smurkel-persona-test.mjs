@@ -273,5 +273,52 @@ console.log('\n' + Y + '=== the pre-ride guidance can be replied to ===' + X);
   ok('post-ride framing is unchanged', /This is the debrief you already gave/.test(reply));
 }
 
+// THE PRE-RIDE BUNDLE WAS EMPTY, and not because anything was missing — because the builder threw.
+// Every day-level lookup lived inside the ride block, whose first line reads ride.np; with no ride
+// that throws, the surrounding catch swallows it, and the builder returned {dateKey, ride}. Measured
+// live: a 403-character bundle saying "none on file for this date" / "not loaded" / "not available"
+// on every line. The pre-ride coach was answering "what are my targets?" from facts with no targets.
+console.log('\n' + Y + '=== the day resolves from the DATE, with or without a ride ===' + X);
+{
+  const ctx = src.slice(src.indexOf('function _smurkelContext_('), src.indexOf('function _smurkelContext_(') + 6000);
+  ok('the day block runs BEFORE anything touches the ride',
+     ctx.indexOf('_sessionRxFor_') < ctx.indexOf('_smNum_(ride.np)'));
+  ok('the session comes from THE day lookup', /_sessionRxFor_\(dateKey, ride\|\|null\)/.test(ctx));
+  ok('...the block phase from the date', /blockPlanFor_\(dateKey\)/.test(ctx));
+  ok('...the next milestone from the date', /_blockMilestonesEffective_/.test(ctx) && /C\.nextMilestone=/.test(ctx));
+  ok('...fitness from the single source', /getFitness_\(\)/.test(ctx) && /C\.fitness=\{ loaded:true/.test(ctx));
+  ok('...and recent sessions so today is not day one', /C\.recent=/.test(ctx));
+  ok('a pre-ride day returns the resolved day rather than falling into the ride block',
+     /if\(!ride\) return C;/.test(ctx));
+  // A ride-side miss must not wipe the day-level session.
+  ok('the ride lookup only OVERRIDES on a hit', /if\(rx\) C\.rx=\{/.test(ctx) && !/C\.rx=rx\?\{/.test(ctx));
+
+  const facts = src.slice(src.indexOf('function _smurkelFacts_('), src.indexOf('function _smurkelFacts_(') + 12000);
+  ok('pre-ride is framed as a session ahead, not a blank result', /THE SESSION HAS NOT BEEN RIDDEN YET/.test(facts));
+  ok('...and the new day facts are rendered', /NEXT ON THE CALENDAR/.test(facts) && /WHAT HE HAS BEEN DOING/.test(facts));
+}
+
+// INTERNAL NAMES MUST NOT REACH HIM. "Prescription" is the variable's name (_sessionRxFor_), not a
+// word a coach says. The facts bundle is model INPUT, so a label there is a word the model will
+// happily echo back — this is not only about rendered HTML.
+console.log('\n' + Y + '=== no internal jargon in anything he reads ===' + X);
+{
+  const emitted = src.split('\n').filter((L) => L.length < 50000)
+    .flatMap((L) => (L.match(/L\.push\('[^']{0,200}'/g) || []));
+  const jargon = emitted.filter((q) => /prescri|\bRx\b|dateKey|st\.plan|_sessionRxFor_|intent:/i.test(q));
+  ok('the facts bundle names nothing after its variables', jargon.length === 0);
+  if (jargon.length) jargon.slice(0, 4).forEach((q) => console.log('       ' + q.slice(0, 110)));
+  ok("the day's session reads as a session", /L\.push\('TODAY: '\+C\.rx\.name/.test(src));
+  ok('...and an empty day says so plainly', /nothing scheduled on the plan for this date/.test(src));
+  ok('execution rules read as instructions', /how to ride it: /.test(src));
+  // Rendered HTML too, not just the model bundle. Comment lines are not rendered, and on a long
+  // line a bare `>` match can land on text that is not in a tag body — require the word to sit in
+  // an actual element's text, on a line that is not a comment.
+  const html = src.split('\n').filter((L) => L.length < 50000 && !L.trim().startsWith('//'))
+    .filter((L) => /<[^>]*>[^<']{0,80}[Pp]rescri(bed|ption)/.test(L));
+  ok('no rendered HTML uses the word either', html.length === 0);
+  if (html.length) html.slice(0, 3).forEach((L) => console.log('       ' + L.trim().slice(0, 110)));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'Dr. Smurkel persona: all checks passed' + X));
 process.exit(fails ? 1 : 0);

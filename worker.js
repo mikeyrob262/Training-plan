@@ -26186,7 +26186,7 @@ function _trjCardFitness_(){
   var body;
   if(p.same){
     body='<div style="font-size:13.5px;font-weight:700;color:var(--d-head);line-height:1.35">Three identical weeks in a row.</div>'
-      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">The last three weeks prescribed the same '
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">The last three weeks have asked for the same '
       +p.sessions+' sessions in the same shape. Repeating a week stops adding stimulus once you have adapted to it.</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">SUGGESTED CHANGE</div>'
       +'<div style="font-size:12px;color:var(--d-soft);margin-top:2px">Add one VO2 session this week.</div>'
@@ -32428,7 +32428,7 @@ function _tbWeekStrip_(now){
   if(!any) return '';
   return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">This week &middot; planned</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span>'
     +'<span onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+todayK+'&#39;)" style="font-size:11px;font-weight:700;color:#FC4C02;cursor:pointer;margin-left:auto">On the calendar &rarr;</span></div>'
     +rows+'</div>';
@@ -33050,6 +33050,64 @@ function _smurkelContext_(dateKey, ride){
   // ride is carried on the context so downstream fact builders can reach the RAW record (GPS, for
   // the away-from-home read) rather than only the normalised numbers in C.act.
   var C={ dateKey:dateKey, ride:ride };
+  // ---- THE DAY, RESOLVED FROM THE DATE. This runs BEFORE anything that touches the ride. ----
+  //
+  // Everything below used to live inside the ride block, and the ride block's first line reads
+  // ride.np. With no ride that throws, the surrounding catch swallows it, and the whole builder
+  // returns {dateKey, ride} — measured: a 403-character bundle that said "none on file for this
+  // date", "not loaded", "not available" on every line. Not a missing feature; a silent early exit.
+  //
+  // So the pre-ride coach was answering "what are my targets today?" from facts containing no
+  // targets. It could only invent them or refuse. Worth being exact about the cost: it never
+  // stopped working loudly, it just had nothing to work from.
+  //
+  // These four are all DATE lookups that never needed a ride in the first place:
+  //   _sessionRxFor_(dateKey, ride) — THE day lookup, and it already accepts a null ride
+  //   blockPlanFor_ / _blockMilestonesEffective_ — where he is in the block and what is next
+  //   getFitness_ — the single CTL/ATL/TSB source
+  //   recent sessions — what he has actually been doing, so advice can reference it
+  try{
+    if(typeof _sessionRxFor_==='function'){
+      var _drx=_sessionRxFor_(dateKey, ride||null);
+      if(_drx) C.rx={ name:_drx.name, intent:_drx.intent, lo:_drx.lo, hi:_drx.hi, zone:_drx.zone,
+                      rules:_drx.rules, hrLo:null, hrHi:null, hrCap:_drx.hrCap,
+                      durationMin:_drx.durationMin, struct:_drx.struct||'', via:_drx.via };
+    }
+  }catch(e){}
+  try{
+    var _bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+    if(_bp){ C.blockWeek=_bp.weekInPhase; C.phase=_bp.phaseLabel; }
+  }catch(e){}
+  try{
+    if(typeof _blockMilestonesEffective_==='function'){
+      var _ms=_blockMilestonesEffective_(new Date(dateKey+'T00:00:00'))
+        .filter(function(m){ return m && m.date && m.date>=dateKey; })
+        .sort(function(a,b){ return a.date<b.date?-1:1; })[0];
+      if(_ms) C.nextMilestone={ label:_ms.label, date:_ms.date,
+        daysAway:Math.round((new Date(_ms.date+'T00:00:00')-new Date(dateKey+'T00:00:00'))/86400000) };
+    }
+  }catch(e){}
+  try{
+    var _f=(typeof getFitness_==='function')?getFitness_():null;
+    if(_f && _f.ctl!=null) C.fitness={ loaded:true, ctl:Math.round(_f.ctl), atl:Math.round(_f.atl),
+                                       tsb:Math.round(_f.tsb), ctlIsBlockHigh:!!_f.ctlIsBlockHigh };
+  }catch(e){}
+  try{
+    // The last handful of sessions, so pre-ride advice can refer to the week he is actually in
+    // rather than treating today as the first day of his training life.
+    var _all=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]);
+    C.recent=(_all||[]).filter(function(r){
+        var d=String((r&&r.date)||'').slice(0,10); return r && !r.deleted && d && d<dateKey; })
+      .sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); })
+      .slice(0,5).map(function(r){
+        var d=String(r.date).slice(0,10);
+        return { date:d, name:(typeof actName_==='function')?actName_(r):(r.name||''),
+                 miles:_smNum_(r.distance),
+                 tss:(typeof constRideTSS_==='function')?constRideTSS_(r):_smNum_(r.tss),
+                 daysAgo:Math.round((new Date(dateKey+'T00:00:00')-new Date(d+'T00:00:00'))/86400000) };
+      });
+  }catch(e){}
+  if(!ride) return C;      // pre-ride: the day is resolved, and there is no activity to describe
   try{
     var prof=(typeof _actProfile_==='function')?_actProfile_(ride):{noun:'ride', cyclingPower:true};
     var ftp=(typeof ftpOn_==='function')?_smNum_(ftpOn_(dateKey)):_smNum_(st && st.ftp);
@@ -33074,8 +33132,11 @@ function _smurkelContext_(dateKey, ride){
     // The prescription, and whether the athlete claimed the day themselves.
     try{
       var rx=(typeof _ridePrescriptionFor_==='function')?_ridePrescriptionFor_(ride):null;
-      C.rx=rx?{ name:rx.name, intent:rx.intent, lo:rx.lo, hi:rx.hi, zone:rx.zone, rules:rx.rules,
-                hrLo:rx.hrLo, hrHi:rx.hrHi, hrCap:rx.hrCap, durationMin:rx.durationMin, via:rx.via }:null;
+      // Only OVERRIDE when the ride-side lookup actually found something. It used to assign null on
+      // a miss, which would now wipe the day-level session resolved above — a ride-specific miss is
+      // not evidence that the day has nothing on it.
+      if(rx) C.rx={ name:rx.name, intent:rx.intent, lo:rx.lo, hi:rx.hi, zone:rx.zone, rules:rx.rules,
+                hrLo:rx.hrLo, hrHi:rx.hrHi, hrCap:rx.hrCap, durationMin:rx.durationMin, via:rx.via };
       // The last comparable session, so the debrief can say what MOVED rather than only what happened.
       try{ C.prior=(typeof _smPriorComparable_==='function')?_smPriorComparable_(dateKey, ride):null; }catch(e){ C.prior=null; }
       var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
@@ -33275,7 +33336,17 @@ function _smGeoAway_(ride){
 function _smurkelFacts_(C){
   var L=[], a=C.act||{}, NL=String.fromCharCode(10);
   var n=function(v,suf,dp){ if(v==null) return 'not recorded'; var x=(dp!=null)?(Math.round(v*Math.pow(10,dp))/Math.pow(10,dp)):Math.round(v); return x+(suf||''); };
-  L.push('ACTIVITY: '+actName_(a)+' on '+(a.date||C.dateKey)+', a '+(C.noun||'ride')+'.');
+  // PRE-RIDE IS A DIFFERENT DOCUMENT, not the post-ride one with every field blanked. Listing
+  // "distance not recorded, time not recorded, TSS not recorded" for a session that has not
+  // happened yet reads as missing data rather than as a session still ahead of him, and it is the
+  // first thing the model sees.
+  if(!C.ride){
+    L.push('TODAY IS '+(C.dateKey||'')+'. THE SESSION HAS NOT BEEN RIDDEN YET — everything below is '
+      +'what is planned and where he stands going into it. Nothing here is a result. Never grade it, '
+      +'never speak about it in the past tense.');
+  } else {
+    L.push('ACTIVITY: '+actName_(a)+' on '+(a.date||C.dateKey)+', a '+(C.noun||'ride')+'.');
+  }
   var _away=(typeof _smGeoAway_==='function')?_smGeoAway_(C.ride||a.__ride||null):null;
   if(_away) L.push('  LOCATION: started about '+_away.mi+' miles from where this athlete usually rides. '
     +'They are away from home — unfamiliar roads, and travel disrupts sleep, food and recovery. '
@@ -33315,21 +33386,21 @@ function _smurkelFacts_(C){
   L.push('  cadence '+(_cad?(_cad.val+_cad.unit):'not recorded')+', average HR '+n(a.avgHR,' bpm')
     +(a.pctMaxHR!=null?(' ('+a.pctMaxHR+'% of max HR)'):'')+', elevation gain '+n(a.elevGain,' ft')+'.');
   if(C.rx){
-    L.push('PRESCRIPTION: '+C.rx.name+(C.rx.lo!=null&&C.rx.hi!=null?(', target band '+C.rx.lo+'-'+C.rx.hi+'W'):', no specific power band')
+    L.push('TODAY: '+C.rx.name+(C.rx.lo!=null&&C.rx.hi!=null?(', target band '+C.rx.lo+'-'+C.rx.hi+'W'):', no specific power band')
       +(C.rx.zone?(' ('+C.rx.zone+')'):'')+'.');
     // The HR band is the whole prescription on a run, so it is stated as its own line rather than
     // buried — and the ceiling is called a ceiling, because that is how it is meant to be judged.
-    if(C.rx.hrLo!=null && C.rx.hrHi!=null) L.push('  prescribed HR band: '+C.rx.hrLo+'-'+C.rx.hrHi+' bpm.');
+    if(C.rx.hrLo!=null && C.rx.hrHi!=null) L.push('  HR band to hold: '+C.rx.hrLo+'-'+C.rx.hrHi+' bpm.');
     if(C.rx.hrCap!=null){
       L.push('  HR CEILING: '+C.rx.hrCap+' bpm. This is a hard ceiling, not a target.'
         +(a.avgHR!=null?(' Average HR for this session was '+Math.round(a.avgHR)+' bpm — '
           +(a.avgHR>C.rx.hrCap?('OVER the ceiling by '+Math.round(a.avgHR-C.rx.hrCap)+' bpm.')
                               :('inside the ceiling by '+Math.round(C.rx.hrCap-a.avgHR)+' bpm.'))):''));
     }
-    if(C.rx.durationMin!=null) L.push('  prescribed duration: about '+C.rx.durationMin+' min.');
-    if(C.rx.rules) L.push('  execution rules: '+C.rx.rules);
+    if(C.rx.durationMin!=null) L.push('  planned duration: about '+C.rx.durationMin+' min.');
+    if(C.rx.rules) L.push('  how to ride it: '+C.rx.rules);
     if(C.swapped) L.push('  NOTE: the athlete swapped this session themselves — it is what they chose to do, not a deviation from the plan.');
-  } else { L.push('PRESCRIPTION: none on file for this date.'); }
+  } else { L.push('TODAY: nothing scheduled on the plan for this date.'); }
   if(C.prior){
     var p=C.prior;
     L.push('LAST COMPARABLE SESSION ('+p.date+', '+p.daysAgo+' days ago'+(p.name?(', "'+p.name+'"'):'')+'):');
@@ -33379,6 +33450,18 @@ function _smurkelFacts_(C){
     if(C.fitness.ctlIsBlockHigh) L.push('  this Fitness figure is the highest recorded in the series so far.');
   } else { L.push('FITNESS: not loaded — do not state CTL, ATL or Form.'); }
   if(C.blockWeek) L.push('BLOCK: week '+C.blockWeek+(C.phase?(' of the '+C.phase+' phase'):'')+'.');
+  // The two day-level facts the pre-ride path exists for: what he is building toward, and what he
+  // has actually been doing. Both are DATE lookups, so they are present whether or not he has ridden.
+  if(C.nextMilestone) L.push('NEXT ON THE CALENDAR: '+C.nextMilestone.label+' on '+C.nextMilestone.date
+    +' — '+C.nextMilestone.daysAway+' day'+(C.nextMilestone.daysAway===1?'':'s')+' away.');
+  if(C.recent && C.recent.length){
+    L.push('WHAT HE HAS BEEN DOING (most recent first):');
+    C.recent.forEach(function(r){
+      L.push('  '+r.daysAgo+'d ago, '+r.date+': '+r.name
+        +(r.miles!=null?(', '+(Math.round(r.miles*10)/10)+' mi'):'')
+        +(r.tss!=null?(', TSS '+Math.round(r.tss)):'')+'.');
+    });
+  }
   if(C.week){
     L.push('THIS WEEK (Mon-Sun), TSS by day:');
     C.week.days.forEach(function(d){
@@ -33395,7 +33478,7 @@ function _smurkelFacts_(C){
     });
     L.push('  clean week: '+(C.weekCheck.pass?'yes':'no')+'; sessions on '+C.weekCheck.distinctDays+' separate days.');
   }
-  if(C.tomorrow) L.push('TOMORROW is prescribed: '+(C.tomorrow.length?C.tomorrow.join(', '):'nothing')+'.');
+  if(C.tomorrow) L.push('TOMORROW on the plan: '+(C.tomorrow.length?C.tomorrow.join(', '):'nothing')+'.');
   return L.join(NL);
 }
 // No apostrophes in here: a backslash-escaped quote inside this template literal loses a backslash
@@ -34178,7 +34261,7 @@ function showSessionDetail_(dateKey, sid){
   });
   // Nothing prescribed: say so rather than showing an empty list above a dead button.
   if(!steps.length){
-    wrap.innerHTML='<div style="font-size:12.5px;color:var(--t3);line-height:1.5;padding:10px 2px">No movements are prescribed for this session yet. Open the day editor to add them.</div>';
+    wrap.innerHTML='<div style="font-size:12.5px;color:var(--t3);line-height:1.5;padding:10px 2px">Nothing is scheduled for this session yet. Open the day editor to add them.</div>';
   }
   // Body map for the whole session, below the movement list — the SAME shared mount every other
   // surface uses, so each row's Muscles chip focuses into this diagram via _anatDac_.
