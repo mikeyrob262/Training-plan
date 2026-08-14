@@ -882,6 +882,20 @@ try {
     fail('DNA insights repeat, fabricate, or claim something the data cannot back (see above).');
   }
 
+  // STEP 54 - session identity. "Did it happen" and "was it at the prescribed intensity" are two
+  //           facts; collapsing them relabelled all three VO2 sessions as threshold and cost real
+  //           weeks. Structure is read BEFORE the whole-ride ratio, which is only for a ride
+  //           nothing could read.
+  console.log(`${D}. checking session classification...${X}`);
+  try {
+    const so = execSync('node scripts/block-classify-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a measured session is being relabelled by the whole-ride ratio (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

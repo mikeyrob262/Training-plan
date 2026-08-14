@@ -31920,9 +31920,57 @@ function _blockIntervalIntent_(r, dateKey){
 //
 // The ratio bands remain the fallback for unprescribed days, unparseable structs, and streams too
 // coarse to average an effort. This narrows the inference; it does not pretend to replace it.
+// The prescribed intent this ride's STRUCTURE matches, regardless of whether the watts reached the
+// band. Same loop and same readers as _blockIntervalIntent_, with the power gate removed.
+//
+// WHY THIS EXISTS. "Did the session happen" and "was it ridden at the prescribed intensity" are two
+// different facts, and collapsing them cost real weeks. Measured across the whole block: all three
+// prescribed VO2 sessions (Jul 28, Aug 4, Aug 11) were ridden with the structure verbatim — the lap
+// reader finds exactly four work intervals on each — but at 173-195W against a 201W floor. Because
+// the only interval path required the watts, each fell through to the whole-ride ratio and was
+// relabelled THRESHOLD: a session that was not a threshold session filling the threshold slot, VO2
+// reading as never done, and the week reported as missed to an athlete who rode it.
+//
+// The band is not in doubt here and was checked before this was written: pctFtp [110,120] is the
+// deliberate raise off the old 95-105%, _planZoneFromPct_ prices it off st.ftp correctly, and the
+// screen and the step card agree at 201-220W. He is under the floor on every FTP the history holds
+// (183 -> 201, 190 -> 209, 230 -> 253), so the verdict does not depend on which one is right.
+//
+// This ONLY recognises the session the block prescribed for that date, exactly as the intensity path
+// does, so it can never promote a hard group ride into a VO2 session it was not.
+function _blockIntentByStructure_(r, dateKey){
+  try{
+    if(!r || !dateKey) return null;
+    if(typeof blockPlanFor_!=='function') return null;
+    var bp=blockPlanFor_(dateKey); if(!bp || !bp.sessions || !bp.sessions.length) return null;
+    for(var i=0;i<bp.sessions.length;i++){
+      var s=bp.sessions[i];
+      if(!s || !s.struct) continue;
+      if(s.intent!=='vo2' && s.intent!=='threshold' && s.intent!=='z2') continue;
+      var t=(s.rx && s.rx.targets)?s.rx.targets:null;
+      if(!t || t.powerLo==null || t.powerHi==null) continue;
+      // Device laps first, same order as the intensity path. A non-null return means the reader
+      // located the prescribed number of work intervals at the prescribed clock — that IS the
+      // session having happened, whatever the watts were.
+      var lp=(typeof _blockLapPowers_==='function')?_blockLapPowers_(r, s.struct, t):null;
+      if(lp && lp.vals && lp.vals.length>=2) return s.intent;
+      if(typeof _cvStreamIntervals_==='function'){
+        var out=_cvStreamIntervals_(r, s.intent, t, s.struct, true);
+        if(out && out.vals && out.vals.length>=2) return s.intent;
+      }
+    }
+    return null;
+  }catch(e){ return null; }
+}
 function _blockSessionOf_(r, ftp, dateKey){
   var iv=_blockIntervalIntent_(r, dateKey);
   if(iv) return iv;
+  // STRUCTURE BEFORE RATIO. The whole-ride fallback is for a ride nothing could read; it must not
+  // overrule a reading that succeeded. A measured-but-short session keeps its own identity here and
+  // is failed on the watts one layer up, in _blockWeekAssess_'s conditions check — which is the
+  // split the week assessment already draws between allThree and conditionsMet.
+  var byStruct=_blockIntentByStructure_(r, dateKey);
+  if(byStruct) return byStruct;
   var pw=_blockPwr_(r); if(pw==null || !(ftp>0)) return null;
   var ratio=pw/ftp;
   if(ratio>=1.06) return 'vo2';
