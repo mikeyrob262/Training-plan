@@ -31083,12 +31083,20 @@ function _cvSlide_(now){
   // So it now says what actually happened: the GATE moved, the retest did not, and the reason is
   // stated as the quality-session condition rather than as absence.
   if(!gapNow && gapNow!==0) return '';
-  return 'The four-week gate has moved out by '+slide+' week'+(slide===1?'':'s')
-    +' — that is the clean-week condition, not days off: a week only counts when all three quality '
-    +'sessions land on three separate days. The retest is fixed at '+_blockFmtDate_(retest.date)
-    +' and Chalet Reynard is still '+_blockFmtDate_(chalet.date)+', so neither of those moved. '
-    +'You have '+gapNow+' day'+(gapNow===1?'':'s')+' between them'
-    +((gapBase!=null&&gapBase!==gapNow)?(' instead of '+gapBase):'')+'.';
+  // IN HIS VOICE, NOT A STATUS READOUT. The previous version was accurate and read like a compliance
+  // notice — "that is the clean-week condition, not days off" is a definition being recited at
+  // someone. The register that already works on this panel is _CV_EXPECT ("Boredom is the signal you
+  // are doing it correctly"): plain, second person, tells him what it means for him.
+  //
+  // AND IT LEADS WITH WHAT HE DID, because he did the work. A banner that opens on what has not
+  // banked, to an athlete who rode through both weeks, is the same critic-not-coach failure the
+  // debrief had — just hand-written instead of generated.
+  return 'Two weeks have not banked yet, and not because you took them off — you rode through both. '
+    +'The gate wants all three quality sessions on three separate days before it counts a week, and '
+    +'it has not seen that yet. Nothing you care about moved: the retest is still '
+    +_blockFmtDate_(retest.date)+' and Chalet Reynard is still '+_blockFmtDate_(chalet.date)+'. '
+    +'That is '+gapNow+' day'+(gapNow===1?'':'s')+' between them'
+    +((gapBase!=null&&gapBase!==gapNow)?(' rather than '+gapBase):'')+' — plenty, if the quality days land.';
 }
 // Rolling HRV baseline from the accumulating daily rMSSD values (st.hrvDaily, written by
 // fetchLiveIntervalsWellness). Readiness is ALWAYS vs this baseline, never a single-day read —
@@ -31746,6 +31754,16 @@ function _coachVPanel_(now){
         +'</div>';
       try{ setTimeout(function(){ if(typeof _zwoWireDest_==='function') _zwoWireDest_(dk,'cv-zwo'); }, 0); }catch(e){}
     }
+    // PRE-RIDE HAD NOWHERE TO REPLY, and it was never a regression: the reply UI only ever existed
+    // inside the POST-ride path. _smurkelMount_ bails on the first line when no activity is logged
+    // for the day ("if(!todays.length){ host.innerHTML=''; return; }"), and the reply UI is mounted
+    // in the debrief callback that early-return never reaches. So the pre-ride branch renders static
+    // prescription copy and stops — the one moment the athlete most wants to ask "so the midpoint is
+    // 128, I can go as high as 146?" is the moment there is no box to ask it in.
+    //
+    // Its own host, because the two branches are mutually exclusive and #sm-debrief only exists on
+    // the logged side.
+    H+='<div id="sm-pre" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"></div>';
     H+='</div>';
   } else if(cv.primary){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
@@ -33653,6 +33671,26 @@ function _smurkelHTML_(text){
 // day with a ride AND a strength session, the ride is what the week turns on.
 function _smurkelMount_(dk){
   try{
+    // PRE-RIDE FIRST, and it is a separate host on purpose: the panel renders either the logged
+    // branch (#sm-debrief) or the prescription branch (#sm-pre), never both. This used to reach the
+    // early return below and stop, which is why the pre-ride guidance had no reply box.
+    var pre=document.getElementById('sm-pre');
+    if(pre && typeof _smurkelReplyUI_==='function'){
+      // The guidance already on screen IS the opening turn — the coach has said something, and the
+      // reply needs that context or the first answer arrives with no idea what it is replying to.
+      // Read from the DOM rather than rebuilt, so what he is answering is exactly what he read.
+      var said='';
+      try{
+        var box=pre.parentNode;
+        // \\s NOT \s — this file is served inside a template literal, which eats one backslash
+        // level, so /\s+/ would reach the browser as /s+/ and collapse every letter s instead of
+        // whitespace. Silent, valid, and wrong.
+        said=box?String(box.innerText||box.textContent||'').replace(/\\s+/g,' ').trim().slice(0,1200):'';
+      }catch(e){}
+      pre.innerHTML=_smurkelReplyUI_();
+      _SM_CONVO={ dk:dk, ride:null, pre:true, debrief:said, turns:[] };
+      if(typeof _smurkelBindReply_==='function') _smurkelBindReply_();
+    }
     var host=document.getElementById('sm-debrief'); if(!host) return;
     var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
     var todays=(all||[]).filter(function(r){
@@ -33768,11 +33806,31 @@ function fetchSmurkelReply_(convo, cb){
   var NL=String.fromCharCode(10);
   var hist=convo.turns.filter(function(t){ return t.text && t.text!=='…'; })
     .map(function(t){ return (t.who==='you'?'ATHLETE: ':'YOU: ')+t.text; }).join(NL);
+  // PRE-RIDE IS A DIFFERENT CONVERSATION and gets a different frame. Post-ride is "here is what you
+  // did"; pre-ride is "here is what you are about to do, and I am standing next to you while you
+  // decide". Handing the post-ride wording to a pre-ride question produced answers in the past
+  // tense about a session that has not happened.
+  var isPre=!!convo.pre;
   var prompt=_SM_PERSONA+NL+NL+_SM_FORMAT_CHAT+NL+NL
-    +'These are the measured facts for the session under discussion.'+NL+facts+NL+NL
-    +'This is the debrief you already gave:'+NL+convo.debrief+NL+NL
+    +(isPre
+      ? ('These are the measured facts for TODAY, BEFORE the session. It has not been ridden yet, so '
+         +'nothing here is a result — targets, prescription and current fitness only. Never speak '
+         +'about it in the past tense and never grade it.'+NL+facts+NL+NL
+         +'This is the guidance already on screen in front of him:'+NL+convo.debrief+NL+NL)
+      : ('These are the measured facts for the session under discussion.'+NL+facts+NL+NL
+         +'This is the debrief you already gave:'+NL+convo.debrief+NL+NL))
     +'The athlete is now talking back to you. Conversation so far:'+NL+hist+NL+NL
     +'Answer their latest message. Rules:'+NL
+    +(isPre
+      ? ('- He is ASKING BEFORE HE RIDES, so answer the question and then make it usable. If he asks '
+         +'about a number, confirm or correct it in the first line, then give the numbers that '
+         +'matter for today as a compact table — floor, midpoint, ceiling, any HR cap, duration — '
+         +'using ONLY figures from the facts above.'+NL
+         +'- Then one plain-language rule for today: the single thing to hold to, and what to do when '
+         +'two limits disagree. One sentence, no hedging.'+NL
+         +'- Close forward: what today feeds into and how far out it is, where the facts give you a '
+         +'date. Ask him something real if there is something you genuinely need to know.'+NL)
+      : '')
     +'- Engage with their REASONING, do not restate the debrief. If they have given you a good reason '
       +'for something you flagged, say so plainly and UPDATE your read — changing your mind on new '
       +'information is the job, not a climbdown.'+NL

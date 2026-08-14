@@ -241,5 +241,37 @@ console.log('\n' + Y + '=== an unmeasurable interval session says so, instead of
   ok('...with the unmeasurable case spelled out', /could not be measured, you have no evidence about the work/.test(deb));
 }
 
+// PRE-RIDE HAD NOWHERE TO REPLY, and it was never a regression: the reply UI only ever existed
+// inside the POST-ride path. _smurkelMount_ bails on its first line when no activity is logged
+// ("if(!todays.length){ host.innerHTML=''; return; }") and the reply UI is mounted in the debrief
+// callback that early return never reaches. The one moment the athlete most wants to ask "so the
+// midpoint is 128, can I go to 146?" was the one moment there was no box to ask it in.
+console.log('\n' + Y + '=== the pre-ride guidance can be replied to ===' + X);
+{
+  const panel = src.slice(src.indexOf('function _coachVPanel_('), src.indexOf('function _coachVPanel_(') + 16000);
+  ok('the pre-ride branch has its own reply host', /id="sm-pre"/.test(panel));
+  ok('...separate from the logged-session host', /id="sm-debrief"/.test(panel));
+
+  const mount = src.slice(src.indexOf('function _smurkelMount_('), src.indexOf('function _smurkelMount_(') + 2600);
+  ok('the pre-ride mount runs BEFORE the no-activity early return',
+     mount.indexOf("getElementById('sm-pre')") < mount.indexOf('if(!todays.length)'));
+  ok('...and mounts the same reply UI, not a second one', /pre\.innerHTML=_smurkelReplyUI_\(\)/.test(mount));
+  ok('...with a pre-ride conversation', /_SM_CONVO=\{ dk:dk, ride:null, pre:true/.test(mount));
+  ok('...seeded with what is actually on screen', /innerText\|\|box\.textContent/.test(mount));
+  ok('...and bound like the post-ride one', /_smurkelBindReply_\(\)/.test(mount));
+
+  const reply = src.slice(src.indexOf('function fetchSmurkelReply_('), src.indexOf('function fetchSmurkelReply_(') + 4000);
+  ok('the reply knows pre-ride from post-ride', /var isPre=!!convo\.pre/.test(reply));
+  ok('...and refuses the past tense on an unridden session', /Never speak\s*'\s*\+\s*'about it in the past tense|past tense/.test(reply));
+  ok('...and refuses to grade it', /never grade it/.test(reply));
+  // The reference exchange's shape: confirm the number, then a table, then one rule, then forward.
+  ok('a pre-ride answer confirms or corrects the number first', /confirm or correct it in the first line/.test(reply));
+  ok('...then gives the day numbers as a table', /floor, midpoint, ceiling/.test(reply));
+  ok('...then one plain rule for when limits disagree', /what to do when\s*'\s*\+\s*'two limits disagree|two limits disagree/.test(reply));
+  ok('...and closes forward with a real date', /what today feeds into and how far out/.test(reply));
+  ok('...still using only real figures', /using ONLY figures from the facts above/.test(reply));
+  ok('post-ride framing is unchanged', /This is the debrief you already gave/.test(reply));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'Dr. Smurkel persona: all checks passed' + X));
 process.exit(fails ? 1 : 0);
