@@ -31069,7 +31069,26 @@ function _cvSlide_(now){
   var base=null; for(var i=0;i<_BLOCK_MILESTONES.length;i++){ if(_BLOCK_MILESTONES[i].slug==='ftp-retest') base=_BLOCK_MILESTONES[i]; }
   var gapNow=_blockDaysBetween_(_blockDay_(retest.date), _blockDay_(chalet.date));
   var gapBase=base?_blockDaysBetween_(_blockDay_(base.date), _blockDay_(chalet.date)):null;
-  return 'A missed week slid the retest to '+_blockFmtDate_(retest.date)+', but Chalet Reynard is still '+_blockFmtDate_(chalet.date)+' — the mountain does not move. You now have '+gapNow+' day'+(gapNow===1?'':'s')+' between them'+((gapBase!=null&&gapBase!==gapNow)?(' instead of '+gapBase):'')+'. That compresses the taper; build the recovery around it.';
+  // THIS SENTENCE OUTLIVED THE BEHAVIOUR IT DESCRIBED. It asserted that a missed week "slid the
+  // retest", which stopped being true the moment ftp-retest became slidable:false — after which it
+  // printed the retest's FIXED date immediately after claiming it had moved.
+  //
+  // AND "A MISSED WEEK" WAS NEVER THE RIGHT WORDS. The gate slides on slideWeeks, which is
+  // completed-minus-streak: a week where the athlete trained four or five times but the block could
+  // not find all three quality sessions counts the same as a week he did not train at all. Traced on
+  // the live plan: weeks of Jul 27 and Aug 3 carry 5 and 4 rides at 424 and 342 TSS and BOTH read as
+  // missed, because the Zwift VO2 session classified as threshold. Telling an athlete who trained
+  // nine times in a fortnight that he missed two weeks is not a wording problem, it is a false claim.
+  //
+  // So it now says what actually happened: the GATE moved, the retest did not, and the reason is
+  // stated as the quality-session condition rather than as absence.
+  if(!gapNow && gapNow!==0) return '';
+  return 'The four-week gate has moved out by '+slide+' week'+(slide===1?'':'s')
+    +' — that is the clean-week condition, not days off: a week only counts when all three quality '
+    +'sessions land on three separate days. The retest is fixed at '+_blockFmtDate_(retest.date)
+    +' and Chalet Reynard is still '+_blockFmtDate_(chalet.date)+', so neither of those moved. '
+    +'You have '+gapNow+' day'+(gapNow===1?'':'s')+' between them'
+    +((gapBase!=null&&gapBase!==gapNow)?(' instead of '+gapBase):'')+'.';
 }
 // Rolling HRV baseline from the accumulating daily rMSSD values (st.hrvDaily, written by
 // fetchLiveIntervalsWellness). Readiness is ALWAYS vs this baseline, never a single-day read —
@@ -31655,28 +31674,28 @@ function _coachVPanel_(now){
   var H='<div style="background:linear-gradient(135deg,rgba(168,85,247,.12),rgba(34,197,94,.06));border:1px solid #2a2340;border-radius:16px;padding:18px;margin-top:14px">';
   // identity + milestone voice
   H+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">'
-    +'<span style="width:30px;height:30px;border-radius:9px;background:'+P+'22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:'+P+'">V</span>'
-    +'<div><div style="font-size:13px;font-weight:800;color:var(--d-head)">Dr. Smurkel</div>'
-    +'<div style="font-size:10.5px;color:var(--d-dim)">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
+    +'<span style="width:30px;height:30px;border-radius:9px;background:'+P+'22;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;color:'+P+'">V</span>'
+    +'<div><div style="font-size:14.5px;font-weight:800;color:var(--d-head)">Dr. Smurkel</div>'
+    +'<div style="font-size:12px;color:var(--d-dim)">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
   // Yesterday recap sits above the milestone voice — it is the most recent fact Dr. Smurkel has, and it
   // only ever renders when today has nothing logged against it (coachV_ gates that).
   if(cv.yesterday && cv.yesterday.line){
-    H+='<div style="font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid var(--d-chip);overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
+    H+='<div style="font-size:14px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid var(--d-chip);overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
   }
   if(cv.milestone){
-    H+='<div style="font-size:12.5px;color:var(--d-t2);line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
+    H+='<div style="font-size:14px;color:var(--d-t2);line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
   }
-  if(cv.slide){ H+='<div style="font-size:12px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
-  if(cv.hrv){ H+='<div style="font-size:12px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
+  if(cv.slide){ H+='<div style="font-size:13.5px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
+  if(cv.hrv){ H+='<div style="font-size:13.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
   // today's session coaching — POST-ride once a ride is logged (pre-ride tense is stale after import)
   if(cv.done){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:var(--c-green)">&#10003; logged</span></div>'
-      +'<div style="font-size:13px;color:var(--d-t2);line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
+      +'<div style="font-size:12.5px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:var(--c-green)">&#10003; logged</span></div>'
+      +'<div style="font-size:14.5px;color:var(--d-t2);line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
       // Debrief row — its own block under the logged-session line. Only renders when there was
       // something computable to say; a missing prescription or missing numbers yield '' and the
       // row is simply absent rather than showing an empty verdict.
-      +(cv.debrief?('<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(168,85,247,.10);border:1px solid #2a2340;font-size:12.5px;color:var(--d-soft);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+P+'">Debrief &mdash; </b>'+cv.debrief+'</div>'):'')
+      +(cv.debrief?('<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(168,85,247,.10);border:1px solid #2a2340;font-size:14px;color:var(--d-soft);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+P+'">Debrief &mdash; </b>'+cv.debrief+'</div>'):'')
       // THE FULL DEBRIEF. Filled in after paint by _smurkelMount_ so the panel never waits on the
       // model. The short rule-based line above stays: it is computed locally and is there even when
       // the coach cannot be reached.
@@ -31684,26 +31703,26 @@ function _coachVPanel_(now){
       +'</div>';
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:var(--c-green)">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:var(--d-dim)">'+cv.primary.struct+'</span>'):'')+'</div>';
+      +'<div style="font-size:12.5px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:var(--c-green)">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:var(--d-dim)">'+cv.primary.struct+'</span>'):'')+'</div>';
     // Fuel check ABOVE the pre-session instructions: if the athlete is about to start a VO2 or
     // Threshold session under-fuelled, that changes the session, so it has to be read before the
     // watt targets are. Absent entirely on an adequately-fuelled day.
     if(cv.fuel && cv.fuel.length){
-      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);font-size:12.5px;color:var(--d-t2);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+A+'">Fuel &mdash; </b>'+cv.fuel.join(' ')+'</div>';
+      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);font-size:14px;color:var(--d-t2);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+A+'">Fuel &mdash; </b>'+cv.fuel.join(' ')+'</div>';
     }
     // Leg-protection swap, ABOVE the session instructions for the same reason as the fuel check:
     // it changes WHICH session today is, so it has to be read before the prescription for the one
     // being replaced. Carries the action, so the recommendation is one tap from being taken.
     if(cv.protect){
-      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.35);font-size:12.5px;color:var(--d-t2);line-height:1.6;overflow-wrap:anywhere">'
+      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.35);font-size:14px;color:var(--d-t2);line-height:1.6;overflow-wrap:anywhere">'
         +'<b style="color:#f97316">Protect the legs &mdash; </b>'+cv.protect
         +'<div onclick="if(window.swapToStrengthC_)swapToStrengthC_(&#39;'+dk+'&#39;,&#39;'+((cv.primary&&cv.primary.id)||'')+'&#39;)" '
-        +'style="margin-top:8px;display:inline-block;padding:6px 12px;border-radius:8px;border:1px solid rgba(249,115,22,.55);color:#f97316;font-weight:700;font-size:12px;cursor:pointer">Swap to Strength C</div>'
+        +'style="margin-top:8px;display:inline-block;padding:6px 12px;border-radius:8px;border:1px solid rgba(249,115,22,.55);color:#f97316;font-weight:700;font-size:13.5px;cursor:pointer">Swap to Strength C</div>'
         +'</div>';
     }
-    cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:var(--d-t2);line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
-    if(cv.form) H+='<div style="font-size:12.5px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
-    if(cv.expect) H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:var(--d-soft)">What to expect &mdash;</b> '+cv.expect+'</div>';
+    cv.pre.forEach(function(line){ H+='<div style="font-size:15px;color:var(--d-t2);line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
+    if(cv.form) H+='<div style="font-size:14px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
+    if(cv.expect) H+='<div style="font-size:14px;color:var(--d-t3);line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:var(--d-soft)">What to expect &mdash;</b> '+cv.expect+'</div>';
     // Zwift export, on the card that gave the instruction. Only when the prescription resolves to a
     // real ERG target: _zwoFor_ returns null for runs, strength, mobility and group rides (no
     // ceiling to hold), so the link simply is not offered rather than producing a file to ignore.
@@ -31716,12 +31735,12 @@ function _coachVPanel_(now){
       H+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
         +'<div id="cv-zwo-row" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
         +'<div id="cv-zwo" onclick="if(window._zwoCoachV_)_zwoCoachV_(&#39;'+dk+'&#39;)" '
-        +'style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+P+';cursor:pointer">'
+        +'style="display:inline-flex;align-items:center;gap:7px;font-size:14.5px;font-weight:800;color:'+P+';cursor:pointer">'
         +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+P+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>'
         +'<span id="cv-zwo-label">Download for Zwift (.zwo)</span></div>'
-        +'<div id="cv-zwo-alt" style="display:none;font-size:11.5px;color:var(--d-dim);cursor:pointer;text-decoration:underline">Download instead</div>'
+        +'<div id="cv-zwo-alt" style="display:none;font-size:13px;color:var(--d-dim);cursor:pointer;text-decoration:underline">Download instead</div>'
         +'</div>'
-        +'<div id="cv-zwo-note" style="font-size:10.5px;color:var(--d-dim);margin-top:5px;line-height:1.5">'
+        +'<div id="cv-zwo-note" style="font-size:12px;color:var(--d-dim);margin-top:5px;line-height:1.5">'
           +_cvz.blocks+' block'+(_cvz.blocks===1?'':'s')+' &middot; '+_cvz.lo+'&ndash;'+_cvz.hi+'W at FTP '+_cvz.ftp
           +'. <span id="cv-zwo-dest" style="cursor:pointer;text-decoration:underline">Set up one-click send to Zwift</span></div>'
         +'</div>';
@@ -31730,11 +31749,11 @@ function _coachVPanel_(now){
     H+='</div>';
   } else if(cv.primary){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:12.5px;color:var(--d-t2);line-height:1.55">'+(cv.pre[0]||'Rest today.')+'</div></div>';
+      +'<div style="font-size:14px;color:var(--d-t2);line-height:1.55">'+(cv.pre[0]||'Rest today.')+'</div></div>';
   }
   // ftp discontinuity
   if(cv.ftp){
-    H+='<div style="font-size:11.5px;color:var(--d-soft);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
+    H+='<div style="font-size:13px;color:var(--d-soft);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
   }
   H+='</div>';
   // Fill the debrief in after this HTML is in the DOM. Both surfaces mount this panel from
@@ -32939,6 +32958,21 @@ function _smurkelContext_(dateKey, ride){
       if(rx && typeof _blockWorkMeasure_==='function' && rx.intent){
         var wm=_blockWorkMeasure_(ride, dateKey, rx.intent);
         C.workIntervals=wm?{ vals:wm.vals, lo:wm.lo, hi:wm.hi, source:wm.source }:null;
+        // WAS THIS AN INTERVAL SESSION AT ALL? Carried separately from the measurement, because the
+        // interesting case is exactly the one where the two disagree: a structured prescription whose
+        // intervals could NOT be read. Without this the facts fall silent and NP becomes the only
+        // power number in the room — which is how a recovery block ends up counted as a shortfall.
+        try{
+          if(bp && bp.sessions){
+            for(var _si=0; _si<bp.sessions.length; _si++){
+              var _s=bp.sessions[_si];
+              if(_s && _s.intent===rx.intent && _s.struct
+                 && typeof _structIntervals_==='function' && _structIntervals_(_s.struct)){
+                C.structured=_s.struct; break;
+              }
+            }
+          }
+        }catch(_e){}
       }
     }catch(e){}
     // Fitness — the single source, plus whether this is the block's high-water mark.
@@ -33186,6 +33220,24 @@ function _smurkelFacts_(C){
     L.push('WORK INTERVALS (measured from '+(C.workIntervals.source==='laps'?'device laps':'the power stream')+'): '
       +C.workIntervals.vals.map(function(v,i){ return '#'+(i+1)+' '+v+'W'; }).join(', ')
       +' against a '+C.workIntervals.lo+'-'+C.workIntervals.hi+'W band. The whole-ride average INCLUDES warm-up, recoveries and cool-down and is NOT the prescribed effort.');
+  } else if(C.structured){
+    // THE SILENCE WAS THE BUG. When a STRUCTURED session's intervals cannot be measured, this block
+    // simply said nothing — and the only power figures left in the facts were NP and the whole-ride
+    // average. The model then graded an interval session against its band using a number that has
+    // the recoveries baked into it, and led with a shortfall that was arithmetic, not performance.
+    //
+    // Measured case: a debrief called NP 151W "5W short of the floor" on a session carrying a
+    // ten-minute recovery block at 100W. The recovery is IN that 151. The athlete had to explain his
+    // own session back to the coach, twice, before it was conceded.
+    //
+    // An unknown is stated here rather than dropped, which is the same contract every other line in
+    // this builder follows ("not recorded" rather than silence). Saying WHY the number is not
+    // comparable is what stops it being reached for.
+    L.push('WORK INTERVALS: could not be measured for this session — no device laps and no usable '
+      +'power stream. This was a STRUCTURED session ('+String(C.structured)+'), so its recoveries are '
+      +'INSIDE the whole-ride average and inside NP. Neither number is the prescribed effort and '
+      +'NEITHER IS EVIDENCE OF A SHORTFALL. Do not say this session came up short on power: you '
+      +'cannot see the work intervals, and the honest statement is that they were not recorded.');
   }
   if(C.zones){
     L.push('TIME IN ZONE (from '+C.zones.src+'):');
@@ -33339,6 +33391,14 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
     +'- Do not describe terrain, weather or how it felt. You were not there and none of that is above.'+NL
     +'- If a prescription is on file, judge against THAT intent. If WORK INTERVALS are given, they are the '
       +'prescribed effort — never call the session short because the whole-ride average sits under the band.'+NL
+    +'- LOOK FOR THE OBVIOUS EXPLANATION BEFORE YOU FLAG A GAP. If a number looks short, check the '
+      +'facts above for the thing that would explain it — a recovery block inside the average, a '
+      +'warm-up, an interval set you cannot see — and if one is there, say THAT, not the gap. A gap '
+      +'you have not tried to explain is not a finding, it is arithmetic. And if WORK INTERVALS say '
+      +'they could not be measured, you have no evidence about the work at all: NP and the whole-ride '
+      +'average both contain the recoveries, so neither can show a shortfall. Say the intervals were '
+      +'not recorded. Do not lead with a number being short when the reason it is short is sitting '
+      +'in the same list of facts.'+NL
     +'- Be specific. "Solid effort" is worthless; "47 minutes at 135W is real aerobic base work" is the job.'+NL
     +'- If a HR CEILING is given, that is the line the session is judged on. Say whether it was held or '
       +'blown, by how many bpm, and what that means. Never fudge the figure - and a 2 bpm overrun is '
@@ -33539,8 +33599,8 @@ function _smurkelHTML_(text){
   var cells=function(s){
     return String(s).trim().replace(/^\\|/,'').replace(/\\|$/,'').split('|').map(function(c){ return c.trim(); });
   };
-  var TD='padding:4px 8px;font-size:12px;color:var(--d-t2);border-top:1px solid var(--d-line);text-align:left';
-  var TH='padding:4px 8px;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--d-t3);text-align:left';
+  var TD='padding:4px 8px;font-size:13.5px;color:var(--d-t2);border-top:1px solid var(--d-line);text-align:left';
+  var TH='padding:4px 8px;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--d-t3);text-align:left';
   for(var i=0;i<lines.length;i++){
     var raw=String(lines[i]||'');
     if(isRow(raw)){
@@ -33578,12 +33638,12 @@ function _smurkelHTML_(text){
     var body=fmt(ln);
     var isHeading=!isBullet && (marked || (ln.length<52 && ln.indexOf('.')<0 && (ln===ln.toUpperCase()) && /[A-Z]/.test(ln)));
     if(isHeading){
-      out.push('<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+P+';margin:13px 0 5px">'+body+'</div>');
+      out.push('<div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+P+';margin:13px 0 5px">'+body+'</div>');
     } else if(isBullet){
-      out.push('<div style="display:flex;gap:7px;font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:3px 0">'
+      out.push('<div style="display:flex;gap:7px;font-size:14px;color:var(--d-soft);line-height:1.55;margin:3px 0">'
         +'<span style="color:'+P+';flex-shrink:0">&middot;</span><span style="min-width:0;overflow-wrap:anywhere">'+body+'</span></div>');
     } else {
-      out.push('<div style="font-size:12.5px;color:var(--d-t2);line-height:1.6;margin:6px 0;overflow-wrap:anywhere">'+body+'</div>');
+      out.push('<div style="font-size:14px;color:var(--d-t2);line-height:1.6;margin:6px 0;overflow-wrap:anywhere">'+body+'</div>');
     }
   }
   return out.join('');

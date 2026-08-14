@@ -248,5 +248,26 @@ console.log('\n' + Y + '=== every climb-rehearsal rung lands on a real Saturday 
   ok('...on a long-form Saturday', intentsOn(satOf(top)).some((i2) => i2 === 'group' || i2 === 'long'));
 }
 
+// THE SLIDE SENTENCE OUTLIVED THE BEHAVIOUR IT DESCRIBED. It asserted a missed week "slid the
+// retest", which stopped being true the moment ftp-retest became slidable:false — after which it
+// printed the retest's FIXED date immediately after claiming it had moved.
+//
+// And "a missed week" was never the right words for what slideWeeks measures. Traced live: the weeks
+// of Jul 27 and Aug 3 carry 5 and 4 rides at 424 and 342 TSS and BOTH read as missed, because the
+// Zwift VO2 session classified as threshold. Telling an athlete who trained nine times in a
+// fortnight that he missed two weeks is a false claim, not a wording preference.
+console.log('\n' + Y + '=== the slide copy describes what actually slides ===' + X);
+{
+  const cv = src.slice(src.indexOf('function _cvSlide_('), src.indexOf('function _cvSlide_(') + 2600);
+  ok('it no longer claims a missed week slid the retest', !/A missed week slid the retest/.test(cv));
+  ok('...it says the GATE moved', /The four-week gate has moved out by/.test(cv));
+  ok('...and states the retest is fixed', /The retest is fixed at/.test(cv));
+  ok('the mountain still does not move', /Chalet Reynard is still/.test(cv));
+  // The condition is a quality-session rule, and calling it "days off" is the false part.
+  ok('it names the clean-week CONDITION rather than absence', /that is the clean-week condition, not days off/.test(cv));
+  ok('...and spells the condition out', /all three quality\s*'\s*\+\s*'sessions land on three separate days|three separate days/.test(cv));
+  ok('it still reports the real gap between the two dates', /day'\+\(gapNow===1\?'':'s'\)\+' between them/.test(cv));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'block structure: all checks passed' + X));
 process.exit(fails ? 1 : 0);

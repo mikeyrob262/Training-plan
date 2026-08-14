@@ -210,5 +210,36 @@ console.log('\n' + Y + '=== the panel can actually DRAW what the prompt asks for
 }
 
 try { fs.rmSync(OUT, { recursive: true, force: true }); } catch (e) {}
+// THE FIFTH TONE FAILURE WAS NOT A TONE FAILURE. A debrief called NP 151W "5W short of the floor"
+// on a session carrying a ten-minute recovery block at 100W — the recovery is INSIDE that 151. The
+// athlete had to explain his own session back to the coach, twice, before it was conceded.
+//
+// No wording change fixes that, because the copy was reasoning correctly from the only power
+// numbers it was given. _smurkelFacts_ emits WORK INTERVALS when they can be measured and, before
+// this, said NOTHING when they could not — leaving NP and the whole-ride average as the only
+// figures in the room, both of which contain the recoveries.
+//
+// An unknown is now STATED, which is the contract every other line in that builder follows.
+console.log('\n' + Y + '=== an unmeasurable interval session says so, instead of leaving NP to be graded ===' + X);
+{
+  const facts = src.slice(src.indexOf('function _smurkelFacts_('), src.indexOf('function _smurkelFacts_(') + 9000);
+  ok('measured intervals are still stated', /WORK INTERVALS \(measured from/.test(facts));
+  ok('...and an UNMEASURABLE structured session is stated too', /WORK INTERVALS: could not be measured/.test(facts));
+  ok('...naming why NP cannot answer it', /recoveries are\s*'\s*\+\s*'INSIDE the whole-ride average|INSIDE the whole-ride average/.test(facts));
+  ok('...and refusing the shortfall claim outright', /NEITHER IS EVIDENCE OF A SHORTFALL/.test(facts));
+  ok('the branch only fires on a STRUCTURED prescription', /\} else if\(C\.structured\)\{/.test(facts));
+
+  const ctx = src.slice(src.indexOf('function _smurkelContext_('), src.indexOf('function _smurkelContext_(') + 12000);
+  ok('the context carries whether the session was structured at all', /C\.structured=_s\.struct/.test(ctx));
+  ok('...decided by the real interval parser, not a guess', /_structIntervals_\(_s\.struct\)/.test(ctx));
+
+  const deb = src.slice(src.indexOf('function fetchSmurkelDebrief_('), src.indexOf('var key=_ciHash_(prompt);'));
+  ok('the prompt requires an explanation to be sought BEFORE a gap is flagged',
+     /LOOK FOR THE OBVIOUS EXPLANATION BEFORE YOU FLAG A GAP/.test(deb));
+  ok('...naming a recovery block as exactly that kind of explanation', /a recovery block inside the average/.test(deb));
+  ok('...and calling an unexplained gap what it is', /not a finding, it is arithmetic/.test(deb));
+  ok('...with the unmeasurable case spelled out', /could not be measured, you have no evidence about the work/.test(deb));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'Dr. Smurkel persona: all checks passed' + X));
 process.exit(fails ? 1 : 0);
