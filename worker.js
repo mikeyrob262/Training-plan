@@ -31091,12 +31091,34 @@ function _cvSlide_(now){
   // AND IT LEADS WITH WHAT HE DID, because he did the work. A banner that opens on what has not
   // banked, to an athlete who rode through both weeks, is the same critic-not-coach failure the
   // debrief had — just hand-written instead of generated.
+  // NAME THE CONDITION THAT ACTUALLY FAILED. Until the classifier fix these weeks failed on
+  // ATTENDANCE — the VO2 session was being relabelled threshold, so the block believed it never
+  // happened. Now the sessions are recognised and what fails is the WATTS, which is a completely
+  // different sentence to say to someone. Asking the week assessment rather than assuming keeps
+  // this honest if the reason changes again.
+  var why='';
+  try{
+    if(typeof _blockWeekAssess_==='function' && typeof _blockWeekStart_==='function'){
+      var _ws=_blockWeekStart_(now);
+      var _last=new Date(_ws.getTime()-4*86400000);        // mid-week of the last COMPLETED week
+      var _a=_blockWeekAssess_((typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]),
+                               parseInt((st&&st.ftp)||186)||186, _last);
+      if(_a && _a.allThree && _a.distinctDays && !_a.conditionsMet){
+        var _miss=(_a.checks||[]).filter(function(c){ return c.done && !c.ok; })
+          .map(function(c){ return c.label+' '+(c.miss||'off target'); });
+        why='The sessions landed — all three, on three separate days. What did not is the intensity: '
+          +(_miss.length?_miss.join(', '):'one of them came in under its band')+'. ';
+      }
+    }
+  }catch(e){}
+  if(!why) why='The gate wants all three quality sessions on three separate days before it counts a '
+    +'week, and it has not seen that yet. ';
   return 'Two weeks have not banked yet, and not because you took them off — you rode through both. '
-    +'The gate wants all three quality sessions on three separate days before it counts a week, and '
-    +'it has not seen that yet. Nothing you care about moved: the retest is still '
+    +why
+    +'Nothing you care about moved: the retest is still '
     +_blockFmtDate_(retest.date)+' and Chalet Reynard is still '+_blockFmtDate_(chalet.date)+'. '
     +'That is '+gapNow+' day'+(gapNow===1?'':'s')+' between them'
-    +((gapBase!=null&&gapBase!==gapNow)?(' rather than '+gapBase):'')+' — plenty, if the quality days land.';
+    +((gapBase!=null&&gapBase!==gapNow)?(' rather than '+gapBase):'')+' — plenty, if the watts land.';
 }
 // Rolling HRV baseline from the accumulating daily rMSSD values (st.hrvDaily, written by
 // fetchLiveIntervalsWellness). Readiness is ALWAYS vs this baseline, never a single-day read —

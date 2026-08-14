@@ -260,7 +260,7 @@ console.log('\n' + Y + '=== the slide copy describes what actually slides ===' +
 {
   // Scoped to the RETURNED STRING, not the function body: the comment above it deliberately quotes
   // the old wording to explain why it went, and a naive negative check would match its own epitaph.
-  const _fn = src.slice(src.indexOf('function _cvSlide_('), src.indexOf('function _cvSlide_(') + 4200);
+  const _fn = src.slice(src.indexOf('function _cvSlide_('), src.indexOf('function _cvSlide_(') + 7000);
   const cv = _fn.slice(_fn.lastIndexOf("return 'Two weeks"));
   ok('it no longer claims a missed week slid the retest', !/A missed week slid the retest/.test(cv));
   // It must LEAD with what he did. He rode through both weeks; opening on what has not banked is
@@ -269,9 +269,9 @@ console.log('\n' + Y + '=== the slide copy describes what actually slides ===' +
   ok('...and says plainly that nothing he cares about moved', /Nothing you care about moved/.test(cv));
   ok('...naming the retest', /the retest is still/.test(cv));
   ok('...and the mountain', /Chalet Reynard is still/.test(cv));
-  ok('it states the condition rather than implying absence', /all three quality sessions on three separate days/.test(cv));
+  ok('it names the condition that ACTUALLY failed, asked not assumed', /_blockWeekAssess_/.test(_fn) && /What did not is the intensity/.test(_fn));
   ok('it still reports the real gap between the two dates', /day'\+\(gapNow===1\?'':'s'\)\+' between them/.test(cv));
-  ok('...and closes forward rather than on the shortfall', /plenty, if the quality days land/.test(cv));
+  ok('...and closes forward rather than on the shortfall', /plenty, if the watts land/.test(cv));
   // Register check: the previous version recited a definition at him.
   ok('it no longer recites the rule as a definition', !/that is the clean-week condition, not days off/.test(cv));
 }
