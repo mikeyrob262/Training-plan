@@ -30537,14 +30537,39 @@ function _blockNextMilestone_(now){
 // (threshold/vo2/z2 via _blockCyc_), so neither edit moves the three-sessions/three-days gate or
 // the Four-weeks-consistent milestone.
 var _TB_VERSION='ventop-2026-4';   // bumped: attempts clustered to Oct 31 / Nov 7 / Nov 14, third run to Sunday
+var _TB_CACHE=null;   // module scope, NOT st: a derived cache must never enter synced state
 function _trainingBlock_(){
   if(typeof st==='undefined') return null;
-  if(st.trainingBlock && st.trainingBlock.v===_TB_VERSION) return st.trainingBlock;
+  // THE BLOCK IS A PURE FUNCTION OF THIS FILE, AND PERSISTING IT WAS THE BUG.
+  //
+  // It used to be written into st — synced state — and read back on the next load whenever the
+  // stored version matched. But state MERGES: two devices carrying different block versions union
+  // their phases and their per-date slot arrays, while the version STRING resolves to a single
+  // value. The result is a cache stamped with the CURRENT version whose contents are a blend of
+  // two, and the version gate can never catch it because the stamp is the one thing that merged
+  // cleanly.
+  //
+  // Measured on the live plan before this change:
+  //   Nov 10  a stray ventop slot from a version where Ven-Top sat on Nov 11, sitting beside the
+  //           real strengthB + recovery — five sessions on a two-session day
+  //   Nov 14  the ventop slot TWICE. The two copies differ only by a hyphen against an em-dash in
+  //           the note, so contentFingerprint_ read them as different items and mergeArrays_ kept
+  //           both — a duplicated summit produced by a dash character
+  //   Nov 15  two differently-worded optional slots from two versions
+  // A fresh build produces exactly one slot on each of those dates.
+  //
+  // It also explains the dates that kept resurfacing in handoffs. "Alpe Oct 13-14 / Ven-Top Nov
+  // 10-11" was not an alternative plan anyone chose; it was an older block version still alive
+  // inside this cache, being read back as if it were current.
+  //
+  // So it memoises in MODULE SCOPE, keyed on the version, and never reads st. Nothing derived from
+  // source belongs in synced state.
+  if(_TB_CACHE && _TB_CACHE.v===_TB_VERSION) return _TB_CACHE;
   // Third argument is TIME OF DAY, and it is a real field rather than words inside the subtitle:
   // Tuesday now carries two hard efforts and "which one is the morning" is scheduling information,
   // not a description. Optional everywhere else, so every existing S() call is unchanged.
   var S=function(i,s,t){ var o={i:i}; if(s) o.s=s; if(t) o.t=t; return o; };
-  st.trainingBlock={
+  var _tb={
     v:_TB_VERSION, start:'2026-07-24', end:'2026-11-15',
     phases:[
       // RUNNING IS Mon / Wed / SUN. The third run sits on Sunday rather than Friday: Friday already
@@ -30619,7 +30644,14 @@ function _trainingBlock_(){
         '2026-11-15':[S('optional','alternate Ven-Top day if Nov 14 is a no-go - otherwise easy run, 29-31 min')] } }
     ]
   };
-  return st.trainingBlock;
+  _TB_CACHE=_tb;
+  // Drop the persisted copy. It is derived, it can only go stale, and while it sits in state it
+  // keeps syncing and keeps accumulating slots from every version any device has ever held. No user
+  // data lives here — st.plan owns the sessions the athlete actually edits, and generateBlockPlan_
+  // folds this into st.plan separately. A merge from a device still running the old code can put
+  // the key back, which is harmless now that nothing reads it.
+  try{ if(st.trainingBlock) delete st.trainingBlock; }catch(e){}
+  return _TB_CACHE;
 }
 // Which phase contains a date, or null when the date is outside the block.
 function _tbPhaseFor_(d){
@@ -44940,7 +44972,10 @@ function getWeekStartDate(w){
 // Block week when today falls inside the training block; otherwise the calendar week OF THE MONTH,
 // which is the only other week number that means anything above a month grid.
 function _blockWeekOf_(dt){
-  var tb=(typeof st!=='undefined'&&st)?st.trainingBlock:null;
+  // Through the resolver, not the stored copy — this was the last reader of st.trainingBlock, and
+  // after a merge that object could carry a different start/end than the block the rest of the app
+  // was using.
+  var tb=(typeof _trainingBlock_==='function')?_trainingBlock_():null;
   if(!tb||!tb.start) return 0;
   var s=parseDayKey(String(tb.start).slice(0,10));
   if(isNaN(s.getTime())) return 0;

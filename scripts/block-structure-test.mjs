@@ -27,7 +27,9 @@ const exVar = (n) => { const m = src.match(new RegExp('var ' + n + '\\s*=[^;]*;'
 const exArr = (n) => { const i = src.indexOf('var ' + n + '='); if (i < 0) throw new Error('missing ' + n); let j = src.indexOf('[', i), d = 0, k = j; for (; k < src.length; k++) { const c = src[k]; if (c === '[') d++; else if (c === ']') { d--; if (!d) break; } } return src.slice(i, k + 1) + ';\n'; };
 
 const M = new Function(asServed(
-  'var st={};\n' + exVar('_TB_VERSION') + exVar('_FTP_RETEST_DATE') + exVar('BLOCK_RUN_RAMP_MAX') +
+  // _TB_CACHE is the module-scope memo the block now uses instead of st. It has to be declared here
+  // too, or the extracted builder throws on its own cache check.
+  'var st={};\nvar _TB_CACHE=null;\n' + exVar('_TB_VERSION') + exVar('_FTP_RETEST_DATE') + exVar('BLOCK_RUN_RAMP_MAX') +
   exArr('_BLOCK_MILESTONES') + exFn('_trainingBlock_') +
   ';return { tb:_trainingBlock_(), MS:_BLOCK_MILESTONES, RAMP:BLOCK_RUN_RAMP_MAX };'
 ))();
@@ -274,6 +276,54 @@ console.log('\n' + Y + '=== the slide copy describes what actually slides ===' +
   ok('...and closes forward rather than on the shortfall', /plenty, if the watts land/.test(cv));
   // Register check: the previous version recited a definition at him.
   ok('it no longer recites the rule as a definition', !/that is the clean-week condition, not days off/.test(cv));
+}
+
+// THE BLOCK IS DERIVED, AND PERSISTING IT WAS THE BUG. st.trainingBlock was written into SYNCED
+// state and read back whenever the stored version matched. State merges: two devices on different
+// block versions union their phases and their per-date slot arrays while the version STRING resolves
+// to one value, so the cache ends up stamped current with blended contents — and the version gate
+// can never catch it, because the stamp is the one thing that merged cleanly.
+//
+// Measured live: Nov 10 carried a stray ventop slot from a version where Ven-Top sat on Nov 11;
+// Nov 14 carried the ventop slot TWICE, the two copies differing only by a hyphen against an
+// em-dash; Nov 15 carried two differently-worded optional slots. It is also where the phantom
+// "Alpe Oct 13-14 / Ven-Top Nov 10-11" dates came from — an old version read back as current.
+console.log('\n' + Y + '=== the block is derived, never read back from synced state ===' + X);
+{
+  const fn = src.slice(src.indexOf('function _trainingBlock_('), src.indexOf('function _trainingBlock_(') + 12000);
+  ok('the cache lives in module scope', /var _TB_CACHE=null/.test(src));
+  ok('...and is keyed on the version', /_TB_CACHE && _TB_CACHE\.v===_TB_VERSION/.test(fn));
+  ok('the builder no longer assigns into st', !/st\.trainingBlock=\{/.test(src));
+  ok('...it builds a local object', /var _tb=\{/.test(fn));
+  ok('...and returns the module cache', /return _TB_CACHE;/.test(fn));
+  ok('the stale persisted copy is dropped', /delete st\.trainingBlock/.test(fn));
+  // Nothing may READ the stored object again — that is the whole defect. Counted per LINE, because
+  // the delete line names it twice and a naive occurrence count never balances.
+  const live = src.split('\n').filter((L) => L.includes('st.trainingBlock'))
+    .filter((L) => !L.trim().startsWith('//') && !L.includes('delete st.trainingBlock'));
+  ok('no code path reads st.trainingBlock any more', live.length === 0);
+  // The dates the cache was corrupting, asserted against source.
+  const ms = (s) => M.MS.find((m) => m.slug === s).date;
+  ok('Chalet is Oct 31', ms('chalet') === '2026-10-31');
+  ok('Alpe is Nov 7', ms('alpe') === '2026-11-07');
+  ok('Ven-Top is Nov 14', ms('ventop') === '2026-11-14');
+  ok('...one week apart, which is what "Attempt cluster" means',
+     Math.round((D(ms('alpe')) - D(ms('chalet'))) / 86400000) === 7 &&
+     Math.round((D(ms('ventop')) - D(ms('alpe'))) / 86400000) === 7);   // rounded: Nov 1 is a DST boundary
+  // A freshly built block prescribes each attempt EXACTLY once, on its own date.
+  ['chalet', 'alpe', 'ventop'].forEach((slug) => {
+    const days = Object.keys(dated).filter((d) => dated[d].filter((i) => i === slug).length);
+    const dupes = Object.keys(dated).filter((d) => dated[d].filter((i) => i === slug).length > 1);
+    ok(slug + ' is prescribed on exactly one day', days.length === 1);
+    ok('...and only once on that day', dupes.length === 0);
+  });
+  // The specific dates the merged cache polluted.
+  ok('Nov 10 carries no attempt at all',
+     !(dated['2026-11-10'] || []).some((i) => ATTEMPTS.indexOf(i) >= 0));
+  ok('...just the strength and recovery it is meant to',
+     JSON.stringify(dated['2026-11-10']) === JSON.stringify(['strengthB', 'recovery']));
+  ok('Nov 15 carries one optional, not two',
+     JSON.stringify(dated['2026-11-15']) === JSON.stringify(['optional']));
 }
 
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'block structure: all checks passed' + X));
