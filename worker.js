@@ -30564,6 +30564,12 @@ function _trainingBlock_(){
   //
   // So it memoises in MODULE SCOPE, keyed on the version, and never reads st. Nothing derived from
   // source belongs in synced state.
+  // The drop happens BEFORE the cache check, not after the build. Placed at the bottom it only ran
+  // on the first build of a page load, and the Firebase pull that lands seconds later merges the
+  // remote copy straight back — measured: still present, still carrying two slots on Nov 14. Here it
+  // fires on every call, so a restored copy is removed again promptly and the key stops travelling
+  // once one clean push lands.
+  try{ if(st.trainingBlock) delete st.trainingBlock; }catch(e){}
   if(_TB_CACHE && _TB_CACHE.v===_TB_VERSION) return _TB_CACHE;
   // Third argument is TIME OF DAY, and it is a real field rather than words inside the subtitle:
   // Tuesday now carries two hard efforts and "which one is the morning" is scheduling information,
