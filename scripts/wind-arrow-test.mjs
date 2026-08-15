@@ -106,6 +106,33 @@ const e = buildGauge('\u{1F60A}', 'Temperature', 0.5, '#1D9E75');
 check('an emoji still renders as a text node', /<text x="45" y="54" text-anchor="middle" font-size="28">/.test(e), true);
 check('...and adds no sub-label when none is given', /margin-top:-2px/.test(e), false);
 
+console.log('\n' + Y + '=== the arrow BADGES the face, it does not replace it ===' + X);
+// The regression this section exists for: the arrow was swapped IN for the emoji whenever a bearing
+// existed, so Wind became the only gauge with no condition face. Both must be present at once.
+{
+  const both = buildGauge('\u{1F60A}', 'Wind', 0.45, '#1D9E75', 'blowing toward NE', windArrowSVG(225, '#1D9E75', 3));
+  check('the emoji face is still there', /<text x="45" y="54" text-anchor="middle" font-size="28">/.test(both), true);
+  check('...and the arrow is there too', both.indexOf('<polyline points="6 10 12 4 18 10"/>') > -1, true);
+  check('...rotated to the blowing-toward bearing', /rotate\(45\.0 12 12\)/.test(both), true);
+  check('the badge sits on its own circle', /<circle cx="68" cy="24" r="13"/.test(both), true);
+  check('...scaled down rather than redrawn at another size', /translate\(59 15\) scale\(0\.75\)/.test(both), true);
+  check('...and layered AFTER the face, so it is drawn on top', both.indexOf('font-size="28"') < both.indexOf('cx="68"'), true);
+  // Same call with no badge must be byte-identical to the old two-gauge behaviour.
+  const plain = buildGauge('\u{1F60A}', 'Wind', 0.45, '#1D9E75', 'blowing toward NE');
+  check('NEG: no badge markup when none is passed', /cx="68"/.test(plain), false);
+  check('...and the other gauges are untouched by the new parameter',
+        buildGauge('\u{1F326}', 'Precipitation', 0.3, '#378ADD').indexOf('cx="68"') < 0, true);
+  // An emoji badge must work too - nothing about the slot assumes markup.
+  const emojiBadge = buildGauge('\u{1F60A}', 'Wind', 0.45, '#1D9E75', '', '\u{1F4A8}');
+  check('an emoji badge renders as text, not raw markup', /<text x="68" y="29"/.test(emojiBadge), true);
+}
+console.log('\n' + Y + '=== the call site passes it as a badge, not as the face ===' + X);
+check('the face is the condition emoji again', /buildGauge\(wc\.emoji,'Wind',wc\.pct,wc\.color,windSub,windBadge\)/.test(src), true);
+check('...and the arrow goes to the badge slot', /var windBadge=\(midDir!=null\)\?windArrowSVG\(midDir,wc\.color,3\):''/.test(src), true);
+// NEG: the swap that caused the regression must not come back.
+check('NEG: the arrow no longer replaces the emoji', /windArrowSVG\(midDir,wc\.color,2\.6\):wc\.emoji/.test(src), false);
+check('the badge is still gated on a real bearing', /\(midDir!=null\)\?windArrowSVG/.test(src), true);
+
 console.log('\n' + Y + '=== a missing bearing is omitted, never invented ===' + X);
 // The 270 default was indistinguishable from a real due-west reading.
 check('midDir no longer defaults to 270', /windDir\.length\?windDir\[Math\.floor\(windDir\.length\/2\)\]:270/.test(src), false);
@@ -116,7 +143,7 @@ check('...but still labels a real bearing', [0,45,90,135,180,225,270,315].map(ge
 // The three places that print the cardinal must all tolerate the empty string.
 check('gust tile guards the label', /max gust'\+\(dirLbl\?\(' '\+dirLbl\):''\)/.test(src), true);
 check('wind chart note guards the label', /'mph'\+\(dirLbl\?\(' '\+dirLbl\):''\)/.test(src), true);
-check('the gauge falls back to the emoji', /\(midDir!=null\)\?windArrowSVG\(midDir,wc\.color,2\.6\):wc\.emoji/.test(src), true);
+check('the gauge shows no arrow at all without a bearing', /var windBadge=\(midDir!=null\)\?windArrowSVG\(midDir,wc\.color,3\):''/.test(src), true);
 
 console.log('');
 if (fails) { console.log(R + 'wind arrow: ' + fails + ' check(s) failed' + X + '\n'); process.exit(1); }

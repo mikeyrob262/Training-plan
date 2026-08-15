@@ -51504,13 +51504,28 @@ function showWeatherHistory(){
   // detected by its leading '<' and centred with a translate, so an SVG icon and an emoji sit in the
   // same place on the gauge face. Deliberately not a wholesale icon-set swap: temp and precip keep
   // their emoji until they get drawn glyphs of their own.
-  function buildGauge(icon,label,pct,color,sub){
+  function buildGauge(icon,label,pct,color,sub,badge){
     var r=32,cx=45,cy=45,circ=2*Math.PI*r;
     var arc=circ*0.75,filled=arc*Math.min(1,Math.max(0,pct)),offset=circ*0.125;
     var mk=String(icon||'');
     var face=(mk.charAt(0)==='<')
       ? '<g transform="translate('+(cx-12)+' '+(cy-12)+')">'+mk+'</g>'
       : '<text x="'+cx+'" y="'+(cy+9)+'" text-anchor="middle" font-size="28">'+mk+'</text>';
+    // Optional BADGE — a second, smaller glyph pinned to the top-right of the ring and layered OVER
+    // the face rather than replacing it. The Wind gauge has to say two things at once: what the
+    // conditions feel like (the emoji, same read as Temperature and Precipitation) and which way the
+    // wind is going (the arrow, which no emoji can express). Swapping one in for the other made wind
+    // the odd gauge out and threw away the condition read entirely.
+    // Authored on the same 24x24 box as any icon and scaled down in place, so one glyph serves both
+    // slots and the arrow builder needs no badge-specific variant. Emoji accepted here too, for
+    // symmetry with the face - nothing about this slot assumes markup.
+    var bd=String(badge||'');
+    var bx=68, by=24, br=13;
+    var badgeMk=!bd ? '' :
+      ('<circle cx="'+bx+'" cy="'+by+'" r="'+br+'" fill="var(--s2)" stroke="'+color+'" stroke-width="1.5"/>'
+       +((bd.charAt(0)==='<')
+          ? '<g transform="translate('+(bx-9)+' '+(by-9)+') scale(0.75)">'+bd+'</g>'
+          : '<text x="'+bx+'" y="'+(by+5)+'" text-anchor="middle" font-size="14">'+bd+'</text>'));
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
       +'<svg width="90" height="90" viewBox="0 0 90 90">'
       +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--s3)" stroke-width="8" '
@@ -51518,6 +51533,7 @@ function showWeatherHistory(){
       +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="8" '
       +'stroke-dasharray="'+filled+' '+(circ-filled)+'" stroke-dashoffset="-'+offset+'" stroke-linecap="round" transform="rotate(135 '+cx+' '+cy+')"/>'
       +face
+      +badgeMk
       +'</svg>'
       +'<div style="font-size:11px;font-weight:700;color:var(--t2)">'+label+'</div>'
       +(sub?('<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:-2px;letter-spacing:.04em">'+sub+'</div>'):'')
@@ -52163,17 +52179,19 @@ function showWeatherHistory(){
         var tc=getCondition('temp',maxTemp);
         var pc=getCondition('precip',maxPrecip);
         var wc=getCondition('wind',maxGust);
-        // The Wind gauge carries a real arrow instead of a face: it is the only one of the three
-        // whose reading has a DIRECTION, and an emoji cannot express it. Falls back to the emoji
-        // when the forecast gave no bearing, so the gauge never sits empty and never points at a
-        // made-up one. Sub-label spells out the convention in words, since an arrow alone is
-        // ambiguous about whether it means from or toward.
-        var windFace=(midDir!=null)?windArrowSVG(midDir,wc.color,2.6):wc.emoji;
+        // The Wind gauge shows BOTH: the condition emoji as its face, exactly like the other two
+        // gauges, plus the bearing arrow as a badge. The arrow used to REPLACE the face whenever a
+        // bearing existed, which cost the condition read entirely and left wind as the only gauge
+        // without a face - a regression, not a design.
+        // The badge stays gated on a real bearing: no arrow at all beats an arrow pointing at the
+        // 270 default this code used to invent. Sub-label spells the convention out in words, since
+        // an arrow alone is ambiguous about whether it means from or toward.
+        var windBadge=(midDir!=null)?windArrowSVG(midDir,wc.color,3):'';
         var windSub=(midDir!=null)?('blowing toward '+getDirStr((midDir+180)%360)):'';
         gEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">'
           +buildGauge(tc.emoji,'Temperature',tc.pct,tc.color)
           +buildGauge(pc.emoji,'Precipitation',pc.pct,pc.color)
-          +buildGauge(windFace,'Wind',wc.pct,wc.color,windSub)
+          +buildGauge(wc.emoji,'Wind',wc.pct,wc.color,windSub,windBadge)
           +'</div>'
           +'<div style="display:flex;justify-content:space-around;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--b1)">'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--c-red)">'+Math.round(maxTemp)+'°F</div><div style="font-size:10px;color:var(--t3)">peak temp</div></div>'
