@@ -896,6 +896,49 @@ try {
     fail('a measured session is being relabelled by the whole-ride ratio (see above).');
   }
 
+  // STEP 55 - elevation. Gain (a Strava summary scalar) and the altitude profile (a separately
+  //           fetched stream) are different facts, so one ride showed 1739 ft next to "No elevation
+  //           data". The flag that gates the stream fetch must be stamped when the endpoint ANSWERS,
+  //           never when it is called — the guard-on-attempt mistake that has cost this file three
+  //           times now. And an absent profile is described, not reported as absent elevation.
+  console.log(`${D}. checking elevation stream guard...${X}`);
+  try {
+    const so = execSync('node scripts/elev-stream-guard-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a ride can report real climbing next to a blank elevation profile (see above).');
+  }
+
+  // STEP 56 - wind direction. APIs report where wind blows FROM; the rider needs where it blows TO,
+  //           so the arrow is bearing+180. A sign flip here does not look broken, it just tells you
+  //           to expect a tailwind on the leg that will be into the wind. The test rotates the
+  //           arrow's tip and checks the compass quadrant rather than grepping for "+180".
+  console.log(`${D}. checking wind arrow direction...${X}`);
+  try {
+    const so = execSync('node scripts/wind-arrow-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the wind arrow points the wrong way, or two arrows on one screen disagree (see above).');
+  }
+
+  // STEP 57 - prescription cross-match. A Z2 ride was graded against a Z4 band belonging to the
+  //           pre-amendment Friday, because _sessionRxFor_ let a COMPLETED stale plan row outrank
+  //           the block. Completion says work landed on the DATE; it is not evidence about the
+  //           session's identity. On a genuine contradiction the activity itself adjudicates.
+  console.log(`${D}. checking prescription cross-match...${X}`);
+  try {
+    const so = execSync('node scripts/rx-crossmatch-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a ride can be graded against another day\'s prescription (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

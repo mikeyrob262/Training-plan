@@ -5047,6 +5047,31 @@ function healStaleLaps_(){
     return n;
   }catch(e){ try{ console.error('[laps] heal: '+((e&&e.message)||e)); }catch(_e){} return 0; }
 }
+// Fixing the stamping rule does NOT repair rides already carrying the flag: _streamsTried is a
+// plain property on the ride, it is not in STORAGE_HEAVY_FIELDS_, so it was persisted and synced
+// and would keep blocking the fetch forever on a corrected client. This clears it on exactly the
+// rides that show the symptom — a ride with no altitude profile — so each re-attempts ONCE on its
+// next open. Makes no API calls itself. Version-stamped so it runs once per client, not per load:
+// a repair that reports work on every load is a persistence failure, not a busy migration.
+var _ELEV_HEAL_V='elevstream-1';
+function healElevStreamFlag_(){
+  try{
+    if(typeof st==='undefined' || !Array.isArray(st.rides)) return 0;
+    if(st._elevHealV===_ELEV_HEAL_V) return 0;
+    var n=0;
+    st.rides.forEach(function(r){
+      if(!r || r.deleted || !r.stravaId) return;
+      if(r.chartEle && r.chartEle.length) return;      // already has the profile, nothing to arm
+      if(!r._streamsTried) return;                     // not blocked
+      delete r._streamsTried;
+      n++;
+    });
+    st._elevHealV=_ELEV_HEAL_V;
+    if(n){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    try{ console.log('[elev] heal armed '+n+' ride(s) for one altitude-stream re-attempt on next open'); }catch(e){}
+    return n;
+  }catch(e){ try{ console.error('[elev] heal: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function ensureRideStreams(r){
   if(!r || !r.stravaId) return Promise.resolve(r);
   // Require BOTH streams and GPS before treating the ride as complete — a ride
@@ -5174,6 +5199,15 @@ function fetchStravaStreams_(r, ds, maxOf){
         // denies a ride its speed data. A 200 with no velocity stream DOES stamp: that is a real
         // answer of "this ride has none", and re-asking would loop forever.
         if(arr[0]) r._spdTried=true;
+        // The STREAM flag now follows the same rule, and for the same reason. It used to be stamped
+        // by the two ride-detail open paths BEFORE this call, so one rate-limited or network-failed
+        // fetch set it permanently and the ride could never acquire chartEle or maxElev again — while
+        // r.elev (a Strava SUMMARY scalar, present from the activity sync) kept showing a real gain
+        // total beside an empty profile and a blank Max Elevation. That is the guard-on-attempt
+        // mistake this file has already paid for twice via _gpsTried. Stamped on ANSWER: a 200 with
+        // no altitude stream is a real "this ride has none" and stops the re-ask; a failure leaves it
+        // unset so the next open retries.
+        if(arr[0]) r._streamsTried=true;
         // laps[] from the detailed activity (Strava field names, m & sec).
         // Strava laps are a FALLBACK only — written when the ride has NO laps AND none from Garmin.
         // Garmin auto-lap is authoritative; the merge prefers it, so Strava never mixes with or overrides
@@ -39561,7 +39595,10 @@ function openDesktopRideDetail(idx, _noFetch){
   // Self-limiting: the fetch stamps lapTimeBasis='moving' and the predicate goes false for good.
   var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
   if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps || _wantSpd)){
-    if(_wantStr) r._streamsTried=true;
+    // _streamsTried is NOT stamped here any more. Stamping before the call meant a failed fetch
+    // denied the ride its altitude stream forever; fetchStravaStreams_ now stamps it when the
+    // endpoint actually answers. The re-open below still passes _noFetch=true, so a single open
+    // cannot loop regardless.
     ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx, true); });
     return;
   }
@@ -39672,11 +39709,19 @@ function openDesktopRideDetail(idx, _noFetch){
   }
 
   // Elevation profile with ft axis + mileage axis
-  function elevProfile(ele,distMi,secs,_sc,_st,_sd){
+  function elevProfile(ele,distMi,secs,_sc,_st,_sd,_gain){
     // Fewer than two samples: the existing message stands and NO scrubber is registered, so there
     // is no interactive layer over a chart that does not exist.
     _rdScrubReset_();
-    if(!ele||ele.length<2) return '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:11px">No elevation data</div>';
+    if(!ele||ele.length<2){
+      // "No elevation data" was a lie whenever the ride carried a gain total. Gain and profile are
+      // DIFFERENT FACTS from different places: r.elev is a Strava summary scalar that arrives with
+      // the activity sync, chartEle is a per-point altitude stream fetched separately and often
+      // absent. Saying nothing was recorded contradicted the real ft figure two rows above it.
+      // The mobile map surface already drew this distinction — this is the same wording.
+      var _g=(_gain!=null&&_gain>0)?('+'+Math.round(_gain)+' ft total gain &mdash; '):'';
+      return '<div style="height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 18px;color:var(--d-t4);font-size:11px;line-height:1.5">'+_g+'no per-point altitude stream stored for this ride</div>';
+    }
     var mn=Math.min.apply(null,ele),mx=Math.max.apply(null,ele),rng=mx-mn||1;
     var W=800,H=100,padL=36,padB=16;
     var iW=W-padL, iH=H-padB;
@@ -39807,14 +39852,16 @@ function openDesktopRideDetail(idx, _noFetch){
       // 4-col stats below map
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:var(--d-deep);border-bottom:1px solid var(--d-line);flex-shrink:0">'+
         miniStat(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance',true)+
-        miniStat(r.elev?Math.round(r.elev)+' ft':'--','Elevation Gain',true)+
+        // Through _actElevGain_, not a bare r.elev — the same canonical resolver the chart's empty
+        // state and calRollup_ read, so the tile and the message under it can never disagree.
+        miniStat((function(){var _eg=_actElevGain_(r);return _eg?Math.round(_eg)+' ft':'--';})(),'Elevation Gain',true)+
         miniStat(r.maxElev?Math.round(r.maxElev)+' ft':'—','Max Elevation',true)+
         miniStat(avgSpd!=='--'?avgSpd+' mph':'--','Avg Speed',false)+
       '</div>'+
 
       // ELEVATION PROFILE
       '<div style="background:var(--d-deep);padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
-        elevProfile(r.chartEle,r.distance,r.movingSecs,r.chartSpd,r.chartTime,r.chartDist)+
+        elevProfile(r.chartEle,r.distance,r.movingSecs,r.chartSpd,r.chartTime,r.chartDist,_actElevGain_(r))+
       '</div>'+
 
       // 4 METRIC CARDS
@@ -40370,7 +40417,9 @@ function openRideDetail(idx, _noFetch){
   // applied to only one leaves the other reading elapsed times forever.
   var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
   if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps)){
-    if(_wantStr) r._streamsTried=true;
+    // See the desktop path: the flag is stamped on ANSWER inside fetchStravaStreams_, never here.
+    // Both renderers gate independently, so this has to be removed on both or the surface that
+    // still pre-stamps keeps poisoning the shared ride record for the one that does not.
     ensureRideStreams(r).then(function(){ openRideDetail(idx, true); });
     return;
   }
@@ -40741,7 +40790,10 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
     // Elev Gain / Max Elev - flat two-column row below the map, no card
     var elevRow=document.createElement('div');
     elevRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px';
-    elevRow.innerHTML='<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+(r.elev||'-')+(r.elev?' ft':'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">Elev Gain</div></div>'
+    // Same canonical resolver as the desktop tile — parallel renderers, so a bare r.elev here would
+    // let the two surfaces report different climbing for one ride.
+    var _mEg=_actElevGain_(r);
+    elevRow.innerHTML='<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+(_mEg?Math.round(_mEg):'-')+(_mEg?' ft':'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">Elev Gain</div></div>'
       +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+(r.maxElev||'-')+(r.maxElev?' ft':'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">Max Elevation</div></div>';
     wrap.appendChild(elevRow);
   }
@@ -40920,6 +40972,23 @@ function _rxTrainableIntent_(intent){
   var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[intent]:null;
   return !!d && (d.type==='ride' || d.type==='attempt' || d.type==='run');
 }
+// Which of the three measurable buckets an INTENT sits in, priced off its own pctFtp band rather
+// than a hardcoded list of intent names — so a new intent needs no entry here and cannot silently
+// fall outside the comparison. Boundaries are _blockSessionOf_'s, deliberately: this is only ever
+// compared against that function's output, and two sets of thresholds would drift apart.
+// Null for anything without a power band (runs, strength, mobility), which is the correct answer —
+// those cannot be adjudicated on watts and must fall through to the normal precedence.
+function _rxIntentBucket_(intent){
+  try{
+    var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[intent]:null;
+    if(!d || d.type==='run' || !d.pctFtp || d.pctFtp.length<2) return null;
+    var mid=(parseFloat(d.pctFtp[0])+parseFloat(d.pctFtp[1]))/200;   // percent pair -> ratio of FTP
+    if(!isFinite(mid)) return null;
+    if(mid>=1.06) return 'vo2';
+    if(mid>=0.80) return 'threshold';
+    return 'z2';
+  }catch(e){ return null; }
+}
 // THE day-level prescription resolver. Every surface that needs "what was prescribed on this date"
 // resolves through here, so two of them can no longer name different sessions for the same day.
 //
@@ -40964,9 +41033,44 @@ function _sessionRxFor_(dateKey, ride){
   // Everything else defers to the block, which is what stops uncompleted plan residue overriding a
   // real prescription.
   var pick=null, via='';
-  if(pln && (plnDone || !tpl)){ pick=pln; via='plan'; }
-  else if(tpl){ pick=tpl; via='block'; }
-  else if(pln){ pick=pln; via='plan'; }
+  // ADJUDICATION, and it runs BEFORE the precedence below.
+  //
+  // A completed plan row is normally the record of what the session was. But completion is stamped
+  // when work lands on the DATE — it is not evidence about the session's IDENTITY, in exactly the
+  // way the calendar's plan chip is date co-location rather than a match. So when the stored row and
+  // the block CONTRADICT each other about what the day is, completion alone must not settle it.
+  //
+  // That is how a Z2 ride came to be graded against a Z4 band. The Thu/Fri amendment gives Friday
+  // the Z2 from SCHED_THU_FRI_SWAP_FROM, but the stored row still carried the pre-amendment
+  // Threshold, and migratePlanIntentsToBlock_ cannot repair it: that pass is FUTURE-ONLY and
+  // _planReplaceable_ excludes a completed row. So the day was misgraded precisely BECAUSE it was
+  // ridden — 138W against a 162-181W band the athlete was never asked to hold.
+  //
+  // The tie-break is the activity itself. _blockSessionOf_ reads structure, then intensity, then the
+  // whole-ride ratio, and answers what this ride actually WAS; whichever candidate agrees with it
+  // wins. Narrow by construction — it fires only on a real contradiction with a ride in hand and a
+  // readable identity, so the two cases this resolver was built around are untouched: Aug 3 (the
+  // candidates agree, nothing to adjudicate) and 2026-07-31 (same). When the ride is unreadable, or
+  // both candidates sit in the same bucket, or neither matches, it declines to choose and the
+  // existing precedence runs exactly as before.
+  try{
+    if(pln && tpl && pln.intent!==tpl.intent && ride){
+      var _pB=_rxIntentBucket_(pln.intent), _tB=_rxIntentBucket_(tpl.intent);
+      if(_pB && _tB && _pB!==_tB && typeof _blockSessionOf_==='function'){
+        var _ftpX=(typeof ftpOn_==='function')?parseFloat(ftpOn_(dk)):parseFloat(st&&st.ftp);
+        var _was=_blockSessionOf_(ride, _ftpX, dk);
+        if(_was==='vo2' || _was==='threshold' || _was==='z2'){
+          if(_pB===_was && _tB!==_was){ pick=pln; via='plan-measured'; }
+          else if(_tB===_was && _pB!==_was){ pick=tpl; via='block-measured'; }
+        }
+      }
+    }
+  }catch(e){}
+  if(!pick){
+    if(pln && (plnDone || !tpl)){ pick=pln; via='plan'; }
+    else if(tpl){ pick=tpl; via='block'; }
+    else if(pln){ pick=pln; via='plan'; }
+  }
   if(!pick) return null;
   var def=((typeof SESSION_DEFS!=='undefined')&&SESSION_DEFS[pick.intent])||{};
   // What SPORT is this day actually? The intent alone cannot answer it: this athlete's Aug 3 session
@@ -51232,7 +51336,26 @@ function showWeatherHistory(){
 
   var wxCharts=[];
   function destroyCharts(){wxCharts.forEach(function(c){try{c.destroy();}catch(e){}});wxCharts=[];}
-  function getDirStr(deg){return['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8];}
+  // null in, null out. This used to be handed a 270 fallback, so a ride whose forecast carried no
+  // wind direction at all rendered a confident "W" — a fabricated bearing sitting next to a real
+  // wind speed. Callers now pass null and omit the label rather than inventing due west.
+  function getDirStr(deg){ if(deg==null||!isFinite(deg)) return ''; return['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8]; }
+  // Wind arrow, drawn on a 24x24 box so it can drop into the gauge face or a map pin unchanged.
+  // METEOROLOGICAL CONVENTION: every API here reports the direction wind blows FROM, but a rider
+  // judging headwind vs tailwind wants to see where it is blowing TO — so the glyph is rotated by
+  // bearing+180. The arrow is an up-arrow at rest, matching the compass in drawWindMap.
+  // Rotation is an SVG transform with an EXPLICIT centre, not a CSS transform: a CSS rotate on an
+  // inner SVG node pivots about the user-space origin unless transform-box/transform-origin are
+  // also set, which swings the arrow clean out of its box. Rotating the outer <svg> element (as the
+  // map pins do) is fine because that element has a layout box; a nested <g> does not.
+  function windArrowSVG(fromDeg,color,sw){
+    var toward=(((+fromDeg||0)+180)%360);
+    var c=color||'currentColor';
+    return '<g transform="rotate('+toward.toFixed(1)+' 12 12)" fill="none" stroke="'+c+'" stroke-width="'+(sw||2.4)+'" stroke-linecap="round" stroke-linejoin="round">'
+      +'<line x1="12" y1="20" x2="12" y2="4"/>'
+      +'<polyline points="6 10 12 4 18 10"/>'
+      +'</g>';
+  }
 
   function getCondition(type,val){
     if(type==='temp'){
@@ -51255,18 +51378,27 @@ function showWeatherHistory(){
     return{emoji:'😊',color:'#1D9E75',pct:0.5};
   }
 
-  function buildGauge(emoji,label,pct,color){
+  // icon is EITHER an emoji character OR a block of SVG markup authored on a 24x24 box. Markup is
+  // detected by its leading '<' and centred with a translate, so an SVG icon and an emoji sit in the
+  // same place on the gauge face. Deliberately not a wholesale icon-set swap: temp and precip keep
+  // their emoji until they get drawn glyphs of their own.
+  function buildGauge(icon,label,pct,color,sub){
     var r=32,cx=45,cy=45,circ=2*Math.PI*r;
     var arc=circ*0.75,filled=arc*Math.min(1,Math.max(0,pct)),offset=circ*0.125;
+    var mk=String(icon||'');
+    var face=(mk.charAt(0)==='<')
+      ? '<g transform="translate('+(cx-12)+' '+(cy-12)+')">'+mk+'</g>'
+      : '<text x="'+cx+'" y="'+(cy+9)+'" text-anchor="middle" font-size="28">'+mk+'</text>';
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
       +'<svg width="90" height="90" viewBox="0 0 90 90">'
       +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--s3)" stroke-width="8" '
       +'stroke-dasharray="'+arc+' '+(circ-arc)+'" stroke-dashoffset="-'+offset+'" stroke-linecap="round" transform="rotate(135 '+cx+' '+cy+')"/>'
       +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="8" '
       +'stroke-dasharray="'+filled+' '+(circ-filled)+'" stroke-dashoffset="-'+offset+'" stroke-linecap="round" transform="rotate(135 '+cx+' '+cy+')"/>'
-      +'<text x="'+cx+'" y="'+(cy+9)+'" text-anchor="middle" font-size="28">'+emoji+'</text>'
+      +face
       +'</svg>'
       +'<div style="font-size:11px;font-weight:700;color:var(--t2)">'+label+'</div>'
+      +(sub?('<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:-2px;letter-spacing:.04em">'+sub+'</div>'):'')
       +'</div>';
   }
 
@@ -51898,22 +52030,33 @@ function showWeatherHistory(){
       var maxTemp=temps.length?Math.max.apply(null,temps):75;
       var maxPrecip=precip.length?Math.max.apply(null,precip):0;
       var maxGust=gusts.length?Math.max.apply(null,gusts):wind.length?Math.max.apply(null,wind):10;
-      var midDir=windDir.length?windDir[Math.floor(windDir.length/2)]:270;
+      // Midpoint sample of the ride window. NULL when the forecast carried no direction at all —
+      // the old 270 fallback was indistinguishable from a real due-west reading, and every consumer
+      // below (cardinal label, gauge arrow, chart note) would have drawn it as fact.
+      var midDir=windDir.length?windDir[Math.floor(windDir.length/2)]:null;
+      var dirLbl=getDirStr(midDir);
 
       var gEl=document.getElementById('wx-gauges');
       if(gEl){
         var tc=getCondition('temp',maxTemp);
         var pc=getCondition('precip',maxPrecip);
         var wc=getCondition('wind',maxGust);
+        // The Wind gauge carries a real arrow instead of a face: it is the only one of the three
+        // whose reading has a DIRECTION, and an emoji cannot express it. Falls back to the emoji
+        // when the forecast gave no bearing, so the gauge never sits empty and never points at a
+        // made-up one. Sub-label spells out the convention in words, since an arrow alone is
+        // ambiguous about whether it means from or toward.
+        var windFace=(midDir!=null)?windArrowSVG(midDir,wc.color,2.6):wc.emoji;
+        var windSub=(midDir!=null)?('blowing toward '+getDirStr((midDir+180)%360)):'';
         gEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">'
           +buildGauge(tc.emoji,'Temperature',tc.pct,tc.color)
           +buildGauge(pc.emoji,'Precipitation',pc.pct,pc.color)
-          +buildGauge(wc.emoji,'Wind',wc.pct,wc.color)
+          +buildGauge(windFace,'Wind',wc.pct,wc.color,windSub)
           +'</div>'
           +'<div style="display:flex;justify-content:space-around;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--b1)">'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--c-red)">'+Math.round(maxTemp)+'°F</div><div style="font-size:10px;color:var(--t3)">peak temp</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#378ADD">'+Math.round(maxPrecip)+'%</div><div style="font-size:10px;color:var(--t3)">max rain</div></div>'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#1D9E75">'+Math.round(maxGust)+'mph</div><div style="font-size:10px;color:var(--t3)">max gust '+getDirStr(midDir)+'</div></div>'
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#1D9E75">'+Math.round(maxGust)+'mph</div><div style="font-size:10px;color:var(--t3)">max gust'+(dirLbl?(' '+dirLbl):'')+'</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+Math.round(wind.length?Math.max.apply(null,wind):0)+'mph</div><div style="font-size:10px;color:var(--t3)">max sustained</div></div>'
           +'</div>';
       }
@@ -51926,9 +52069,12 @@ function showWeatherHistory(){
           var ri=Math.floor(pct*(lats.length-1));
           var wi=Math.floor(pct*windDir.length);
           var deg=windDir[wi]||0,spd=wind[wi]?Math.round(wind[wi]):'';
+          // These pins sit on the SAME SCREEN as the Wind gauge and used to rotate by the raw
+          // bearing while the gauge arrow points where the wind is going — two arrows, one ride,
+          // opposite directions. Both now use the blowing-TOWARD convention via windArrowSVG.
           var html='<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'
             +'<div style="background:#378ADD;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">'
-            +'<svg width="14" height="14" viewBox="0 0 24 24" fill="white" style="transform:rotate('+deg+'deg)"><path d="M12 2l6 18-6-4-6 4z"/></svg>'
+            +'<svg width="15" height="15" viewBox="0 0 24 24">'+windArrowSVG(deg,'#fff',2.6)+'</svg>'
             +'</div>'
             +(spd?'<div style="background:#000;border-radius:8px;padding:1px 5px;font-size:10px;font-weight:900;color:#fff;white-space:nowrap">'+spd+'mph</div>':'')
             +'</div>';
@@ -51949,7 +52095,7 @@ function showWeatherHistory(){
           {suggestedMin:Math.min.apply(null,feels)-3,suggestedMax:Math.max.apply(null,temps)+3});},100);
       }
       if(wind.length>1){
-        var w=makeChartEl('wx-wind','Wind','Max '+Math.round(maxGust)+'mph '+getDirStr(midDir));
+        var w=makeChartEl('wx-wind','Wind','Max '+Math.round(maxGust)+'mph'+(dirLbl?(' '+dirLbl):''));
         cEl.appendChild(w);
         setTimeout(function(){makeChart('wx-wind',times,
           [{label:'Sustained (mph)',data:wind,color:'#185FA5',fill:true},
@@ -54752,6 +54898,9 @@ window.onload = function(){
         // remote pull so it sees the merged library, clears only the flag that would block the next
         // open's fetch, and makes no API calls itself — the rewrite happens when a ride is opened.
         try{ if(typeof healStaleLaps_==='function') healStaleLaps_(); }catch(e){}
+        // Same placement and same reasoning for the altitude-stream flag: AFTER the remote pull, so
+        // it sees the merged library rather than whatever this device happened to hold at boot.
+        try{ if(typeof healElevStreamFlag_==='function') healElevStreamFlag_(); }catch(e){}
         // Build segment effort history from what rides already carry. Local only, no API calls.
         try{ if(typeof harvestSegmentEfforts_==='function') harvestSegmentEfforts_(true); }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,
