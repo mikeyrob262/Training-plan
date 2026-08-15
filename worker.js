@@ -41298,6 +41298,31 @@ function _rideTelemetryFacts_(r){
   }catch(e){ _work=null; }
   if(prof.cyclingPower){
     tele+='Avg power: '+(r.avgPwr||'unknown')+'W, NP: '+(r.np||'unknown')+'W, FTP: '+FTP+'W. ';
+    // THE EFFORT VERDICT, COMPUTED HERE RATHER THAN LEFT TO BE INFERRED.
+    //
+    // Only the whole-ride AVERAGE was ever compared to the band, so Aug 15 2026 — a group ride at
+    // 154.7W average, NP 181W, IF 0.95 — read as "prescription hit: power and effort dialed in"
+    // while the real effort sat 14W ABOVE the top of its 114-167W band. Average understates a
+    // variable ride BY CONSTRUCTION; correcting for exactly that is what NP is for. So on any ride
+    // carrying an NP, NP is the number the verdict has to answer to, and it is stated as a fact
+    // rather than being one of several figures the model may weigh however it likes.
+    //
+    // Same failure family as the whole-ride-average dilution above and the VO2-vs-threshold
+    // misclassification: check the softer number, then call the agreement real.
+    if(rx && rx.lo!=null && rx.hi!=null && r.np>0){
+      var _ifv=(FTP>0)?(Math.round(r.np/FTP*100)/100):null;
+      tele+='NP is '+(FTP>0?(Math.round(r.np/FTP*100)+'% of FTP'):'an unknown share of FTP')
+        +(_ifv!=null?(' (IF '+_ifv.toFixed(2)+')'):'')+'. ';
+      if(r.np>rx.hi){
+        tele+='VERDICT ON EFFORT: NP '+r.np+'W is ABOVE the top of the prescribed band ('+rx.hi+'W). '
+          +'This ride was ridden HARDER than prescribed, whatever the whole-ride average says. Say that '
+          +'plainly, and do NOT call the prescription met on the strength of the average alone. ';
+      } else if(r.np>=rx.lo){
+        tele+='VERDICT ON EFFORT: NP '+r.np+'W sits INSIDE the prescribed band - the effort matched the prescription. ';
+      } else {
+        tele+='VERDICT ON EFFORT: NP '+r.np+'W is BELOW the bottom of the prescribed band ('+rx.lo+'W). ';
+      }
+    }
     if(_work && _work.vals && _work.vals.length){
       tele+='WORK INTERVALS (measured from '+(_work.source==='laps'?'the device laps':'the power stream')+'): '
         +_work.vals.map(function(v,i){ return 'interval '+(i+1)+' '+v+'W'; }).join(', ')+'. '
@@ -41317,6 +41342,17 @@ function _rideTelemetryFacts_(r){
   // absent, and the model faithfully reported the zero back as "flat terrain, zero elevation gain".
   var FACTS='Describe ONLY what the data above states. Where a value is given as "not recorded" or '
     +'"unknown", say it was not recorded — never substitute zero, and never infer it from another number. '
+    // The old anti-inference rule was scoped to values given as not-recorded/unknown, which left a
+    // gap: a number that was never mentioned at all had no rule covering it. The execution rules for
+    // a group ride read "Sit in for the first 20 mi. Race only the last 10-15", and those got summed
+    // into a "30-mile implied window" that was then compared against a 26.3 mi ride. Both inputs were
+    // real; the total was not, and it arrived stated as a fact. So the ban is on ARITHMETIC ACROSS
+    // GIVEN FIGURES, not just on filling blanks.
+    +'Never COMBINE figures to state a new one. Do not add, subtract or total two numbers you were '
+    +'given and present the result as a target or a fact — in particular, distances or durations '
+    +'mentioned inside the execution rules describe PHASES WITHIN the ride and must never be summed '
+    +'into a total, an expected distance, or an implied window. If a figure is not stated above, you '
+    +'do not have it: do not compute it, imply it, or reason against it. '
     +'Do not call the terrain flat, rolling, or hilly unless elevation gain is given to you as a number. '
     +'This activity is a '+noun+': call it a '+noun+' and nothing else. ';
   return {FTP:FTP, maxHR:maxHR, zonePct:zonePct, prof:prof, noun:noun, Noun:Noun, rx:rx, suppress:suppress, gain:gain, tele:tele, FACTS:FACTS};
@@ -41327,11 +41363,29 @@ function fetchRideCoachInsight(r, callback){
   var prompt;
   if(rx){
     var bandTxt=(rx.lo!=null&&rx.hi!=null)?(rx.lo+'-'+rx.hi+'W'):'no specific power band';
-    var baseNote=_CV_BASE_INTENTS[rx.intent]
+    // The base-ride dispensation is now CONDITIONAL ON NP, and that condition is the whole fix.
+    //
+    // "High NP-to-average-power spread is EXPECTED, not a fault" is correct for a genuine endurance
+    // ride: surges you sit in on and rolling terrain lift NP without making the ride hard. It stops
+    // being correct the moment NP clears the top of the band, because then the spread is not noise
+    // around a compliant ride, it IS the ride. Applied unconditionally it told the model to dismiss
+    // the only number that showed a threshold-level effort, which is how a 0.95 IF group ride was
+    // reported as executed to prescription.
+    var _npOverBand=!!(rx.lo!=null && rx.hi!=null && r.np>0 && r.np>rx.hi);
+    var baseNote=(_CV_BASE_INTENTS[rx.intent] && !_npOverBand)
       ? 'This is a BASE / ENDURANCE ride ('+rx.name+'). If the average power sits in the prescribed band, the ride was executed CORRECTLY and that IS the success. Do NOT frame staying in the band as a shortfall, do NOT say power was left on the table, do NOT suggest pushing harder or holding steadier. High NP-to-average-power spread on a group or endurance ride is EXPECTED (rolling terrain, surges you sit in on), not a fault.'
+      : _npOverBand
+      ? 'This was prescribed as a BASE / ENDURANCE ride ('+rx.name+') and it was NOT ridden as one: NP cleared the top of the band. A high NP-to-average spread is normally expected on this kind of ride and would not be a fault, but that dispensation does NOT apply once NP itself is above the band - at that point the surges ARE the ride. Lead with the fact that it was harder than prescribed. Do not present the average sitting in the band as evidence the prescription was met.'
       : 'Judge execution strictly against THIS prescription and its intent, not a generic steady-state ideal.';
+    // Stating the absence is what actually stops the invention. A rule telling the model not to infer
+    // a target distance still leaves it reaching for one when the prescription visibly talks in miles;
+    // saying plainly that no distance target exists removes the gap it was filling.
+    var _tgtNote='Target duration '+(rx.durationMin!=null?(rx.durationMin+' min'):'not prescribed')+'. '
+      +'NO TARGET DISTANCE is prescribed for this session. Any distances in the execution rules refer '
+      +'to phases inside the ride, not to a total the ride is measured against. ';
     prompt='You are a cycling coach reviewing a completed ride AGAINST its prescription. '
       +'Prescription: '+rx.name+', target power '+bandTxt+(rx.zone?(' ('+rx.zone+')'):'')+'. '
+      +_tgtNote
       +(rx.rules?('Execution rules: '+rx.rules+' '):'')+baseNote+' '+tele+FACTS
       // BRIEF by design. This card sits on the activity page; the full debrief — weekly context,
       // zone breakdown, scorecard, what to do next — is Dr. Smurkel's on the Plan page. Two places

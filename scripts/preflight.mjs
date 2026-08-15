@@ -953,6 +953,21 @@ try {
     fail('the coaching voice has drifted back to hedging, or the facts floor was loosened (see above).');
   }
 
+  // STEP 59 - effort verdict. Average power understates a variable ride by construction, which is
+  //           what NP exists to correct, so a group ride at 154.7W avg / 181W NP / IF 0.95 read as
+  //           "prescription hit" while the real effort sat above the band. NP now carries the
+  //           verdict, and no figure may be assembled out of other figures (20 mi + 10-15 mi became
+  //           a "30-mile implied window" that never existed).
+  console.log(`${D}. checking NP effort verdict...${X}`);
+  try {
+    const so = execSync('node scripts/np-verdict-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a ride harder than prescribed can read as executed, or a figure can be invented (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
