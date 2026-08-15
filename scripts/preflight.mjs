@@ -939,6 +939,20 @@ try {
     fail('a ride can be graded against another day\'s prescription (see above).');
   }
 
+  // STEP 58 - coaching conviction. A deliberate product trade: motivation over calibration ON THE
+  //           READ, facts untouched. Pins that the layer reaches both the debrief and the three
+  //           pre-ride prompts, that it sits where a contradiction resolves in its favour, that
+  //           COACH_GONOGO still outranks it on hazards, and that the anti-fabrication rules survive.
+  console.log(`${D}. checking coaching conviction layer...${X}`);
+  try {
+    const so = execSync('node scripts/smurkel-conviction-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the coaching voice has drifted back to hedging, or the facts floor was loosened (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

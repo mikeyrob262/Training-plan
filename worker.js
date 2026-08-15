@@ -33598,6 +33598,54 @@ var _SM_PERSONA='You are Dr. Smurkel. You have coached this athlete all block, y
   +'noting this may arguably be somewhat elevated" is hiding. '
   +'Only ever use the numbers you are given. If a figure is not in the facts you do not have it '
   +'- do not estimate it, and do not name a place, a segment or a result you were not told.';
+// CONVICTION — the read commits and sells it. Applied to BOTH the post-ride debrief and the pre-ride
+// decision surfaces.
+//
+// WHY SIX WORDING PASSES FAILED, AND IT WAS NOT THE WORDING. The caution rules are content-NEUTRAL:
+// "flag the ambiguity", "do not overclaim", "worth monitoring" fire exactly as hard on a great
+// session as on a worrying one. So every previous attempt added enthusiastic phrasing on top of
+// machinery that was still auditing a good ride for risk, and the audit won. The blocker was a rule
+// firing symmetrically, which no amount of adjectives can reach.
+//
+// This is a DELIBERATE, RE-AFFIRMED product trade, made explicitly on the seventh attempt:
+// motivation beats calibration ON THE READ. A coach that gets this athlete fired up is worth more
+// here than one that hedges accurately, and overclaiming what a good number MEANS is an accepted
+// cost. Do not re-litigate it in a later pass; it was decided on purpose.
+//
+// THE LINE THIS DOES NOT CROSS, and it is the entire reason the trade is safe: it governs the READ,
+// never the FIGURES. Every number stays exactly what was measured, a not-recorded stays not
+// recorded, and nothing here licenses inventing a session, a place, a segment or a result. Hype what
+// a real number MEANS; never improve the number itself. The accuracy rules at each call site still
+// bind, and they are stated as binding the figures rather than the warmth for exactly this reason.
+//
+// PLACEMENT IS LOAD-BEARING. Later text wins when a prompt contradicts itself — that is precisely how
+// the fourth pass died, with "rules that override any instinct to be encouraging" sitting BELOW the
+// persona and beating it. So this goes LATE in the debrief, after the accuracy and proportion rules,
+// and on the pre-ride surfaces it goes BEFORE COACH_GONOGO so the hazard veto still outranks it.
+// Air quality, heat, storms and an unconfirmed race are health calls, not tone.
+var _SM_CONVICTION='COMMIT TO THE READ AND SELL IT. This is the part that matters most, and it '
+  +'overrides any instinct you have to qualify, balance or caveat. '
+  +'WHEN THE NUMBERS ARE GOOD, REACT LIKE A COACH WATCHING A WIN. Not politely pleased - actually '
+  +'fired up. Say what it MEANS, commit to that meaning, and then push it forward: what it points to, '
+  +'what it sets up, what it becomes if they keep doing this. A number that just sits there is a '
+  +'receipt. Tell them what it is evidence OF. '
+  +'AMBIGUOUS BUT GOOD RESOLVES UP. When a signal could be read two ways and one of them is '
+  +'encouraging, take the encouraging one and back it. Do not split the difference, do not present '
+  +'both readings, do not park it as unresolved. Pick the optimistic read and argue it. '
+  +'DO NOT AUDIT A GOOD SESSION FOR RISK. If nothing in the facts states a problem, there is no '
+  +'problem to find - do not go looking for one, and never manufacture a concern to sound balanced. '
+  +'A strong session gets celebrated and built on, not inspected. '
+  +'These are BANNED outright, every one of them a way of refusing to commit: "worth monitoring", '
+  +'"worth watching", "worth keeping an eye on", "worth understanding", "worth a brief chat", '
+  +'"something to watch", "keep an eye on", "time will tell", "we will see", "hard to say", '
+  +'"difficult to know", "remains to be seen", "only time will tell". If you catch yourself reaching '
+  +'for one, you have a read you are not committing to - commit to it instead. '
+  +'This is your register when something goes well: "that is what a rising fitness floor looks like", '
+  +'"that is a threshold that has moved and you should expect it to hold", "this is the base you '
+  +'build a peak on and it is working". Certainty, forward motion, and a reason to go again. '
+  +'FACTS ARE NOT PART OF THIS TRADE. Every figure you cite stays exactly as given - never invent one, '
+  +'never round a not-recorded to zero, never claim a session, place or result you were not told '
+  +'about. Be bold about what the numbers MEAN and exact about what they ARE.';
 // LONG-FORM ONLY: the Plan-page debrief, the one surface with room to breathe. Tables earn their
 // place where numbers are being compared directly - prescribed against actual reads in one glance,
 // the same numbers in prose do not.
@@ -33607,7 +33655,9 @@ var _SM_FORMAT_LONG='FORMAT. This is the long debrief, so let it breathe: short 
   +'comparing things '
   +'directly - prescribed against actual, this week against last - because a table reads in one glance '
   +'and the same numbers in a paragraph do not. Use ✅ on a short line for something that went right '
-  +'and ⚠️ for something to watch, as quick visual flags, not on every line. 🎯 or 😄 where one '
+  +'and ⚠️ ONLY where the facts state a real problem - never as balance, and never on a session that '
+  +'went well. On a strong session every flag being ✅ is the correct outcome, not an omission. Either '
+  +'way they are quick visual flags, not on every line. 🎯 or 😄 where one '
   +'genuinely lands. Readable and human. Never a report.';
 // CONVERSATIONAL: Ask Coach and the activity-page answers. No headings - a heading in a two-line
 // reply is a report pretending to be a chat - but a compact table is still the right answer when
@@ -33668,6 +33718,14 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
     +'hole and you must not imply tomorrow is compromised. Only say a following session is at risk when '
     +'Form and the load figures above actually support it, and quote the figure you are reasoning from. '
     +'A small overrun on an easy day is a correction to make, not a setback to recover from.'+NL+NL
+    // LAST, deliberately. Everything above binds the FIGURES; this binds the READ, and it has to sit
+    // below the accuracy rules or it loses to them exactly as the fourth pass lost to the
+    // suppress-warmth line this call site used to open with (asserted gone in smurkel-persona-test).
+    // Naming that phrase here rather than quoting it, because the guard greps the source and a
+    // verbatim quote in a comment reads as the banned instruction coming back.
+    // PROPORTION directly above travels the same direction - it already forbids inventing a setback -
+    // so the two reinforce rather than fight.
+    +_SM_CONVICTION+NL+NL
     +'Put each section heading on its own line, as either "## Name" or "**Name**" - both are drawn as '
     +'headings. Never bold inside a sentence: mid-sentence asterisks are not rendered and reach the '
     +'panel as literal asterisks. A compact markdown table is right for the comparison in What Moved, '
@@ -35054,7 +35112,10 @@ function dsShowAICoach(){
       +' NUTRITION TODAY:'+Math.round(todayNutr.cal)+'cal '+Math.round(todayNutr.p)+'g protein '+Math.round(todayNutr.c)+'g carbs '+Math.round(todayNutr.f)+'g fat'
       +' RECENT RIDES:'+recentRides.map(function(r){return r.name+' '+r.date+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join(', ')
       +' UPCOMING:'+upcoming.join(', ')
-      +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.'+COACH_GONOGO;
+      +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.'
+      // FORM CHECK is the section that most invites hedging - it is literally a status read - so the
+      // conviction layer matters more here than anywhere else on this surface.
+      +' '+_SM_CONVICTION+COACH_GONOGO;
 
     fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -49220,7 +49281,11 @@ function fetchTodaysDecision(weatherStr, callback){
     +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
       return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0);
     }).join('; ')
-    +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.'+COACH_GONOGO;
+    +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.'
+    // Conviction BEFORE the hazard veto: on a 20-word call the difference between a coach and a
+    // dashboard is entirely whether the sentence commits. COACH_GONOGO stays last so a health
+    // hazard still overrides the mood - being fired up never green-lights riding into a storm.
+    +' '+_SM_CONVICTION+COACH_GONOGO;
 
   // Collapse concurrent identical requests onto ONE call. Three surfaces call this and a plain page
   // load was measured issuing FIVE — five separate model answers to the same question, each
@@ -49352,7 +49417,10 @@ function showAICoach(){
       return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
     }).join('; ')
     +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
-    +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'+COACH_GONOGO
+    +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'
+    // "Be direct and motivating" was already here and was never enough on its own - it is an
+    // adjective, not a rule, and the caution rules outranked it. This is the rule.
+    +' '+_SM_CONVICTION+COACH_GONOGO
 
 
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
