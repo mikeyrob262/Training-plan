@@ -30883,11 +30883,17 @@ function generateBlockPlan_(){
       // Respect a day the user has planned or completed — leave it entirely.
       if(existing.some(function(s){ return (typeof _planUserOwned_==='function'&&_planUserOwned_(s)) || (s&&s.status==='completed'); })){ out.kept++; cur=new Date(cur.getTime()+86400000); continue; }
       if(plan && plan.sessions && plan.sessions.length){
+        // seenSlot counts repeats of ONE identity within this day, so a second strength slot gets a
+        // distinct id without either of them becoming positional. Iteration order is the block's own
+        // slot order, which is stable across devices and runs.
+        var seenSlot={};
         plan.sessions.forEach(function(sl){
           var def=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[sl.intent]:null; if(!def) return;
           var s={ type:def.type, intent:(def.type==='rest'?'':sl.intent), name:def.name, status:'planned',
                   block:{ name:plan.phaseLabel, phase:plan.phase, week:plan.weekInPhase, struct:sl.struct||'' } };
-          try{ planUpsertSession_(key, s, ['type','name','intent','status'], 'gen'); }catch(e){}
+          var sk=(s.type||'x')+'|'+(s.intent||'x');
+          var idx=seenSlot[sk]||0; seenSlot[sk]=idx+1;
+          try{ planUpsertSession_(key, s, ['type','name','intent','status'], 'gen', idx); }catch(e){}
         });
         out.generated++;
       }
@@ -46251,11 +46257,104 @@ function _planCoherce_(s){
   }catch(e){}
   return s;
 }
-function planUpsertSession_(dateKey, sess, editedFields, source){
+// COLLAPSE THE ROWS THE POSITIONAL ID ALREADY MINTED.
+//
+// Fixing the id scheme stops NEW duplicates; it cannot repair the ones already stored and synced.
+// A Sunday was measured carrying ~13 live sessions where it should hold about 2, which is what the
+// day editor was reading when it opened on contradictory garbage.
+//
+// THE RULE: within one day, live sessions that describe the SAME THING (same type + intent) are
+// duplicates of each other. Keep exactly one and tombstone the rest.
+//
+// WHICH ONE SURVIVES, in order:
+//   1. an athlete-owned row  - never destroy something the athlete made, even to tidy up
+//   2. a completed row       - it carries a result, and a result is not regenerable
+//   3. the most recently stamped - newest editedAt wins among equals
+// Different identities on one day (a ride AND a strength session) are NOT duplicates and are left
+// alone. So is any day with only one row per identity, which is every healthy day.
+//
+// TOMBSTONE, NEVER SPLICE - a splice is invisible to the merge and the row returns on the next sync.
+// Every tombstone is stamped so the removal has a clock and travels; without that, mergeState_ ORs
+// the booleans and the stale live copy on another device wins.
+//
+// PAST DAYS ARE INCLUDED, unlike the other repairs here. This does not change what was prescribed -
+// it removes copies of it - so the record of the day survives intact and the history stops lying
+// about how many sessions it held.
+var _PLAN_DEDUPE_V='plandupe-1';
+function healPlanDuplicates_(){
+  try{
+    if(typeof st==='undefined' || !st || !st.plan) return 0;
+    if(st._planDedupeV===_PLAN_DEDUPE_V) return 0;
+    var days=0, killed=0, worst=0, worstDay='';
+    Object.keys(st.plan).forEach(function(dk){
+      var d=st.plan[dk]; if(!d || !Array.isArray(d.sessions)) return;
+      var live=d.sessions.filter(function(x){ return x && !x.deleted; });
+      if(live.length<2) return;
+      var byIdent={};
+      live.forEach(function(x){
+        var k=(x.type||'x')+'|'+(x.intent||'x');
+        (byIdent[k]=byIdent[k]||[]).push(x);
+      });
+      var dayKilled=0;
+      Object.keys(byIdent).forEach(function(k){
+        var group=byIdent[k]; if(group.length<2) return;
+        group.sort(function(a,b){
+          var au=(typeof _planUserOwned_==='function'&&_planUserOwned_(a))?1:0;
+          var bu=(typeof _planUserOwned_==='function'&&_planUserOwned_(b))?1:0;
+          if(au!==bu) return bu-au;                                  // athlete-owned first
+          var ac=(a.status==='completed')?1:0, bc=(b.status==='completed')?1:0;
+          if(ac!==bc) return bc-ac;                                  // then completed
+          return (+b.editedAt||0)-(+a.editedAt||0);                  // then newest
+        });
+        group.slice(1).forEach(function(x){
+          x.deleted=true;
+          if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']);
+          else x.editedAt=Date.now();
+          killed++; dayKilled++;
+        });
+      });
+      if(dayKilled){ days++; if(dayKilled>worst){ worst=dayKilled; worstDay=dk; } }
+    });
+    st._planDedupeV=_PLAN_DEDUPE_V;
+    if(killed){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    try{ console.log('[planDupe] collapsed '+killed+' duplicate session(s) across '+days+' day(s)'
+      +(worstDay?('; worst was '+worstDay+' with '+worst):'')); }catch(e){}
+    return killed;
+  }catch(e){ try{ console.error('[planDupe] '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
+function planUpsertSession_(dateKey, sess, editedFields, source, slotIdx){
   var key=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded bucket
   var s=_planCoherce_(normalizeSession_(sess, key));
   var day=planDay_(key, true);
-  if(s.id==null || s.id===''){ s.id='plan-'+key+'-'+day.sessions.length; }
+  // THE ID IS DERIVED FROM WHAT THE SESSION IS, NEVER FROM WHERE IT SITS.
+  //
+  // This line used to append the day's ARRAY LENGTH to the date. Positional, and day.sessions
+  // INCLUDES TOMBSTONES because a removal is a tombstone and never a splice. So every generator run
+  // read a length that its own previous tombstone had just grown, minted a brand-new id, and pushed
+  // another row. Measured by simulation: seven runs on one day produce seven rows. itemsMatch_
+  // matches by id ONLY - "two entries with different ids are different entries even when their
+  // content is identical" - so none of them ever collapse on merge.
+  //
+  // Worse across devices. Two devices with different tombstone counts assign the SAME positional id
+  // to DIFFERENT sessions, which then merge field-wise into one hybrid row - a type from one
+  // generation and an intent from another. That is the "Session: Other / Intent: Z2 endurance" the
+  // day editor was showing.
+  //
+  // A derived id fixes both: the same slot on the same day resolves to the same id on every device
+  // and on every run, so the upsert below REPLACES in place instead of appending, and two devices
+  // that generate the same day converge instead of accumulating. Same lesson as the nutrition id
+  // backfill (content-derived ids stop cross-device dupes) and the seeded-defaults rule.
+  //
+  // slotIdx disambiguates a genuine repeat of one identity in a single day (two strength slots); the
+  // caller supplies it from its own iteration order, which is stable. A USER session keeps a unique
+  // id - it is a distinct thing the athlete made, not a derivable slot - but is still not positional.
+  if(s.id==null || s.id===''){
+    if(source==='gen' || source==='migrated'){
+      s.id='plan-'+key+'-'+(s.type||'x')+'-'+(s.intent||'x')+(slotIdx>0?('-'+slotIdx):'');
+    } else {
+      s.id='plan-'+key+'-u'+Date.now()+'-'+day.sessions.length;
+    }
+  }
   if(source==='gen' || source==='migrated' || source==='user'){ s.source=source; }
   else if(!s.source){ try{ if(typeof console!=='undefined') console.warn('[planUpsert] no source declared for '+s.id+' — defaulting to user (unreplaceable). Fix the caller.'); }catch(e){} s.source='user'; }
   var errs=validateSession_(s);
@@ -55307,6 +55406,10 @@ window.onload = function(){
         // Same placement and same reasoning for the altitude-stream flag: AFTER the remote pull, so
         // it sees the merged library rather than whatever this device happened to hold at boot.
         try{ if(typeof healElevStreamFlag_==='function') healElevStreamFlag_(); }catch(e){}
+        // Collapse duplicate plan sessions AFTER the remote pull, so it sees the merged library
+        // rather than this device's local copy - the duplicates are a cross-device artefact and
+        // deduping a half-merged day would just leave the other device's copies to re-arrive.
+        try{ if(typeof healPlanDuplicates_==='function') healPlanDuplicates_(); }catch(e){}
         // Build segment effort history from what rides already carry. Local only, no API calls.
         try{ if(typeof harvestSegmentEfforts_==='function') harvestSegmentEfforts_(true); }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,

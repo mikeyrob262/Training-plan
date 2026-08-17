@@ -1024,6 +1024,20 @@ try {
     fail('the calendar cannot see what the block derives, or the block overrides a real decision (see above).');
   }
 
+  // STEP 64 - plan session identity. The session id was POSITIONAL (array length), and the array
+  //           includes tombstones because a removal is a tombstone not a splice - so every generator
+  //           run minted a fresh id and appended another row, and two devices assigned the SAME id to
+  //           DIFFERENT sessions. One Sunday reached ~13 live rows and the day editor read a hybrid.
+  console.log(`${D}. checking plan session identity...${X}`);
+  try {
+    const so = execSync('node scripts/plan-dupe-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('plan sessions can duplicate on every generation, or the dedupe does not converge (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
