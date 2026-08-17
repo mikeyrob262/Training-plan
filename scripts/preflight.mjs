@@ -968,6 +968,20 @@ try {
     fail('a ride harder than prescribed can read as executed, or a figure can be invented (see above).');
   }
 
+  // STEP 60 - plan source. A coaching surface may not name a session the plan does not hold. The
+  //           'TOMORROW on the plan' line was gated on truthiness, so it VANISHED whenever the date
+  //           fell outside the block - and the legacy week-index store (ws) was feeding prescription
+  //           names into three prompt builders, two of which built their whole upcoming list from it.
+  console.log(`${D}. checking plan source of truth...${X}`);
+  try {
+    const so = execSync('node scripts/plan-source-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a prompt can name a session the plan does not hold (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

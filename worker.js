@@ -33512,7 +33512,25 @@ function _smurkelFacts_(C){
     });
     L.push('  clean week: '+(C.weekCheck.pass?'yes':'no')+'; sessions on '+C.weekCheck.distinctDays+' separate days.');
   }
-  if(C.tomorrow) L.push('TOMORROW on the plan: '+(C.tomorrow.length?C.tomorrow.join(', '):'nothing')+'.');
+  // ALWAYS PUSHED, and that is the fix. This line used to be gated on C.tomorrow being truthy, so
+  // when blockPlanFor_ returned null - any date outside the block - the line VANISHED and the model
+  // was told nothing at all about tomorrow while section 7 still demanded a next instruction. A
+  // dropped line reads as "not applicable", and the model fills the gap; that is the exact trap the
+  // comment above this function warns about, six lines further down. Three states, all stated, none
+  // silent. The empty-array case was already handled - only null went quiet.
+  // Intents resolve to their real names: easyRun is a variable, not something a coach says out loud.
+  var _tmrTxt;
+  if(!C.tomorrow){
+    _tmrTxt='not known - tomorrow falls outside the current training block, so nothing is prescribed for it';
+  } else if(!C.tomorrow.length){
+    _tmrTxt='nothing scheduled';
+  } else {
+    _tmrTxt=C.tomorrow.map(function(x){
+      var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[x]:null;
+      return (d&&d.name)||x;
+    }).join(', ');
+  }
+  L.push('TOMORROW on the plan: '+_tmrTxt+'.');
   return L.join(NL);
 }
 // No apostrophes in here: a backslash-escaped quote inside this template literal loses a backslash
@@ -33697,7 +33715,13 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
       +'blown, by how many bpm, and what that means. Never fudge the figure - and a 2 bpm overrun is '
       +'both a real number and a small thing, so say both.'+NL
     +'- If a LAST COMPARABLE SESSION is given, say what MOVED against it, with both numbers. That '
-      +'comparison is the point of the debrief; today in isolation is a receipt, not coaching.'+NL+NL
+      +'comparison is the point of the debrief; today in isolation is a receipt, not coaching.'+NL
+    +'- TOMORROW is EXACTLY what the TOMORROW line above says and nothing more. Never name a session '
+      +'type for tomorrow that line did not name. If it says nothing is scheduled, or that tomorrow '
+      +'falls outside the block, say so plainly and frame anything you propose AS A SUGGESTION - "no '
+      +'session on the plan tomorrow, and if you want one I would..." - never as a prescription the '
+      +'athlete has been given. The Do This Next section is the headline action, so an invented '
+      +'session there is the most damaging thing in the whole debrief.'+NL+NL
     +'Structure, with short headings on their own lines. Skip any section you have no data for:'+NL
     +'1. Title line: the activity name and one line of riff.'+NL
     +'2. The Headline — two or three sentences. What this session WAS, whether it was executed, and the '
@@ -35067,18 +35091,20 @@ function dsShowAICoach(){
   // told, so a fabricated figure comes back as a confident coaching sentence.
   var _wk=wkgFromW_(ftp); var wkg=(_wk==null)?'unknown (no weight logged)':_wk.toFixed(2);
 
-  var weekData=ws(cw);
   var dayShort=['mon','tue','wed','thu','fri','sat','sun'];
-  var todayWorkout=((typeof getPlannedWorkoutForDate==='function'&&getPlannedWorkoutForDate(getTodayKey()))||{}).name||(weekData.swaps&&weekData.swaps[todayIdx])||(weekData.wo&&weekData.wo[todayIdx])||null;
+  // st.plan, then the block. The ws() fallback that used to sit on the end of this line is gone.
+  var todayWorkout=_promptPlannedFor_(getTodayKey());
 
   var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
   var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
   var todayActual=(st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
     .map(function(r){return actName_(r)+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
+  // Walks DATES now, not week-day indexes. The old loop had no date to work with, which is the only
+  // reason it could reach the week-keyed store at all.
   var upcoming=[];
   for(var di=todayIdx+1;di<7;di++){
-    var wkt=(weekData.swaps&&weekData.swaps[di])||(weekData.wo&&weekData.wo[di]);
+    var wkt=_promptPlannedFor_(_promptDateFor_(di-todayIdx));
     if(wkt) upcoming.push(dayShort[di]+': '+wkt);
   }
 
@@ -46485,6 +46511,41 @@ function setPlannedOverride_(dateKey, name, dur){
   try{ sv(); }catch(e){}
 }
 
+// ONE answer to "what is prescribed on this DATE", for every LLM prompt builder.
+//
+// st.plan first - the athlete's real, editable, date-keyed record - then the block template, which
+// is deterministic and version-controlled. NEVER the legacy week store: ws() is keyed by week-number
+// x day-index rather than by date, so it cannot be reconciled against a calendar day and it happily
+// survives block amendments that moved the session weeks ago. Three prompt builders used it as a
+// fallback and two built their entire UPCOMING list from it, which is how a session name nobody
+// scheduled reached a coaching prompt as fact.
+//
+// Returns null when neither source has anything, and null MUST be rendered as "nothing scheduled" by
+// the caller - never omitted. A dropped line reads as not-applicable and the model fills the gap.
+function _promptPlannedFor_(dateKey){
+  try{
+    if(!dateKey) return null;
+    var p=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
+    if(p && p.name) return p.name;
+    var b=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+    if(b && b.sessions && b.sessions.length){
+      return b.sessions.map(function(s){
+        var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[s&&s.intent]:null;
+        return (s&&s.rx&&s.rx.name)||(d&&d.name)||(s&&s.intent)||'';
+      }).filter(Boolean).join(', ')||null;
+    }
+  }catch(e){}
+  return null;
+}
+// Date key for an offset from today, so a prompt builder can ask about a DAY rather than a week
+// index. The legacy loops walked day indexes with no date at all, which is precisely why they could
+// only reach the week-keyed store.
+function _promptDateFor_(offsetDays){
+  try{
+    var d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+(offsetDays||0));
+    return (typeof _tbDK_==='function')?_tbDK_(d):null;
+  }catch(e){ return null; }
+}
 function getPlannedWorkoutForDate(dateStr){
   // Phase 0: reads the persistent plan (st.plan) EXCLUSIVELY — the ephemeral ws{}
   // DOM-scrape path is retired (the static markup is left inert). Returns the day's
@@ -49307,9 +49368,10 @@ function fetchTodaysDecision(weatherStr, callback){
   var ftp = parseInt(st.ftp||186);
   var weight = stWeightLb_();
 
-  var weekData = ws(cw);
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
-  var todayWorkout = ((typeof getPlannedWorkoutForDate==='function'&&getPlannedWorkoutForDate(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
+  // st.plan, then the block. The ws() fallback is gone: a week-index store cannot answer a question
+  // about a calendar day, and it was answering anyway.
+  var todayWorkout = _promptPlannedFor_(getTodayKey());
 
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
   var recentRides = (st.rides||[]).filter(function(r){
@@ -49412,11 +49474,12 @@ function showAICoach(){
   var _wk3=wkgFromW_(ftp); var wkg=(_wk3==null)?'unknown (no weight logged)':_wk3.toFixed(2);
 
   // Get this week's plan
-  var weekData = ws(cw);
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
   var dayNames2=['mon','tue','wed','thu','fri','sat','sun'];
   var todayKey = dayNames2[todayIdx];
-  var todayWorkout = ((typeof getPlannedWorkoutForDate==='function'&&getPlannedWorkoutForDate(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
+  // st.plan, then the block. The ws() fallback is gone: a week-index store cannot answer a question
+  // about a calendar day, and it was answering anyway.
+  var todayWorkout = _promptPlannedFor_(getTodayKey());
 
   // Get recent rides (last 7 days)
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
@@ -49427,9 +49490,11 @@ function showAICoach(){
     .map(function(r){return actName_(r)+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   // Get upcoming workouts this week
+  // Date-walked, same reason as the other builder.
   var upcoming = [];
   for(var d=todayIdx+1;d<7;d++){
-    if(weekData.wo&&weekData.wo[d]) upcoming.push({day:dayNames2[d],name:weekData.wo[d]});
+    var _up=_promptPlannedFor_(_promptDateFor_(d-todayIdx));
+    if(_up) upcoming.push({day:dayNames2[d],name:_up});
   }
 
   // Today's nutrition so far (calories/protein/carbs/fat)
