@@ -43,17 +43,29 @@ ok('the last rung steps DOWN into the taper', RUNGS[RUNGS.length - 1].mi < Math.
 
 console.log('\n' + Y + '=== the build is a build, not a staircase with a cliff in it ===' + X);
 {
+  // STEPS ARE MEASURED FROM THE RE-ANCHOR ONWARD. The Aug 16 rung is history - kept at the 3.0 it was
+  // prescribed at, because this table's contract is that a Sunday already run is never re-graded - so
+  // the jump from it to the re-anchored 4.5 is a correction to the ANCHOR, not a training step.
+  // Counting it as one would condemn a ramp whose real steps are all under 12%.
+  const ANCHOR = (src.match(/_RUN_BUILD_ANCHORED_FROM='([\d-]+)'/) || [])[1];
+  ok('the re-anchor date is declared', !!ANCHOR);
+  const live = RUNGS.filter((r) => r.date >= ANCHOR);
+  const past = RUNGS.filter((r) => r.date < ANCHOR);
   // Measured against the highest rung SO FAR, never the previous week: the week after a deliberate
-  // cut-back is a return to the build, not a 50% jump, and comparing to the previous week says the
+  // cut-back is a return to the build, not a jump, and comparing to the previous week says the
   // opposite. Getting this comparison wrong is how a sane ramp reads as reckless.
   let peak = 0, cutbacks = 0, steps = [];
-  RUNGS.forEach((r) => { if (r.mi < peak) cutbacks++; else if (peak) steps.push((r.mi - peak) / peak * 100); if (r.mi > peak) peak = r.mi; });
+  live.forEach((r) => { if (r.mi < peak) cutbacks++; else if (peak) steps.push((r.mi - peak) / peak * 100); if (r.mi > peak) peak = r.mi; });
   eq('two deliberate cut-backs', cutbacks, 2);
-  ok('no step over 20% above the prior peak', steps.every((s) => s <= 20));
-  ok('...and only the opening step exceeds 15%', steps.filter((s) => s > 15).length <= 1);
-  eq('peak is the race distance, not beyond it', peak, 6.2);
-  ok('peak is within 5% of a 10k (6.21 mi)', Math.abs(peak - 6.21) / 6.21 < 0.05);
-  ok('the ramp starts modestly off a thin run base', RUNGS[0].mi <= 3.5);
+  ok('EVERY live step is within the 13% guideline', steps.every((s) => s <= 13));
+  eq('the ramp is anchored at current fitness, not below it', live[0].mi, 4.5);
+  eq('peak is 7.0 mi', peak, 7.0);
+  ok('...which is 1.1-1.25x race distance, not merely equal to it',
+     (peak / 6.21) >= 1.10 && (peak / 6.21) <= 1.25);
+  // The old anchor is exactly the mistake being corrected, so assert it cannot come back.
+  ok('NEG: the ramp no longer opens at 3.0 mi', live[0].mi > 3.5);
+  // And the past rung must survive untouched, or the no-re-grading contract is broken.
+  eq('the past rung is preserved as prescribed', past.map((r) => r.date + ':' + r.mi), ['2026-08-16:3']);
 }
 console.log('\n' + Y + '=== duration tracks distance, and no load is invented ===' + X);
 ok('every rung carries a duration', RUNGS.every((r) => r.min > 0));
@@ -76,7 +88,7 @@ console.log('\n' + Y + '=== a Sunday already run is never re-graded ===' + X);
   eq('a past Sunday has no rung and is left alone', f('2026-08-09'), null);
   eq('...as is any date not in the table', f('2026-09-01'), null);
   eq('no date, no rung', f(''), null);
-  ok('a listed Sunday returns its rung', f('2026-09-20') && f('2026-09-20').mi === 5.0);
+  ok('a listed Sunday returns its rung', f('2026-09-20') && f('2026-09-20').mi === 6.0);
 }
 
 console.log('\n' + Y + '=== the Saturday collision is NAMED, not silently resolved ===' + X);
@@ -96,9 +108,12 @@ console.log('\n' + Y + '=== the Saturday collision is NAMED, not silently resolv
   const f = new Function('_RUN_BUILD', '_RUN_STACK_MIN_MI', ...names, exFn('_runBuildFor_') + 'return _runBuildFor_;')
     (Object.fromEntries(RUNGS.map((r) => [r.date, { mi: r.mi, durationMin: r.min }])), 5.0, ...names.map((n) => stub[n]));
   const flagged = RUNGS.filter((r) => { const v = f(r.date); return v && v.stack; }).map((r) => r.date);
-  eq('flagged exactly the three crunch weeks', flagged, ['2026-09-20', '2026-09-27', '2026-10-04']);
+  // FOUR now, not three. The re-anchored ramp puts more Sundays over the 5.0 mi threshold, so more of
+  // them genuinely land behind a climbing Saturday. The expectation tracks the real collisions rather
+  // than being a number that happened to be right once.
+  eq('flagged every genuine collision week', flagged, ['2026-08-30', '2026-09-20', '2026-09-27', '2026-10-04']);
   eq('...carrying the real climbing minutes', f('2026-10-04').stack, 80);
-  ok('a short run behind a big Saturday is NOT flagged', !f('2026-09-06').stack);
+  ok('a cut-back week behind a big Saturday is NOT flagged', !f('2026-09-06').stack);
   ok('a long run with no Saturday climbing is NOT flagged', !f('2026-10-11').stack);
 }
 

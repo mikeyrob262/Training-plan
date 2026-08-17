@@ -45923,24 +45923,36 @@ var _CLIMB_REHEARSAL={ 5:30, 6:40, 7:50, 9:60, 10:70, 11:80, 14:90 };
 // dated amendment rather than by editing the phase tables.
 //
 // THE RACE IS A 10k (P5 is literally 'label:10k week', the race session is S('tenk'), and P4's
-// Wednesday already carries 10k-pace work). Peak is 6.5 mi - just over race distance - eight days
-// out, then a 4.0 mi step down into P5, which already holds the final taper week. Sep 6 is a
+// Wednesday already carries 10k-pace work). Peak is 7.0 mi - about 1.13x race distance - eight days
+// out, then a 5.0 mi step down into P5, which already holds the final taper week. Sep 6 is a
 // deliberate cut-back, matching the week-4 convention _BLOCK_PROG uses.
+//
+// RE-ANCHORED 2026-08-17. The first pass opened at 3.0 mi, read off a thin running library (~16 runs
+// in 12 months). That was the wrong input: actual current fitness is 4.0-4.5 mi per run, so the ramp
+// now starts at 4.5 and the peak moves with it. Anchoring low was not merely conservative - holding
+// the old 6.2 mi peak off a 4.5 floor produced final steps of +5%, +3%, +3%, which is a ramp that
+// stops progressing exactly when it should be building.
+//
+// AUG 16 IS LEFT AT 3.0 ON PURPOSE. It is in the past now, and this table's whole contract is that a
+// Sunday already run is never re-graded. Editing it would rewrite what was prescribed on the day.
+// The +50% from that rung to the re-anchored 4.5 is therefore NOT a training step and must not be
+// read as one - step sizes are measured from _RUN_BUILD_ANCHORED_FROM onward.
+var _RUN_BUILD_ANCHORED_FROM='2026-08-23';
 //
 // MILES ARE THE PRESCRIPTION. durationMin is a secondary target derived at roughly 10:30/mi so the
 // session card shows a coherent time; if the real easy pace differs, the distance still stands. No
 // TSS is fabricated here and none can be: easyRun carries no pctFtp, so _planSessionFromDef_ derives
 // no tssTarget for it.
 var _RUN_BUILD={
-  '2026-08-16':{mi:3.0, durationMin:32},
-  '2026-08-23':{mi:3.5, durationMin:37},
-  '2026-08-30':{mi:4.0, durationMin:42},
-  '2026-09-06':{mi:3.0, durationMin:32},   // cut-back
-  '2026-09-13':{mi:4.5, durationMin:47},
-  '2026-09-20':{mi:5.0, durationMin:53},
-  '2026-09-27':{mi:5.5, durationMin:58},
-  '2026-10-04':{mi:6.2, durationMin:65},   // peak = the race distance itself, a +13% step not +18%
-  '2026-10-11':{mi:4.0, durationMin:42}    // step down; P5 holds the race-week taper
+  '2026-08-16':{mi:3.0, durationMin:32},   // PAST - the prescription as given that day, never re-graded
+  '2026-08-23':{mi:4.5, durationMin:47},   // re-anchor: actual current fitness is 4.0-4.5 mi/run
+  '2026-08-30':{mi:5.0, durationMin:53},
+  '2026-09-06':{mi:4.0, durationMin:42},   // cut-back
+  '2026-09-13':{mi:5.5, durationMin:58},
+  '2026-09-20':{mi:6.0, durationMin:63},
+  '2026-09-27':{mi:6.5, durationMin:68},
+  '2026-10-04':{mi:7.0, durationMin:74},   // peak, ~1.13x race distance
+  '2026-10-11':{mi:5.0, durationMin:53}    // step down; P5 holds the race-week taper
 };
 // The Saturday this Sunday sits behind, so the stacked-load weeks can be NAMED rather than silently
 // resolved. Per the owner's call: ramp both and flag the collision, decide on the day. Only reported
