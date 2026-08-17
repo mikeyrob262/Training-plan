@@ -1038,6 +1038,20 @@ try {
     fail('plan sessions can duplicate on every generation, or the dedupe does not converge (see above).');
   }
 
+  // STEP 65 - map water. NAIP is land aerial photography and returns a FULLY TRANSPARENT tile over
+  //           open water, so Lake Michigan showed as Leaflet's default #ddd. An Esri Ocean base now
+  //           sits in a pane below the imagery. Not a flat blue fill: NAIP 404s outside the US, and
+  //           a blanket water colour would have painted Paris and Watopia as solid ocean.
+  console.log(`${D}. checking map water underlay...${X}`);
+  try {
+    const so = execSync('node scripts/map-water-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('open water renders as blank, or the underlay leaked onto a non-satellite base (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

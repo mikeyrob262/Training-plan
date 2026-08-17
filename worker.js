@@ -41666,10 +41666,45 @@ function addRideMapBase_(map, defaultBase, storeKey){
     }
   }catch(e){}
   var satRoads=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'satRoads'});
+  // GROUND UNDER THE IMAGERY, for everywhere NAIP has no photo.
+  //
+  // NAIP is farmland/land aerial photography and was never flown over open water, so a Lake Michigan
+  // tile comes back 200 OK and FULLY TRANSPARENT - measured: rgba(0,0,0,0) across all 65,536 pixels,
+  // 872 bytes. A coastal tile is partly transparent the same way (the Chicago tile is 10.9% clear).
+  // Nothing was failing to load; there was simply no pixel, and Leaflet's default #ddd container
+  // showed through, which is the flat white-grey lake on the lakefront routes.
+  //
+  // A FLAT BLUE FILL WOULD HAVE BEEN WRONG. The note above records that NAIP 404s at every zoom
+  // outside the US, so Paris and Watopia have no imagery at all - a blanket water colour would paint
+  // those maps as solid ocean, which is worse than the grey it replaces. A real map underneath is
+  // right everywhere: the lake reads as the lake with a correct shoreline, and a Zwift world lands on
+  // plain ground instead of nothing, which is what the US-ONLY note already wanted.
+  //
+  // COSTS NOTHING WHERE NAIP EXISTS. It sits in a pane BELOW tilePane, so over the US it is entirely
+  // hidden behind opaque imagery and cannot add any of the visual noise the NAIP choice was made to
+  // avoid. It carries no labels of its own either - satLabels already draws names, and two label
+  // sets double-print every town.
+  //
+  // WHICH UNDERLAY, MEASURED RATHER THAN GUESSED. Sampling the same Lake Michigan tile out of each
+  // candidate: Carto voyager water is rgb(213,232,235) and positron rgb(212,218,220) - both within a
+  // few points of the #ddd this replaces, so the lake would still have read as pale grey and the fix
+  // would have looked like no fix at all. Carto dark is rgb(38,38,38), which reads as a hole punched
+  // in the map. Esri World_Ocean_Base gives rgb(181,208,235) over water and rgb(242,236,222) over
+  // land: an actual blue lake, and neutral ground for the non-US case.
+  try{
+    if(!map.getPane('satBase')){
+      map.createPane('satBase');
+      map.getPane('satBase').style.zIndex=190;         // tilePane is 200
+    }
+  }catch(e){}
+  var satUnder=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+    {detectRetina:false,maxZoom:19,maxNativeZoom:13,pane:'satBase',attribution:'Ocean base &copy; Esri'});
   function showLabels(which){
     try{ map.removeLayer(darkLabels); }catch(e){}
     try{ map.removeLayer(satLabels); }catch(e){}
     try{ map.removeLayer(satRoads); }catch(e){}
+    try{ map.removeLayer(satUnder); }catch(e){}
+    if(which==='satellite'){ try{ satUnder.addTo(map); }catch(e){} }
     // The light style bakes its own labels; adding an overlay double-prints every place name.
     if(which!=='light'){ try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){} }
     if(which==='satellite'){ try{ satRoads.addTo(map); }catch(e){} }
