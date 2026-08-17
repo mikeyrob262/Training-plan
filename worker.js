@@ -37842,8 +37842,31 @@ function dsShowCalendar(){
           // Planned workout for this date (persisted override) — shown on ALL days,
           // alongside any completed activity, gated by the Planned/Rest filters.
           var planRaw=(c.date && calFilter.planned && typeof getPlannedWorkoutForDate==='function')?(getPlannedWorkoutForDate(c.date)||null):null;
+          // st.plan holds no trainable session for this day - ASK THE BLOCK, which is what Dr Smurkel
+          // and the prompt resolver already answer from. Without this the Calendar was blind to
+          // everything the block derives rather than stores (the Sunday run distance, the climb
+          // rehearsal, the strength rotation), and a Sunday carrying a stale rest row read as "Rest
+          // Day" while every other surface said Easy Run.
+          //
+          // TWO GUARDS, both of which must beat the block:
+          //   swap===true  - the one thing the codebase treats as an athlete DECISION. If they swapped
+          //                  this day, the block does not get to argue.
+          //   a TOMBSTONE  - a deleted session is a removal, and re-showing it from the block would
+          //                  undo a deletion. Checked against the RAW day (planSessionsForDate_
+          //                  filters deleted out, so it cannot see them).
+          if(!planRaw && c.date && calFilter.planned && typeof blockPlannedForDate_==='function'){
+            var _raw=(function(){ try{ var dd=st.plan&&st.plan[c.date]; return (dd&&dd.sessions)||[]; }catch(e){ return []; } })();
+            var _decided=_raw.some(function(x){ return x && x.swap===true; });
+            var _tombed={}; _raw.forEach(function(x){ if(x&&x.deleted&&x.intent) _tombed[x.intent]=1; });
+            if(!_decided){
+              var _bpl=blockPlannedForDate_(c.date);
+              if(_bpl && !_tombed[_bpl.intent]) planRaw=_bpl;
+            }
+          }
           // getPlannedWorkoutForDate excludes rest (rest != workout), so surface a
           // rest DAY here or the cell draws blank. A rest-only day -> synthetic Rest.
+          // Runs AFTER the block fallback: a stored rest row that contradicts a prescribed session is
+          // residue, and the day is not a rest day just because an old row says so.
           if(!planRaw && c.date && calFilter.planned && typeof planSessionsForDate_==='function'){
             var _rs=planSessionsForDate_(c.date).filter(function(x){ return x && x.type==='rest'; })[0];
             if(_rs) planRaw={ name:'Rest', type:'rest', intent:'', sessions:[_rs] };
@@ -46609,12 +46632,12 @@ function _promptPlannedFor_(dateKey){
     if(!dateKey) return null;
     var p=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
     if(p && p.name) return p.name;
-    var b=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+    // Through blockPlannedForDate_ rather than re-reading blockPlanFor_ here. Two copies of "resolve
+    // the block for a date" is how the prompts and the Calendar would drift apart again - which is
+    // the entire failure this chain of fixes has been chasing.
+    var b=(typeof blockPlannedForDate_==='function')?blockPlannedForDate_(dateKey):null;
     if(b && b.sessions && b.sessions.length){
-      return b.sessions.map(function(s){
-        var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[s&&s.intent]:null;
-        return (s&&s.rx&&s.rx.name)||(d&&d.name)||(s&&s.intent)||'';
-      }).filter(Boolean).join(', ')||null;
+      return b.sessions.map(function(s){ return (s&&s.name)||''; }).filter(Boolean).join(', ')||null;
     }
   }catch(e){}
   return null;
@@ -46626,6 +46649,37 @@ function _promptDateFor_(offsetDays){
   try{
     var d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+(offsetDays||0));
     return (typeof _tbDK_==='function')?_tbDK_(d):null;
+  }catch(e){ return null; }
+}
+// What the BLOCK prescribes for a date, returned in the SAME shape getPlannedWorkoutForDate uses, so
+// a renderer can fall back to it without knowing anything about block internals.
+//
+// WHY THIS EXISTS. The Calendar read st.plan and nothing else - blockPlanFor_ appears nowhere in its
+// renderer - so anything the block DERIVES rather than stores was invisible to it. That is not a
+// stale-row problem and the migrate-the-rows pattern does not fix it: the Sunday run distance, the
+// Ven-Top climb rehearsal and the A/B/C/D strength rotation are all resolved at read time BY DESIGN,
+// precisely so they cannot go stale. Copying them into st.plan would recreate the staleness they
+// were built to avoid. The Calendar needs to ASK, the way Dr Smurkel already does.
+//
+// The struct is carried as the duration string because that is where the interesting prescription
+// lives once a session is derived - "5.0 mi easy", "2x20 min, 5 min recovery" - and a bare minute
+// count throws exactly that away.
+function blockPlannedForDate_(dateStr){
+  try{
+    if(!dateStr || typeof blockPlanFor_!=='function') return null;
+    var bp=blockPlanFor_(dateStr);
+    if(!bp || !bp.sessions || !bp.sessions.length) return null;
+    var out=[];
+    bp.sessions.forEach(function(s){
+      var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[s&&s.intent]:null;
+      if(!d || d.type==='rest') return;                       // rest is not a workout, same rule as st.plan
+      out.push({ intent:s.intent, type:d.type, name:(s.rx&&s.rx.name)||d.name||s.intent,
+                 struct:s.struct||'', targets:(s.rx&&s.rx.targets)||null, runMi:(s.runMi!=null?s.runMi:null) });
+    });
+    if(!out.length) return null;
+    var p=out[0];
+    var dur=p.struct || (p.targets&&p.targets.durationMin!=null?(p.targets.durationMin+' min'):'');
+    return { name:p.name, dur:dur, type:p.type, intent:p.intent, sessions:out, fromBlock:true };
   }catch(e){ return null; }
 }
 function getPlannedWorkoutForDate(dateStr){
@@ -52631,6 +52685,17 @@ function showCalendarTab(){
     var isToday=(i===dow);
     // Real planned workout for THIS day (works for future days too).
     var pw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dKey):null;
+    // SAME BLOCK FALLBACK AS THE DESKTOP MONTH GRID, and it has to be here too: these are parallel
+    // renderers, so fixing one leaves the other reading a Sunday as Rest while the desktop shows the
+    // run. Guards are identical - an explicit swap and a tombstone both beat the block.
+    if(!pw && typeof blockPlannedForDate_==='function'){
+      var _rawM=(function(){ try{ var dd=st.plan&&st.plan[dKey]; return (dd&&dd.sessions)||[]; }catch(e){ return []; } })();
+      if(!_rawM.some(function(x){ return x && x.swap===true; })){
+        var _tM={}; _rawM.forEach(function(x){ if(x&&x.deleted&&x.intent) _tM[x.intent]=1; });
+        var _bM=blockPlannedForDate_(dKey);
+        if(_bM && !_tM[_bM.intent]) pw=_bM;
+      }
+    }
     // getPlannedWorkoutForDate excludes rest; a stored Rest day surfaces here so it reads
     // "Rest" (explicit) rather than the generic "Recovery" shown for an unplanned day.
     var restSess=(!pw && typeof planSessionsForDate_==='function')?(planSessionsForDate_(dKey).filter(function(x){ return x && x.type==='rest'; })[0]||null):null;

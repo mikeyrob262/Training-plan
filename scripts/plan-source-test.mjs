@@ -43,7 +43,10 @@ const eq = (l, got, want) => { const c = JSON.stringify(got) === JSON.stringify(
 console.log('\n' + Y + '=== one resolver, and it never reads the week-index store ===' + X);
 ok('_promptPlannedFor_ exists', /function _promptPlannedFor_\(dateKey\)/.test(src));
 ok('...it reads st.plan first', /getPlannedWorkoutForDate\(dateKey\)/.test(exFn('_promptPlannedFor_')));
-ok('...then falls back to the block', /blockPlanFor_\(dateKey\)/.test(exFn('_promptPlannedFor_')));
+// Delegates to blockPlannedForDate_ rather than re-reading blockPlanFor_ itself: two copies of
+// "resolve the block for a date" is exactly how the prompts and the Calendar drifted apart.
+ok('...then falls back to the block, through the shared resolver', /blockPlannedForDate_\(dateKey\)/.test(exFn('_promptPlannedFor_')));
+ok('...and there is only ONE block resolver', /function blockPlannedForDate_\(dateStr\)/.test(src));
 ok('...and never touches ws()', !/\bws\(/.test(exFn('_promptPlannedFor_').replace(/\/\/[^\n]*/g, '')));
 // The regression itself: no prompt builder may read the week store for a prescription again.
 ok('NO builder reads weekData.wo', !/weekData\.wo/.test(src));
@@ -60,7 +63,10 @@ console.log('\n' + Y + '=== the resolver, exercised ===' + X);
     };
     const DEFS = { easyRun: { name: 'Easy Run' }, z2: { name: 'Z2 Endurance' }, strengthA: { name: 'Strength A' } };
     const names = Object.keys(stub);
-    return new Function('SESSION_DEFS', ...names, asServed(exFn('_promptPlannedFor_') + 'return _promptPlannedFor_;'))
+    // Both real functions are pulled in - the resolver AND the block adapter it now delegates to -
+    // so this exercises the actual delegation rather than a stub standing in for half of it.
+    return new Function('SESSION_DEFS', ...names,
+      asServed(exFn('blockPlannedForDate_') + exFn('_promptPlannedFor_') + 'return _promptPlannedFor_;'))
       (DEFS, ...names.map((n) => stub[n]));
   };
   eq('st.plan wins when it has a record', mk('Threshold', ['easyRun'])('2026-08-16'), 'Threshold');

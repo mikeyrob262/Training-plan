@@ -1010,6 +1010,20 @@ try {
     fail('the weather card answers for the wrong window or the wrong moment (see above).');
   }
 
+  // STEP 63 - calendar block fallback. blockPlanFor_ appeared NOWHERE in the calendar renderer, so
+  //           everything the block derives rather than stores (Sunday run distance, climb rehearsal,
+  //           strength rotation) was invisible and a stale rest row read as "Rest Day". Fixed as a
+  //           missing READ PATH, not a data migration - an explicit swap and a tombstone still win.
+  console.log(`${D}. checking calendar block fallback...${X}`);
+  try {
+    const so = execSync('node scripts/cal-block-fallback-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the calendar cannot see what the block derives, or the block overrides a real decision (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
