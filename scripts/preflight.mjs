@@ -982,6 +982,20 @@ try {
     fail('a prompt can name a session the plan does not hold (see above).');
   }
 
+  // STEP 61 - Sunday run build. Keyed by DATE, not week-in-phase: _BLOCK_PROG resets at a phase
+  //           boundary, which is right for a microcycle and wrong for a build toward a fixed race.
+  //           Guards that no rung lands in P5's date-driven taper, that a past Sunday is never
+  //           re-graded, and that the Saturday collision is flagged rather than silently resolved.
+  console.log(`${D}. checking Sunday run build...${X}`);
+  try {
+    const so = execSync('node scripts/run-build-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the run build re-grades a past Sunday, overwrites the taper, or hides the stacked load (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

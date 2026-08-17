@@ -30764,7 +30764,21 @@ function blockPlanFor_(dateKey){
     var _cl=(typeof _climbRehearsalFor_==='function' && (_int==='group'||_int==='long'))
       ? _climbRehearsalFor_(dateKey) : null;
     if(_cl){ _st=(_st?(_st+' · '):'')+_cl+' min sustained climbing block'; }
-    return { intent:_int, struct:_st, when:sl.t||null, rx:rx, progWeek:_pw, climbMin:_cl||null };
+    // The Sunday run build. Gated on via==='week' so it can never touch a DATE-driven day — P5 is
+    // entirely date-driven and holds the race-week taper, which must not be overwritten by a ramp
+    // rung. Sunday only (mon===6) and easyRun only, so no other slot inherits a distance target.
+    // REPLACES the struct rather than appending: once the prescription is a distance, carrying the
+    // phase's minute range alongside it would be two prescriptions for one run.
+    var _rb=(typeof _runBuildFor_==='function' && _int==='easyRun' && mon===6 && via==='week')
+      ? _runBuildFor_(dateKey) : null;
+    if(_rb){
+      _st=_rb.mi.toFixed(1)+' mi easy'
+        +(_rb.stack?(' · stacked behind '+_rb.stack+' min of Saturday climbing - decide on the day which one gives'):'');
+      // The duration target moves with the distance, or the card would show a 5.5 mi run priced at
+      // the phase's 27-29 min. No TSS is touched: easyRun has no power band to derive one from.
+      if(rx && rx.targets) rx.targets.durationMin=_rb.durationMin;
+    }
+    return { intent:_int, struct:_st, when:sl.t||null, rx:rx, progWeek:_pw, climbMin:_cl||null, runMi:(_rb?_rb.mi:null) };
   });
   // A session the athlete has CLAIMED (source 'user' — a swap or a day-editor change) overrides the
   // template for that date.
@@ -45891,6 +45905,62 @@ var _BLOCK_PROG={
 // the rungs are meant to be adjusted. What is NOT adjustable is the shape: it has to reach 90
 // before the first attempt, and it has to arrive there by building rather than by jumping.
 var _CLIMB_REHEARSAL={ 5:30, 6:40, 7:50, 9:60, 10:70, 11:80, 14:90 };
+// ==================== SUNDAY RUN BUILD -> OCT 18 10k ====================
+//
+// The Sunday run was already stepping by PHASE - 20-25 min in P1, 25-27 in P2, 27-29 in P4 - so it
+// was never a fixed distance repeated for two months. What it had no version of was a week-to-week
+// build in MILES aimed at a date, which is what a race needs.
+//
+// KEYED BY DATE, NOT BY WEEK INDEX, and deliberately so. _BLOCK_PROG keys on week-IN-PHASE and
+// therefore RESETS at every phase boundary, which is right for a repeating microcycle and wrong for
+// a build toward a fixed day - the file already draws this distinction on the Ven-Top rehearsal:
+// a microcycle repeats, a rehearsal accumulates. A race build accumulates too. Explicit dates go
+// further than an absolute-week index: there are only nine Sundays in question, the table reads as
+// the calendar it actually is, and it cannot drift if a phase boundary moves.
+//
+// PAST SUNDAYS ARE ABSENT BY DESIGN. A date with no key gets the unmodified phase prescription, so
+// this cannot re-grade a Sunday already run - the same reason the Thu/Fri exchange was applied as a
+// dated amendment rather than by editing the phase tables.
+//
+// THE RACE IS A 10k (P5 is literally 'label:10k week', the race session is S('tenk'), and P4's
+// Wednesday already carries 10k-pace work). Peak is 6.5 mi - just over race distance - eight days
+// out, then a 4.0 mi step down into P5, which already holds the final taper week. Sep 6 is a
+// deliberate cut-back, matching the week-4 convention _BLOCK_PROG uses.
+//
+// MILES ARE THE PRESCRIPTION. durationMin is a secondary target derived at roughly 10:30/mi so the
+// session card shows a coherent time; if the real easy pace differs, the distance still stands. No
+// TSS is fabricated here and none can be: easyRun carries no pctFtp, so _planSessionFromDef_ derives
+// no tssTarget for it.
+var _RUN_BUILD={
+  '2026-08-16':{mi:3.0, durationMin:32},
+  '2026-08-23':{mi:3.5, durationMin:37},
+  '2026-08-30':{mi:4.0, durationMin:42},
+  '2026-09-06':{mi:3.0, durationMin:32},   // cut-back
+  '2026-09-13':{mi:4.5, durationMin:47},
+  '2026-09-20':{mi:5.0, durationMin:53},
+  '2026-09-27':{mi:5.5, durationMin:58},
+  '2026-10-04':{mi:6.2, durationMin:65},   // peak = the race distance itself, a +13% step not +18%
+  '2026-10-11':{mi:4.0, durationMin:42}    // step down; P5 holds the race-week taper
+};
+// The Saturday this Sunday sits behind, so the stacked-load weeks can be NAMED rather than silently
+// resolved. Per the owner's call: ramp both and flag the collision, decide on the day. Only reported
+// once the run is long enough for the pairing to actually matter.
+var _RUN_STACK_MIN_MI=5.0;
+function _runBuildFor_(dateKey){
+  if(!dateKey) return null;
+  var r=_RUN_BUILD[dateKey]; if(!r) return null;
+  var stack=null;
+  try{
+    if(r.mi>=_RUN_STACK_MIN_MI && typeof _blockDay_==='function' && typeof _tbDK_==='function'){
+      var d=_blockDay_(dateKey);
+      if(d){
+        var sat=_tbDK_(new Date(d.getTime()-86400000));
+        if(typeof _climbRehearsalFor_==='function') stack=_climbRehearsalFor_(sat)||null;
+      }
+    }
+  }catch(e){ stack=null; }
+  return { mi:r.mi, durationMin:r.durationMin, stack:stack };
+}
 // Absolute week of the block, 1-based. _BLOCK_START is a Friday, so this counts from the block's
 // own first day rather than from a Monday - the rehearsal is a Saturday feature and only ever asks
 // "how deep into the block is this".
