@@ -37857,13 +37857,23 @@ function dsShowCalendar(){
           // TWO GUARDS, both of which must beat the block:
           //   swap===true  - the one thing the codebase treats as an athlete DECISION. If they swapped
           //                  this day, the block does not get to argue.
-          //   a TOMBSTONE  - a deleted session is a removal, and re-showing it from the block would
-          //                  undo a deletion. Checked against the RAW day (planSessionsForDate_
-          //                  filters deleted out, so it cannot see them).
+          //   a USER TOMBSTONE - a session the ATHLETE deleted is a decision, and re-showing it from
+          //                  the block would undo that deletion. Checked against the RAW day, since
+          //                  planSessionsForDate_ filters deleted rows out and cannot see them.
+          //
+          // ONLY A USER-OWNED TOMBSTONE COUNTS, and getting this wrong is what broke every Sunday.
+          // generateBlockPlan_ TOMBSTONES ITS OWN REPLACEABLE ROWS ON EVERY RUN - that is its normal
+          // clear-and-regenerate cycle, not a removal - so every day it has ever touched carries
+          // generator tombstones for exactly the intents the block still prescribes. Treating those
+          // as deletions suppressed the fallback on every one of them, which read as "Rest Day"
+          // across Aug 23, Aug 30 and Sep 6 alike. A tombstone is only a DECISION when the athlete
+          // made it; generator residue is bookkeeping.
           if(!planRaw && c.date && calFilter.planned && typeof blockPlannedForDate_==='function'){
             var _raw=(function(){ try{ var dd=st.plan&&st.plan[c.date]; return (dd&&dd.sessions)||[]; }catch(e){ return []; } })();
             var _decided=_raw.some(function(x){ return x && x.swap===true; });
-            var _tombed={}; _raw.forEach(function(x){ if(x&&x.deleted&&x.intent) _tombed[x.intent]=1; });
+            var _tombed={}; _raw.forEach(function(x){
+              if(x && x.deleted && x.intent && typeof _planSource_==='function' && _planSource_(x)==='user') _tombed[x.intent]=1;
+            });
             if(!_decided){
               var _bpl=blockPlannedForDate_(c.date);
               if(_bpl && !_tombed[_bpl.intent]) planRaw=_bpl;
@@ -46322,6 +46332,60 @@ function healPlanDuplicates_(){
     return killed;
   }catch(e){ try{ console.error('[planDupe] '+((e&&e.message)||e)); }catch(_e){} return 0; }
 }
+// A GENERATED ROW THE BLOCK NO LONGER PRESCRIBES IS RESIDUE.
+//
+// The duplicate collapse above fixes rows that describe the SAME thing. It cannot touch a row that
+// describes the WRONG thing - a stale generator-owned 'rest' sitting on a Sunday the block now
+// prescribes an Easy Run for. migrateBlockSessions_ cannot either: it corrects intent in place on
+// SAME-TYPE sessions and deliberately never adds or removes rows, so rest (type 'rest') and the run
+// (type 'run') never meet.
+//
+// That row is why the day editor still opened on "Session: Rest" after the tile was right. Fixing
+// the tile without it would have been the third layer of compensation over the same rot.
+//
+// NARROW BY CONSTRUCTION:
+//   FUTURE ONLY      - a past row is the record of what was prescribed at the time
+//   GENERATOR-OWNED  - never an athlete's session, never a completed one, never an explicit swap
+//   BLOCK MUST SPEAK - if the block prescribes nothing for the day, nothing here is stale; skip
+// Tombstoned and stamped, never spliced, exactly like every other removal in this file.
+var _PLAN_STALE_V='planstale-1';
+function healStalePlanRows_(){
+  try{
+    if(typeof st==='undefined' || !st || !st.plan) return 0;
+    if(st._planStaleV===_PLAN_STALE_V) return 0;
+    if(typeof blockPlanFor_!=='function' || typeof SESSION_DEFS==='undefined') return 0;
+    var today=(typeof getTodayKey==='function')?getTodayKey():null; if(!today) return 0;
+    var killed=0, days=0, detail={};
+    Object.keys(st.plan).forEach(function(dk){
+      if(String(dk)<today) return;                       // never rewrite the past
+      var d=st.plan[dk]; if(!d || !Array.isArray(d.sessions)) return;
+      var bp=null; try{ bp=blockPlanFor_(dk); }catch(e){ return; }
+      if(!bp || !bp.sessions || !bp.sessions.length) return;   // block says nothing -> nothing is stale
+      var wanted={};
+      bp.sessions.forEach(function(w){
+        var def=SESSION_DEFS[w&&w.intent]; if(!def) return;
+        wanted[(def.type||'x')+'|'+(def.type==='rest'?'':(w.intent||'x'))]=1;
+      });
+      var hit=0;
+      d.sessions.forEach(function(x){
+        if(!x || x.deleted) return;
+        if(x.swap===true || x.status==='completed') return;
+        if(typeof _planSource_!=='function' || _planSource_(x)==='user') return;   // athlete's, leave it
+        var k=(x.type||'x')+'|'+(x.intent||'x');
+        if(wanted[k]) return;                            // still prescribed
+        x.deleted=true;
+        if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); else x.editedAt=Date.now();
+        killed++; hit++; detail[k]=(detail[k]||0)+1;
+      });
+      if(hit) days++;
+    });
+    st._planStaleV=_PLAN_STALE_V;
+    if(killed){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    try{ console.log('[planStale] retired '+killed+' generated row(s) the block no longer prescribes, across '
+      +days+' future day(s) '+JSON.stringify(detail)); }catch(e){}
+    return killed;
+  }catch(e){ try{ console.error('[planStale] '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function planUpsertSession_(dateKey, sess, editedFields, source, slotIdx){
   var key=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded bucket
   var s=_planCoherce_(normalizeSession_(sess, key));
@@ -52790,7 +52854,11 @@ function showCalendarTab(){
     if(!pw && typeof blockPlannedForDate_==='function'){
       var _rawM=(function(){ try{ var dd=st.plan&&st.plan[dKey]; return (dd&&dd.sessions)||[]; }catch(e){ return []; } })();
       if(!_rawM.some(function(x){ return x && x.swap===true; })){
-        var _tM={}; _rawM.forEach(function(x){ if(x&&x.deleted&&x.intent) _tM[x.intent]=1; });
+        // USER-owned tombstones only - see the desktop note. A generator tombstone is bookkeeping
+        // from the clear-and-regenerate cycle, and counting it as a deletion blanked every Sunday.
+        var _tM={}; _rawM.forEach(function(x){
+          if(x && x.deleted && x.intent && typeof _planSource_==='function' && _planSource_(x)==='user') _tM[x.intent]=1;
+        });
         var _bM=blockPlannedForDate_(dKey);
         if(_bM && !_tM[_bM.intent]) pw=_bM;
       }
@@ -55410,6 +55478,9 @@ window.onload = function(){
         // rather than this device's local copy - the duplicates are a cross-device artefact and
         // deduping a half-merged day would just leave the other device's copies to re-arrive.
         try{ if(typeof healPlanDuplicates_==='function') healPlanDuplicates_(); }catch(e){}
+        // Then retire generated rows the block no longer prescribes. AFTER the dedupe, so it works on
+        // one row per identity rather than thirteen copies of the same stale one.
+        try{ if(typeof healStalePlanRows_==='function') healStalePlanRows_(); }catch(e){}
         // Build segment effort history from what rides already carry. Local only, no API calls.
         try{ if(typeof harvestSegmentEfforts_==='function') harvestSegmentEfforts_(true); }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,

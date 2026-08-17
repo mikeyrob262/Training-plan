@@ -172,6 +172,58 @@ console.log('\n' + Y + '=== the rows already stored get collapsed ===' + X);
   eq('NEG: tombstones are ignored, only live rows collapse', run({ '2026-08-25': tombs }).n, 0);
 }
 
+console.log('\n' + Y + '=== a generated row the block no longer prescribes is retired ===' + X);
+{
+  // The duplicate collapse fixes rows describing the SAME thing. It cannot touch one describing the
+  // WRONG thing - a stale generator 'rest' on a Sunday the block now prescribes a run for. That row
+  // is what the day editor was still opening on after the tile was already right.
+  const DEFS = { easyRun:{type:'run'}, mobility:{type:'mobility'}, z2:{type:'ride'}, rest:{type:'rest'} };
+  const VER = (src.match(/_PLAN_STALE_V='([^']+)'/) || [])[1];
+  ok('the stale-row version constant is declared', !!VER);
+  const stub = {
+    blockPlanFor_: (dk) => (dk >= '2026-08-23' ? { sessions:[{intent:'easyRun'},{intent:'mobility'}] } : null),
+    SESSION_DEFS: DEFS,
+    getTodayKey: () => '2026-08-20',
+    _planSource_: (s) => (s && s.source) || 'user',
+    markPlanEdited_: (s, f) => { (s._edited = s._edited || {}); (f||[]).forEach((x)=>s._edited[x]=1); s.editedAt = 777; return s; },
+    sv: () => {}, console: { log(){}, error(){} }
+  };
+  const names = Object.keys(stub);
+  function run(plan){
+    const st = { plan: plan };
+    const f = new Function('st', '_PLAN_STALE_V', ...names,
+      asServed(exFn('healStalePlanRows_') + 'return healStalePlanRows_;'))(st, VER, ...names.map((n)=>stub[n]));
+    return { n: f(), st };
+  }
+  const sunday = { sessions: [
+    { id:'r', type:'rest', intent:'',         source:'gen' },     // stale: block prescribes a run
+    { id:'a', type:'run',  intent:'easyRun',  source:'gen' },     // still prescribed
+    { id:'m', type:'mobility', intent:'mobility', source:'gen' }  // still prescribed
+  ]};
+  let r = run({ '2026-08-23': sunday });
+  eq('the stale rest row is retired', r.n, 1);
+  eq('...leaving what the block actually prescribes', sunday.sessions.filter((s)=>!s.deleted).map((s)=>s.id), ['a','m']);
+  ok('...tombstoned and stamped, not spliced',
+     sunday.sessions.length === 3 && sunday.sessions[0].deleted === true && sunday.sessions[0].editedAt === 777);
+
+  // Everything that must survive it.
+  const guarded = { sessions: [
+    { id:'u', type:'rest', intent:'', source:'user' },                       // athlete's own rest
+    { id:'c', type:'rest', intent:'', source:'gen', status:'completed' },    // completed
+    { id:'s', type:'rest', intent:'', source:'gen', swap:true }              // explicit swap
+  ]};
+  eq('NEG: an athlete rest, a completed row and a swap are all untouched', run({ '2026-08-30': guarded }).n, 0);
+
+  const past = { sessions:[{ id:'r', type:'rest', intent:'', source:'gen' }] };
+  eq('NEG: a PAST day is never rewritten', run({ '2026-08-16': past }).n, 0);
+
+  const noBlock = { sessions:[{ id:'r', type:'rest', intent:'', source:'gen' }] };
+  eq('NEG: a day the block says nothing about is left alone', run({ '2026-08-21': noBlock }).n, 0);
+
+  const already = { sessions:[{ id:'r', type:'rest', intent:'', source:'gen', deleted:true }] };
+  eq('NEG: an existing tombstone is not re-killed', run({ '2026-08-24': already }).n, 0);
+}
+
 console.log('\n' + Y + '=== the heal converges and runs where it can see the merge ===' + X);
 ok('version stamped, so it runs once per client', /st\._planDedupeV=_PLAN_DEDUPE_V;/.test(src));
 ok('...and returns early once stamped', /if\(st\._planDedupeV===_PLAN_DEDUPE_V\) return 0;/.test(src));

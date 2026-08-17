@@ -82,10 +82,37 @@ console.log('\n' + Y + '=== both renderers fall back, and neither can drift ==='
 console.log('\n' + Y + '=== the two things that still beat the block ===' + X);
 {
   ok('DESKTOP honours an explicit swap', /_decided=_raw\.some\(function\(x\)\{ return x && x\.swap===true; \}\)/.test(src));
-  ok('DESKTOP honours a tombstone', /if\(x&&x\.deleted&&x\.intent\) _tombed\[x\.intent\]=1;/.test(src));
+  ok('DESKTOP honours a tombstone', /x && x\.deleted && x\.intent && typeof _planSource_==='function' && _planSource_\(x\)==='user'/.test(src));
   ok('...and only shows the block when neither applies', /if\(_bpl && !_tombed\[_bpl\.intent\]\) planRaw=_bpl;/.test(src));
   ok('MOBILE honours an explicit swap', /if\(!_rawM\.some\(function\(x\)\{ return x && x\.swap===true; \}\)\)/.test(src));
   ok('MOBILE honours a tombstone', /if\(_bM && !_tM\[_bM\.intent\]\) pw=_bM;/.test(src));
+
+  // THE ASSERTION THAT WAS MISSING, and its absence cost every Sunday.
+  //
+  // The first version of this guard treated ANY tombstone as a deletion. generateBlockPlan_
+  // tombstones its own replaceable rows on EVERY run - that is its clear-and-regenerate cycle, not a
+  // removal - so every day it had ever touched carried generator tombstones for exactly the intents
+  // the block still prescribes, and the fallback was suppressed on all of them. Aug 23, Aug 30 and
+  // Sep 6 all read "Rest Day". The old test asserted the guard EXISTED and never asked what it
+  // counted, which is why it passed while the feature was broken on every date that mattered.
+  const both = (src.match(/_planSource_\(x\)==='user'\) _t(ombed|M)\[x\.intent\]=1;/g) || []).length;
+  eq('BOTH renderers count only USER tombstones', both, 2);
+  ok('NEG: neither counts a bare deleted flag any more',
+     !/if\(x&&x\.deleted&&x\.intent\) _tombed\[x\.intent\]=1;/.test(src) &&
+     !/if\(x&&x\.deleted&&x\.intent\) _tM\[x\.intent\]=1;/.test(src));
+  // And the thing that makes the distinction necessary, asserted so it cannot quietly stop being true.
+  ok('the generator does tombstone its own rows every run',
+     /_planReplaceable_\(s\)\)\{ s\.deleted=true;/.test(src));
+  // Exercise the predicate itself rather than trusting the regex.
+  {
+    const srcOf = new Function(asServed(exFn('_planSource_') + 'return _planSource_;'))();
+    const isUserTomb = (x) => !!(x && x.deleted && x.intent && srcOf(x) === 'user');
+    ok('a GENERATOR tombstone does not suppress the block',
+       !isUserTomb({ deleted:true, intent:'easyRun', source:'gen' }));
+    ok('...nor a migrated one', !isUserTomb({ deleted:true, intent:'easyRun', source:'migrated' }));
+    ok('an ATHLETE tombstone still does', isUserTomb({ deleted:true, intent:'easyRun', source:'user' }));
+    ok('a live generator row is not a tombstone at all', !isUserTomb({ intent:'easyRun', source:'gen' }));
+  }
   // The tombstone check must read the RAW day: planSessionsForDate_ filters deleted rows out, so it
   // cannot see them, and a fallback built on it would silently resurrect every deleted session.
   ok('both read the RAW day, since planSessionsForDate_ hides tombstones',
