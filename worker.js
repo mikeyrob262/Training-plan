@@ -52264,7 +52264,16 @@ function showWeatherHistory(){
     },200);
 
     var lat=ride.gpsLats[0],lon=ride.gpsLons[0];
-    var durH=ride.duration?parseInt((ride.duration||'4:00').split(':')[0])||4:4;
+    // HOW LONG THE ACTIVITY ACTUALLY IS, in minutes.
+    //
+    // This used to read parseInt on the HOURS field alone: "0:42:00" parsed to 0, fell through the
+    // ||4 fallback, and handed a 42-minute run a FOUR-HOUR weather window. That is the whole reason
+    // an 8AM run reported 78F - it was reporting noon. A 1:25 ride was wrong the other way, silently
+    // truncated to one hour. parseDurToMin already handles both shapes; nothing here needed to.
+    var durMin=(typeof parseDurToMin==='function')?(parseDurToMin(ride.duration)||0):0;
+    if(!(durMin>0)) durMin=240;                       // genuinely unknown duration keeps the old 4h assumption
+    durMin=Math.max(15, Math.min(durMin, 12*60));
+    var durH=Math.max(1, Math.ceil(durMin/60));
     var s0=startHour,s1=Math.min(23,s0+durH);
 
     // Need 2 days of forecast if ride goes overnight or we want tomorrow
@@ -52279,10 +52288,27 @@ function showWeatherHistory(){
     .then(function(r){return r.json();}).then(function(data){
       if(!data||!data.minutely_15) return;
       var h=data.minutely_15;
-      // 15-min intervals: s0*4 to s1*4
-      var i0=s0*4, i1=s1*4;
-      function sl(arr){return(arr||[]).slice(i0,i1+1);}
-      function fmt2(arr){return sl(arr).map(function(v){return Math.round(v*10)/10;});}
+      // TWO WINDOWS, on purpose.
+      //
+      // The RIDE window is exactly the activity: start sample to start + duration, in 15-min steps.
+      // Every headline number comes from this, because the card is titled with a specific start time
+      // and must answer for that time rather than for some larger span around it.
+      //
+      // The CHART window is padded to at least three hours so the trend is still visible - a 45
+      // minute run drawn over 45 minutes is four points and tells you nothing about whether it is
+      // about to warm up. Losing that context was the risk in narrowing the window, so it is kept
+      // deliberately, and only the chart uses it.
+      var i0=s0*4;
+      var iRide1=i0+Math.ceil(durMin/15);
+      var iChart1=Math.max(iRide1, i0+12);
+      function slR(arr){return(arr||[]).slice(i0,iRide1+1);}            // the activity itself
+      function sl(arr){return(arr||[]).slice(i0,iChart1+1);}            // padded, charts only
+      function r1(a){return (a||[]).map(function(v){return Math.round(v*10)/10;});}
+      function fmt2(arr){return r1(sl(arr));}
+      // Ride-window series, which every gauge and tile reads.
+      var rTemps=r1(slR(h.temperature_2m)), rPrecip=r1(slR(h.precipitation_probability));
+      var rWind=r1(slR(h.windspeed_10m)), rGusts=r1(slR(h.windgusts_10m));
+      var rDir=slR(h.winddirection_10m)||[];
       var temps=fmt2(h.temperature_2m);
       var feels=fmt2(h.apparent_temperature);
       var precip=fmt2(h.precipitation_probability);
@@ -52292,7 +52318,7 @@ function showWeatherHistory(){
       var humid=fmt2(h.relativehumidity_2m);
       var dew=fmt2(h.dewpoint_2m);
       var uv=data.hourly?(data.hourly.uv_index||[]).slice(s0,s1+1).map(function(v){return Math.round(v*10)/10;}):[];
-      var times=(h.time||[]).slice(i0,i1+1).map(function(t,i){
+      var times=(h.time||[]).slice(i0,iChart1+1).map(function(t,i){
         if(!t||!t.split('T')[1]) return '';
         var parts=t.split('T')[1].slice(0,5).split(':');
         var hr=parseInt(parts[0]),min=parts[1];
@@ -52300,18 +52326,37 @@ function showWeatherHistory(){
         return(hr>12?hr-12:(hr===0?12:hr))+(min==='30'?':30':'')+(hr>=12?'PM':'AM');
       });
 
-      var maxTemp=temps.length?Math.max.apply(null,temps):75;
-      var maxPrecip=precip.length?Math.max.apply(null,precip):0;
-      var maxGust=gusts.length?Math.max.apply(null,gusts):wind.length?Math.max.apply(null,wind):10;
+      // ALL FROM THE RIDE WINDOW, not the padded chart window. Reading these off the chart series
+      // is what let a 45-minute run be judged on three hours of weather.
+      var startTemp=rTemps.length?rTemps[0]:null;                       // the number the card is titled for
+      var maxTemp=rTemps.length?Math.max.apply(null,rTemps):75;
+      var maxPrecip=rPrecip.length?Math.max.apply(null,rPrecip):0;
+      var maxGust=rGusts.length?Math.max.apply(null,rGusts):(rWind.length?Math.max.apply(null,rWind):10);
+      // Does the temperature actually move enough during the activity to be worth saying? Below this
+      // the peak is the same number as the start and printing both is noise.
+      var tempClimbs=(startTemp!=null && (maxTemp-startTemp)>=3);
+      // Clock labels off the SAMPLE INDEX, so the peak is named by when it actually happens rather
+      // than by a guess. Sample n is s0*60 + n*15 minutes into the day.
+      function clockAt(sampleIdx){
+        var mins=s0*60+sampleIdx*15, hr=Math.floor(mins/60)%24, mn=mins%60;
+        return (hr>12?hr-12:(hr===0?12:hr))+(mn?(':'+(mn<10?'0':'')+mn):'')+(hr>=12?'PM':'AM');
+      }
+      var startLbl=clockAt(0);
+      var runEndLbl=clockAt(iRide1-i0);
+      var chartPadded=(iChart1>iRide1);        // the chart shows MORE than the activity, so say so
+      var peakLbl=clockAt(Math.max(0, rTemps.indexOf(maxTemp)));
       // Midpoint sample of the ride window. NULL when the forecast carried no direction at all —
       // the old 270 fallback was indistinguishable from a real due-west reading, and every consumer
       // below (cardinal label, gauge arrow, chart note) would have drawn it as fact.
-      var midDir=windDir.length?windDir[Math.floor(windDir.length/2)]:null;
+      var midDir=rDir.length?rDir[Math.floor(rDir.length/2)]:null;
       var dirLbl=getDirStr(midDir);
 
       var gEl=document.getElementById('wx-gauges');
       if(gEl){
-        var tc=getCondition('temp',maxTemp);
+        // THE GAUGE ANSWERS FOR THE START TIME. The card is titled with a specific start, so judging
+        // it on the window maximum answered a question nobody asked - and with the duration bug above
+        // that maximum was three hours away from the start.
+        var tc=getCondition('temp',(startTemp!=null?startTemp:maxTemp));
         var pc=getCondition('precip',maxPrecip);
         var wc=getCondition('wind',maxGust);
         // The Wind gauge shows BOTH: the condition emoji as its face, exactly like the other two
@@ -52329,10 +52374,15 @@ function showWeatherHistory(){
           +buildGauge(wc.emoji,'Wind',wc.pct,wc.color,windSub,windBadge)
           +'</div>'
           +'<div style="display:flex;justify-content:space-around;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--b1)">'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--c-red)">'+Math.round(maxTemp)+'°F</div><div style="font-size:10px;color:var(--t3)">peak temp</div></div>'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#378ADD">'+Math.round(maxPrecip)+'%</div><div style="font-size:10px;color:var(--t3)">max rain</div></div>'
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--c-red)">'+(startTemp!=null?Math.round(startTemp):Math.round(maxTemp))+'°F</div>'
+            +'<div style="font-size:10px;color:var(--t3)">'+(startTemp!=null?('at '+startLbl):'peak, whole window')+'</div>'
+            // The climb is the OTHER fact, and it is shown as a climb rather than as the headline.
+            // Suppressed when it is under 3 degrees, where start and peak are the same number twice.
+            +(tempClimbs?('<div style="font-size:9.5px;color:var(--t3);margin-top:1px">&rarr; '+Math.round(maxTemp)+'&deg; by '+peakLbl+'</div>'):'')
+          +'</div>'
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#378ADD">'+Math.round(maxPrecip)+'%</div><div style="font-size:10px;color:var(--t3)">max rain, during run</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#1D9E75">'+Math.round(maxGust)+'mph</div><div style="font-size:10px;color:var(--t3)">max gust'+(dirLbl?(' '+dirLbl):'')+'</div></div>'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+Math.round(wind.length?Math.max.apply(null,wind):0)+'mph</div><div style="font-size:10px;color:var(--t3)">max sustained</div></div>'
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+Math.round(rWind.length?Math.max.apply(null,rWind):0)+'mph</div><div style="font-size:10px;color:var(--t3)">max sustained</div></div>'
           +'</div>';
       }
 
@@ -52362,7 +52412,11 @@ function showWeatherHistory(){
       if(!cEl||!times.length) return;
 
       if(temps.length>1){
-        var t=makeChartEl('wx-temp','Temperature',Math.round(temps[0])+'° → '+Math.round(temps[temps.length-1])+'°');
+        // The note names the RUN's end when the chart is padded past it, so a reader cannot mistake
+        // the chart's right-hand end for the end of the activity - which is the inverse of the bug
+        // this change fixes, and just as easy to ship.
+        var t=makeChartEl('wx-temp','Temperature',Math.round(temps[0])+'° → '+Math.round(temps[temps.length-1])+'°'
+          +(chartPadded?(' · run ends '+runEndLbl):''));
         cEl.appendChild(t);
         setTimeout(function(){makeChart('wx-temp',times,
           [{label:'Temp (°F)',data:temps,color:'#E24B4A',fill:true},

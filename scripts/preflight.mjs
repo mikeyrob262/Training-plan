@@ -996,6 +996,20 @@ try {
     fail('the run build re-grades a past Sunday, overwrites the taper, or hides the stacked load (see above).');
   }
 
+  // STEP 62 - weather window. The card is titled with a start time and must answer for it. The
+  //           duration parse read the HOURS FIELD ALONE, so "0:42:00" became a 4-hour window and an
+  //           8AM run reported noon; the headline then took that window's MAXIMUM. Both fixed, with
+  //           a padded window kept for the chart only so the trend is still visible.
+  console.log(`${D}. checking weather window...${X}`);
+  try {
+    const so = execSync('node scripts/wx-window-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the weather card answers for the wrong window or the wrong moment (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

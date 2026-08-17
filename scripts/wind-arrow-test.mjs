@@ -135,8 +135,11 @@ check('the badge is still gated on a real bearing', /\(midDir!=null\)\?windArrow
 
 console.log('\n' + Y + '=== a missing bearing is omitted, never invented ===' + X);
 // The 270 default was indistinguishable from a real due-west reading.
-check('midDir no longer defaults to 270', /windDir\.length\?windDir\[Math\.floor\(windDir\.length\/2\)\]:270/.test(src), false);
-check('...it is null when absent', /windDir\.length\?windDir\[Math\.floor\(windDir\.length\/2\)\]:null/.test(src), true);
+// Reads the RIDE-window direction series (rDir) since the weather-window fix; the rule being
+// guarded is unchanged - absent means null, never the 270 this code used to invent.
+check('midDir no longer defaults to 270', /Math\.floor\((windDir|rDir)\.length\/2\)\]:270/.test(src), false);
+check('...it is null when absent', /var midDir=rDir\.length\?rDir\[Math\.floor\(rDir\.length\/2\)\]:null;/.test(src), true);
+check('...and it reads the activity window, not the padded chart window', /var midDir=rDir\./.test(src), true);
 check('getDirStr returns empty for null', getDirStr(null), '');
 check('...and for a non-finite value', getDirStr(NaN), '');
 check('...but still labels a real bearing', [0,45,90,135,180,225,270,315].map(getDirStr), ['N','NE','E','SE','S','SW','W','NW']);
