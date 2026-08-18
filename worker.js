@@ -43962,6 +43962,48 @@ function _runRefFor_(r){
       }
     }
   }catch(e){}
+  // THIRD PATH: CONTENT MATCH, because the snapshot projection can satisfy neither of the first two.
+  //
+  // Measured on the live library: 0 of 2201 snapshot runs carry a stravaId. Without one, rideKey
+  // builds its CONTENT form 'k:<date>_<miles>_<secs>', while the matching st.rides record - which
+  // DOES have a stravaId - keys as 's<id>'. The two sides key differently and can therefore never
+  // resolve to each other, so the handle path fails for a reason no retry fixes, and the stravaId
+  // path has nothing to scan for. Every PB row and every pace row fell back to plain text, which is
+  // the designed behaviour when a reference cannot be trusted - and why the feature looked unshipped.
+  //
+  // rideKey is deliberately NOT changed. It is load-bearing for ride dedup and carries its own
+  // standing warning; the mismatch is fixed by adding a way to resolve, not by re-keying the library.
+  //
+  // A UNIQUE match is required. Two runs of the same distance on one day cannot be told apart here,
+  // and opening the wrong run is worse than not linking - the same judgement the callers already make
+  // when they render plain text rather than a dead click.
+  try{
+    if(typeof st!=='undefined' && st && st.rides && typeof normDate==='function'){
+      var wantD=normDate(r.date||''), wantMi=parseFloat(r.distance);
+      if(wantD && isFinite(wantMi) && wantMi>0){
+        var wantSec=(typeof _durSec_==='function')?_durSec_(r):0;
+        var hits=[];
+        for(var j=0;j<st.rides.length;j++){
+          var y=st.rides[j];
+          if(!y || y.deleted) continue;
+          var sp=String((typeof rideSport_==='function')?rideSport_(y):'').replace(/[ _-]/g,'');
+          if(!/^(run|trailrun|virtualrun|treadmill)$/i.test(sp)) continue;
+          if(normDate(y.date||'')!==wantD) continue;
+          var yMi=parseFloat(y.distance);
+          // Tolerance, not equality: the snapshot stores metres and converts, so the same run can
+          // differ in the second decimal from the library's own figure.
+          if(!isFinite(yMi) || Math.abs(yMi-wantMi)>Math.max(0.05, wantMi*0.01)) continue;
+          hits.push(j);
+        }
+        // Two runs, same day, same distance: let duration break the tie before giving up on it.
+        if(hits.length>1 && wantSec>0 && typeof _durSec_==='function'){
+          var tight=hits.filter(function(j){ var s2=_durSec_(st.rides[j]); return s2>0 && Math.abs(s2-wantSec)<=60; });
+          if(tight.length) hits=tight;
+        }
+        if(hits.length===1) return hits[0];
+      }
+    }
+  }catch(e){}
   return '';
 }
 // ONE opener for every run reference on this page, so the PB board and the 10k card cannot drift

@@ -1052,6 +1052,20 @@ try {
     fail('open water renders as blank, or the underlay leaked onto a non-satellite base (see above).');
   }
 
+  // STEP 66 - run references. The PB board and the 10k pace card both gate their links on
+  //           rideRefOk_(_runRefFor_(run)) and fall back to plain text. 0 of 2201 snapshot runs
+  //           carry a stravaId, so rideKey built its CONTENT form while the library record keyed by
+  //           id - the two could never resolve to each other and NO link rendered anywhere.
+  console.log(`${D}. checking run references...${X}`);
+  try {
+    const so = execSync('node scripts/run-ref-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a PB row cannot resolve the run that set it, or resolves the wrong one (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
