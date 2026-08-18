@@ -1066,6 +1066,21 @@ try {
     fail('a PB row cannot resolve the run that set it, or resolves the wrong one (see above).');
   }
 
+  // STEP 67 - Strava token. Every caller is written as "do the work inside cb", so an unbounded
+  //           refresh that never settles is TOTAL SILENCE: backfillStravaCalories_ reported no
+  //           callback and no log line because its loop never started. Bounded now, exactly one
+  //           callback, falling back to the stored token - and the once-guard stops a late settle
+  //           running the caller's whole body a second time.
+  console.log(`${D}. checking Strava token callback...${X}`);
+  try {
+    const so = execSync('node scripts/strava-token-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Strava token helper can stall silently or call back twice (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

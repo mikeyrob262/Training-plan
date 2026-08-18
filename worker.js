@@ -5317,9 +5317,16 @@ function backfillStravaCalories_(limit, done){
   var todo=(st.rides||[]).filter(function(r){
     return r && !r.deleted && r.stravaId && !(parseFloat(r.calories)>0);
   }).sort(function(a,b){ return (a.date<b.date)?1:-1; }).slice(0, limit);
-  if(!todo.length){ if(done) done(0,0); return; }
+  // SAY SOMETHING BEFORE THE FIRST AWAIT. This was reported as "ran it, nothing happened" - and
+  // there was no way to tell a stalled auth chain from a still-running loop from an empty candidate
+  // list, because the only output was a single line printed at the very END. A long job that is
+  // silent until it finishes is indistinguishable from a job that died.
+  try{ console.log('[calories] backfill: '+todo.length+' activity(ies) to check (of '
+    +((st.rides||[]).filter(function(r){ return r && !r.deleted && r.stravaId && !(parseFloat(r.calories)>0); }).length)
+    +' missing a figure); ~'+Math.ceil(todo.length*0.4)+'s.'); }catch(e){}
+  if(!todo.length){ try{ console.log('[calories] nothing to do - every ride with a Strava id already has a figure.'); }catch(e){} if(done) done(0,0); return; }
   withStravaToken_(function(token){
-    if(!token){ if(done) done(0,0); return; }
+    if(!token){ try{ console.warn('[calories] no Strava token - reconnect Strava and retry.'); }catch(e){} if(done) done(0,0); return; }
     var i=0, filled=0;
     (function next(){
       if(i>=todo.length){
@@ -5360,16 +5367,40 @@ try{ if(typeof window!=='undefined'){
     return _zVer(h).then(function(v){ console.log('[zwift-dir] name="'+h.name+'" ok='+v.ok+' - '+v.why); return v; });
   }); };
 } }catch(e){}
+// EXACTLY ONE CALLBACK, ALWAYS, AND BOUNDED IN TIME.
+//
+// Every branch here already called cb - but the token refresh is an unbounded fetch, and a request
+// that never settles calls nothing at all. Every caller is written as "do the work inside cb", so a
+// hang is not a failure they can see: it is total silence. backfillStravaCalories_ was reported as
+// "returned undefined, no callback, no log line" and that is exactly this - the loop never started,
+// so it could not even report that it had not.
+//
+// Same lesson the fbPush watchdog records: bound it, so silence becomes a RELEASE rather than a
+// permanent stall. On timeout we fall back to the stored access token, which is usually still valid -
+// a refresh failing does not mean the current token is dead.
+//
+// The once-guard is not belt-and-braces: with a race, the slow original can still settle afterwards,
+// and a second cb would run the caller's whole body twice - for a backfill, that is two concurrent
+// loops writing the same records.
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
-  if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
+  var fired=false, guard=null;
+  var once=function(tok, why){
+    if(fired) return;
+    fired=true;
+    if(guard){ clearTimeout(guard); guard=null; }
+    if(why){ try{ console.warn('[strava] token: '+why); }catch(e){} }
+    try{ cb(tok); }catch(e){ try{ console.error('[strava] token callback threw: '+((e&&e.message)||e)); }catch(_e){} }
+  };
+  if(!st.stravaToken && !st.stravaRefreshToken){ once(null, 'not connected'); return; }
   if(st.stravaRefreshToken){
+    guard=setTimeout(function(){ once(st.stravaToken||null, 'refresh did not answer in 15s - falling back to the stored token'); }, 15000);
     fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
       .then(function(x){return x.json();}).then(function(d){
-        if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; try{sv();}catch(e){} cb(d.access_token); }
-        else cb(st.stravaToken||null);
-      }).catch(function(){ cb(st.stravaToken||null); });
-  } else cb(st.stravaToken);
+        if(d && d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; try{sv();}catch(e){} once(d.access_token); }
+        else once(st.stravaToken||null, 'refresh returned no access_token');
+      }).catch(function(e){ once(st.stravaToken||null, 'refresh failed: '+((e&&e.message)||e)); });
+  } else once(st.stravaToken);
 }
 function stopZoneBackfill(){ _zoneBackfill.stop=true; }
 function runZoneBackfill(){
