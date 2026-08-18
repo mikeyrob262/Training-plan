@@ -122,8 +122,28 @@ check('no site renders rideKj_ with a Cal label', /rideKj_\([^)]*\)[^;]{0,80}' C
 check('the desktop Burned cell reads through rideCalText_', /rideCalText_\(r\)\+'<\/div><div style="font-size:9px;color:[^"]+">/.test(src), true);
 check('the backfill exists and is newest-first', /function backfillStravaCalories_[\s\S]{0,700}\(a\.date<b\.date\)\?1:-1/.test(src), true);
 check('the sync calls it', /backfillStravaCalories_\(40,/.test(src), true);
-check('every /activities/{id} fetch harvests the payload',
-  (src.match(/stravaHarvestDetail_\(/g)||[]).length >= 3, true);
+// EVERY DETAIL FETCH, COUNTED AGAINST THE FETCHES — not a bare occurrence count.
+//
+// The old form was `occurrences >= 3`, and the function DEFINITION is one of those occurrences, so
+// it passed while fetchStravaStreams_ — which pulls /activities/{id} for laps — threw the calorie
+// payload away, and while fetchStravaGPS did the same for the polyline. A run synced today read
+// calories:null and contributed nothing to the day's burn; on a bike day the kJ estimate hid it, so
+// it only ever surfaced on a run-only day. The assertion existed and did not ask the right question.
+//
+// Now: every site that fetches the ACTIVITY object must harvest. Streams-only URLs are excluded —
+// they return no activity payload to harvest.
+{
+  const detailFetches = [...src.matchAll(/api\/v3\/activities\/'\+[^\n]*/g)]
+    .map((m) => m[0]).filter((u) => !/\/streams/.test(u));
+  const harvests = (src.match(/stravaHarvestDetail_\(/g) || []).length - 1;   // minus the definition
+  check('every activity-detail fetch site harvests the payload', harvests >= detailFetches.length, true);
+  check('...and there are at least four such sites', detailFetches.length >= 4, true);
+  // The two that were silently discarding it.
+  check('fetchStravaStreams_ harvests the detail it already fetched',
+    /var s=arr\[0\]\|\|\{\}, a=arr\[1\]\|\|\{\};[\s\S]{0,900}stravaHarvestDetail_\(r, a\)/.test(src), true);
+  check('fetchStravaGPS harvests BEFORE its no-map early return',
+    /stravaHarvestDetail_\(_ht, a\)[\s\S]{0,300}if\(!a\|\|!a\.map\)/.test(src), true);
+}
 
 console.log('\n'+(fails? R+fails+' CHECK(S) FAILED'+X : G+'calorie-source: all checks passed'+X));
 process.exit(fails?1:0);

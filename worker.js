@@ -5144,6 +5144,14 @@ function fetchStravaStreams_(r, ds, maxOf){
         fetch(base+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;})
       ]).then(function(arr){
         var s=arr[0]||{}, a=arr[1]||{};
+        // HARVEST THE DETAIL WE ALREADY PAID FOR. arr[1] is the full /activities/{id} response,
+        // fetched here for laps and otherwise discarded - which is the exact waste
+        // stravaHarvestDetail_ was written to stop, and this was the one fetch site never wired to
+        // it. Calories are absent from the LIST endpoint, so a run synced today reads calories:null
+        // and contributes nothing to the day's burn; on a bike day the kJ estimate hides that, so it
+        // only ever surfaces on a run-only day. Gap-fill and idempotent: a value already on the
+        // record wins, so a manual edit is never overwritten. Costs no extra request.
+        try{ if(typeof stravaHarvestDetail_==='function') stravaHarvestDetail_(r, a); }catch(e){}
         var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
         var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), tm=g('time'), dst=g('distance'), ll=g('latlng');
         // GPS track (decimal-degree [lat,lon] pairs) — recovers rides whose /gps
@@ -50890,6 +50898,16 @@ function fetchStravaGPS(stravaId, rideRef) {
     fetch('https://www.strava.com/api/v3/activities/'+stravaId, {
       headers: {'Authorization': 'Bearer '+token}
     }).then(function(r){return r.json();}).then(function(a){
+      // Same harvest as every other detail fetch, and BEFORE the map guards on purpose: the two
+      // early returns below are the common case for a treadmill run, so harvesting after them
+      // would skip exactly the activities whose calories are hardest to come by. Resolution is
+      // deferred into this call rather than done at entry, per the note on the signature.
+      try{
+        if(typeof stravaHarvestDetail_==='function' && a){
+          var _hi=rideResolveIdx_(rideRef), _ht=(_hi>=0)?st.rides[_hi]:null;
+          if(_ht && stravaHarvestDetail_(_ht, a)){ sv(); fbPush(true); }
+        }
+      }catch(e){}
       if(!a||!a.map){ toast('No GPS data available'); return; }
       var poly = a.map.polyline || a.map.summary_polyline;
       if(!poly){ toast('No polyline for this activity'); return; }
