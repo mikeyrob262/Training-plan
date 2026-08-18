@@ -98,6 +98,26 @@ ok('both link surfaces still gate on rideRefOk_', (src.match(/rideRefOk_\(/g) ||
 // Position 0 is a valid reference: a truthiness test would silently drop the newest run.
 ok('rideRefOk_ still accepts position 0', /function rideRefOk_\(ref\)\{ return \(typeof ref==='number'\) \? \(ref>=0\)/.test(src));
 
+console.log('\n' + Y + '=== the SECOND resolver, on the Legacy pace curve, uses it too ===' + X);
+{
+  // Legacy needed no NEW linking - its pace-curve points already carried a click and an "Opens this
+  // run" tooltip. None of them were reachable, through a DIFFERENT resolver: rideRefOf_ returns
+  // rideKey's content form for a snapshot run while the library record keys by id, and its indexOf
+  // fallback returns -1 because the snapshot object is not the library object. _recRefUsable_ then
+  // rejected it and the clickable circle was never emitted at all - the same silent failure as the
+  // PB board, reached a second way.
+  ok('the pace curve resolves through _runRefFor_ first',
+     /var rr=\(typeof _runRefFor_==='function'\)\?_runRefFor_\(best\.run\):'';/.test(src));
+  ok('...falling back to rideRefOf_ for anything already in st.rides',
+     /&& typeof rideRefOf_==='function'\) rr=rideRefOf_\(best\.run\);/.test(src));
+  ok('...and still gated by _recRefUsable_, so a dead ref draws no circle',
+     /ref=\(typeof _recRefUsable_==='function' && !_recRefUsable_\(rr\)\)\?null:rr;/.test(src));
+  ok('the click target is still gated on a usable ref', /if\(b\.ref!=null && b\.run\)\{/.test(src));
+  // Legacy is otherwise aggregates only - asserted so "add linking to Legacy" is not re-opened.
+  ok('NEG: the Legacy tiles are lifetime aggregates, not activities', /\{ k:'Runs', v:_lgNum_/.test(src));
+  ok('NEG: its seasons panel ranks YEARS, not activities', /Greatest Seasons/.test(src));
+}
+
 console.log('');
 if (fails) { console.log(R + 'run ref: ' + fails + ' check(s) failed' + X + '\n'); process.exit(1); }
 console.log(G + 'run ref: all checks passed' + X + '\n');

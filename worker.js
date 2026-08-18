@@ -24911,9 +24911,21 @@ function _dnaRunPaceCurve_(){
     var inB=runs.filter(function(r){ var d=+r.distance; return d>=lo && d<=hi; });
     var best=null;
     inB.forEach(function(r){ var p=_dnaRunSec_(r)/(+r.distance); if(!best || p<best.p) best={ p:p, run:r }; });
+    // THROUGH THE RUN RESOLVER, not the generic ride one. These points already carried a click and a
+    // "Opens this run" tooltip, and none of them were reachable: rideRefOf_ hands back rideKey's
+    // CONTENT form for a snapshot run (0 of 2201 carry a stravaId) while the matching st.rides record
+    // keys as 's<id>', so the lookup misses; its indexOf fallback then returns -1 because the snapshot
+    // object is not the library object. Either way _recRefUsable_ rejected it, ref stayed null, and the
+    // clickable circle was never emitted at all - the same silent failure as the PB board, reached
+    // through a SECOND resolver. _runRefFor_ carries the date+distance fallback that resolves these.
+    // rideRefOf_ is kept as the fallback: it is the right answer for anything already in st.rides.
     var ref=null;
-    if(best && typeof rideRefOf_==='function'){
-      try{ var rr=rideRefOf_(best.run); ref=(typeof _recRefUsable_==='function' && !_recRefUsable_(rr))?null:rr; }catch(e){ ref=null; }
+    if(best){
+      try{
+        var rr=(typeof _runRefFor_==='function')?_runRefFor_(best.run):'';
+        if(!(typeof rideRefOk_==='function' && rideRefOk_(rr)) && typeof rideRefOf_==='function') rr=rideRefOf_(best.run);
+        ref=(typeof _recRefUsable_==='function' && !_recRefUsable_(rr))?null:rr;
+      }catch(e){ ref=null; }
     }
     return { label:b.label, mi:b.mi, col:b.col, n:inB.length,
              pace:best?best.p:0, paceStr:best?_dnaPaceStr_(best.p):'-',
