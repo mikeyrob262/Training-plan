@@ -13,6 +13,18 @@ jobs:
         with:
           node-version: '22'
       - run: npm install wrangler@4.111.0 --save-dev
+      # STAMP THE BUILD. Fails closed: if the placeholder is gone, the stamp has silently stopped
+      # being applied, and an un-stamped deploy is exactly the condition that makes a stale tab
+      # indistinguishable from a broken fix. Better to block the deploy than to ship a lie.
+      - name: Stamp the build
+        run: |
+          if ! grep -q "__BUILD_STAMP__" worker.js; then
+            echo "::error::worker.js has no __BUILD_STAMP__ placeholder - window.__BUILD__ would ship stale"
+            exit 1
+          fi
+          STAMP="$(date -u +%Y-%m-%dT%H:%MZ)-${GITHUB_SHA:0:7}"
+          sed -i "s/__BUILD_STAMP__/$STAMP/" worker.js
+          echo "build stamped: $STAMP"
       - run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

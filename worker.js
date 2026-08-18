@@ -32220,6 +32220,16 @@ function _blockWorkMeasure_(r, dateKey, intent){
       if(!s || s.intent!==intent || !s.struct) continue;
       var t=(s.rx && s.rx.targets)?s.rx.targets:null;
       if(!t || t.powerLo==null || t.powerHi==null) continue;
+      // THE FILE HE WAS GIVEN OUTRANKS THE PLAN HE WAS NOT. If a .zwo was exported for this day, its
+      // band was recorded then; the live band may have moved since. Grading against the current plan
+      // told an athlete he missed a session he executed exactly - four intervals at 194-200W against
+      // a file targeting ~197W, marked short because the band had been raised to 209-228W after the
+      // file was built. Copied, never mutated in place: bp.sessions is derived and shared.
+      var _sr=(typeof _stampedRxFor_==='function')?_stampedRxFor_(dateKey, intent):null;
+      if(_sr){
+        var t2={}; for(var tk in t) if(Object.prototype.hasOwnProperty.call(t,tk)) t2[tk]=t[tk];
+        t2.powerLo=_sr.lo; t2.powerHi=_sr.hi; t=t2;
+      }
       // Unlike the identity check, grading takes the measurement whether or not it passes — being
       // able to FAIL a session is the entire point of measuring it.
       var lp=_blockLapPowers_(r, s.struct, t);
@@ -32858,6 +32868,7 @@ function _zwoFor_(s0, dateKey){
       .concat(['  </workout>','</workout_file>','']).join(NL);
     var fn=String(nm).replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
     return { xml:xml, name:nm, filename:(dateKey||'workout')+'-'+(fn||'session')+'.zwo',
+             intent:intent,
              ftp:Math.round(ftp), lo:Math.round(lo), hi:Math.round(hi), blocks:blocks.length };
   }catch(e){ try{ console.error('[zwo] '+((e&&e.message)||e)); }catch(_e){} return null; }
 }
@@ -33051,8 +33062,67 @@ function zwiftSendFile_(z){
 }
 // Send-to-Zwift when a verified folder is set; download otherwise. The download path is NOT removed
 // — it is the fallback for another machine, another browser, or a folder that stops verifying.
+// WHAT WAS ACTUALLY SENT TO ZWIFT, RECORDED ON THE DAY IT WAS SENT.
+//
+// The band is DERIVED at read time, which is right for a plan that can change - and wrong the moment
+// a file leaves the building. A .zwo downloaded in July encodes July's target; raise the VO2 band in
+// August and the athlete is graded against a plan the file in his Zwift folder has never heard of.
+// Measured: SESSION_DEFS.vo2 is pctFtp [110,120], so at FTP 190 the grader wants 209-228W and the
+// current exporter writes ~219W - while the file he actually rode targeted ~197W, the pre-557c917
+// band. He executed his file correctly and was told he failed.
+//
+// So the export stamps the band it encoded. Grading prefers the stamp when one exists, because the
+// question "did you do the session" means the session you were GIVEN.
+//
+// STORED AS A STRING, deliberately. mergeState_ resolves numbers with Math.max, so a band later
+// LOWERED could be silently raised again by a stale remote copy - the exact hazard _itemLwwNumbers_
+// exists for. A string carries no such rule and resolves by the session's own clock.
+function _zwoStampRx_(z, dateKey){
+  try{
+    if(!z || !z.intent || !dateKey) return false;
+    if(!(z.lo>0) || !(z.hi>0) || !(z.ftp>0)) return false;
+    if(typeof planSessionsForDate_!=='function') return false;
+    var want=String(z.intent), stamp=z.lo+'-'+z.hi+'@'+z.ftp;
+    var hit=null;
+    (planSessionsForDate_(dateKey)||[]).forEach(function(s){
+      if(hit || !s || s.deleted) return;
+      if(String(s.intent||'')===want) hit=s;
+    });
+    if(!hit) return false;                      // nothing stored for this day - do not invent a row
+    if(hit.zwoRx===stamp) return false;         // idempotent: re-downloading the same file changes nothing
+    hit.zwoRx=stamp;
+    hit.zwoAt=(typeof _tbDK_==='function')?_tbDK_(new Date()):dateKey;
+    if(typeof markPlanEdited_==='function') markPlanEdited_(hit,['zwoRx','zwoAt']); else hit.editedAt=Date.now();
+    try{ if(typeof sv==='function') sv(); }catch(e){}
+    try{ console.log('[zwo] stamped '+want+' on '+dateKey+' as '+stamp+' - grading will use this, not the live band'); }catch(e){}
+    return true;
+  }catch(e){ try{ console.warn('[zwo] stamp failed: '+((e&&e.message)||e)); }catch(_e){} return false; }
+}
+// Reads the stamp back. Returns null when the day was never exported, which is the common case and
+// means "fall back to the derived band" rather than "no band".
+function _stampedRxFor_(dateKey, intent){
+  try{
+    if(!dateKey || !intent || typeof planSessionsForDate_!=='function') return null;
+    var want=String(intent), out=null;
+    (planSessionsForDate_(dateKey)||[]).forEach(function(s){
+      if(out || !s || s.deleted || String(s.intent||'')!==want || !s.zwoRx) return;
+      // STRING OPS, NO REGEX LITERAL. The whole file is served inside one template literal, which
+      // eats a backslash level - a backslash-d here arrives as a bare d and matches the LETTER,
+      // silently, on every stamp. Preflight caught exactly that on the first cut of this line.
+      var raw=String(s.zwoRx), at=raw.indexOf('@'), dash=raw.indexOf('-');
+      if(at<0 || dash<0 || dash>at) return;
+      var lo=parseInt(raw.slice(0,dash),10), hi=parseInt(raw.slice(dash+1,at),10), ftp=parseInt(raw.slice(at+1),10);
+      if(!(lo>0) || !(hi>0) || !(ftp>0) || hi<lo) return;
+      out={ lo:lo, hi:hi, ftp:ftp };
+    });
+    return out;
+  }catch(e){ return null; }
+}
 function _zwoEmit_(z, dateKey, sid){
   if(!z){ try{ if(typeof toast==='function') toast('No ERG target for this session'); }catch(e){} return; }
+  // Stamped HERE rather than in _zwoFor_: this is the one funnel every download and every
+  // send-to-Zwift passes through, and building a preview must not claim a file was issued.
+  _zwoStampRx_(z, dateKey);
   if(zwiftSupported_()){
     zwiftGetHandle_().then(function(h){
       if(!h){ _zwoDownloadFile_(z, dateKey, sid); return; }
@@ -55539,7 +55609,13 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-fog-roads-gradient';
+// STAMPED BY CI, NEVER BY HAND. The placeholder below is replaced at deploy time with the commit
+// and the deploy clock; a local run keeps the placeholder, which honestly reads as "not a deployed
+// build". The note under this line already recorded why a hand-edited string cannot work - it drifts
+// the moment someone forgets, and it read 2026-08-04 through two weeks of deploys, which is exactly
+// how a stale TAB got mistaken for a broken fix twice in two days. CI fails closed if the
+// placeholder is missing, so the stamp cannot quietly stop being applied.
+window.__BUILD__ = '__BUILD_STAMP__';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".

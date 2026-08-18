@@ -1081,6 +1081,20 @@ try {
     fail('the Strava token helper can stall silently or call back twice (see above).');
   }
 
+  // STEP 68 - zwo target stamp + build stamp. A VO2 session ridden at 194/194/200/199W was graded
+  //           against 209-228W and reported as failed. The grader and the exporter agree; the FILE
+  //           was the stale artifact, built before the band was raised. The export now records the
+  //           band it sent and grading prefers it. Build stamp moves to CI, failing closed.
+  console.log(`${D}. checking zwo target + build stamp...${X}`);
+  try {
+    const so = execSync('node scripts/zwo-stamp-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a session can be graded against a band it was never sent (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
