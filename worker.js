@@ -11774,6 +11774,67 @@ function burnedCalsForDate_(dateKey){
   try{ (st.runs||[]).forEach(function(r){ take(r,'run'); }); }catch(e){}
   return out;
 }
+// Console diagnostic: calDump_() -> why the day's burn is what it is.
+//
+// "Burned 0" has now been reported three times and been a different thing twice, so the question is
+// always the same: does the app's OWN record carry a calorie figure, or is it reading one it does
+// not have? This answers that in one line instead of a pasted blob, and names which of the three
+// cases it is. Same console-invoked shape as planDump_ and backfillStravaCalories_.
+//
+// STRICTLY READ-ONLY. It never fetches, never writes and never pushes - the fix is a separate,
+// explicit call, printed in the output. A diagnostic that repairs what it measures cannot be run
+// twice to check whether the repair held.
+//
+// The three cases, and why they are different:
+//   LAG     - stravaId present, calories missing. The LIST endpoint omits calories; only
+//             /activities/{id} carries them. backfillStravaCalories_ closes it.
+//   ORPHAN  - no stravaId (a hand-logged run in st.runs). The backfill filters st.rides and
+//             requires an id, so nothing can ever reach these. Needs a decision, not a re-run.
+//   STORED  - calories are on the record. Then the burn should be non-zero and anything else is a
+//             real bug in the read path.
+function calDump_(dateKey){
+  try{
+    var k=(typeof normDate==='function')?normDate(dateKey||((typeof getTodayKey==='function')?getTodayKey():'')):dateKey;
+    if(!k){ console.log('[cal] no date'); return null; }
+    var rows=[], lag=0, orphan=0, stored=0, est=0;
+    var scan=function(arr, from){
+      (arr||[]).forEach(function(r,i){
+        if(!r || r.deleted || !r.date) return;
+        if(((typeof normDate==='function')?normDate(r.date):r.date)!==k) return;
+        var cal=parseFloat(r.calories), rc=(typeof rideCalories_==='function')?rideCalories_(r):null;
+        // LAG/ORPHAN mean CONTRIBUTES NOTHING, not merely "no calories field". A cycling activity
+        // with kJ but no calories is already counted via the estimate, so flagging it would cry wolf
+        // on every bike day and bury the one case that actually zeroes the burn - which is a run.
+        // It is still worth a backfill (a real Strava figure beats an estimate), so it is reported
+        // separately as ESTIMATED rather than silently folded into either bucket.
+        var counts=!!(rc && rc.cal>0);
+        if(cal>0) stored++;
+        else if(counts) est++;
+        else if(r.stravaId) lag++;
+        else orphan++;
+        rows.push({ where:from+'['+i+']',
+                    name:(typeof actName_==='function')?actName_(r):(r.name||''),
+                    sport:(typeof rideSport_==='function')?rideSport_(r):'',
+                    calories:(r.calories==null?null:r.calories),
+                    workKj:(r.workKj==null?null:r.workKj),
+                    stravaId:(r.stravaId==null?null:r.stravaId),
+                    counted:rc?rc.cal:0, estimated:!!(rc&&rc.est) });
+      });
+    };
+    scan(st&&st.rides, 'st.rides');
+    scan(st&&st.runs, 'st.runs');
+    var burn=(typeof burnedCalsForDate_==='function')?burnedCalsForDate_(k):null;
+    console.log('[cal] '+k+' - '+rows.length+' activity(ies); burn='+((burn&&burn.cal)||0)+' from '+((burn&&burn.n)||0));
+    if(rows.length && console.table) console.table(rows); else rows.forEach(function(x){ console.log('   ', JSON.stringify(x)); });
+    if(!rows.length) console.log('[cal] nothing on this date in st.rides or st.runs - those are the only two arrays the burn reads.');
+    if(est) console.log('[cal] ESTIMATED on '+est+': counted from kJ, not a recorded figure (cycling only). Contributing, but a backfill would make it exact.');
+    if(!lag && !orphan) console.log('[cal] Nothing is contributing zero. If the page still shows no burn, that is a real bug in the read path - send this output.');
+    if(lag) console.log('[cal] LAG on '+lag+': synced without calories (the list endpoint omits them). Fix: backfillStravaCalories_(40, function(f,t){ console.log(f+"/"+t); });');
+    if(orphan) console.log('[cal] ORPHAN on '+orphan+': no stravaId, so the backfill cannot reach it. Hand-logged runs can never gain calories today - that needs a decision, not a re-run.');
+    return { date:k, rows:rows, burn:burn, lag:lag, orphan:orphan, stored:stored, estimated:est };
+  }catch(e){ try{ console.error('[cal] '+((e&&e.message)||e)); }catch(_e){} return null; }
+}
+try{ if(typeof window!=='undefined') window.calDump_=calDump_; }catch(e){}
 // The day's fuelling target once real activity is accounted for. Returns the three figures the
 // surfaces display, so the header and the meal-plan card cannot show different arithmetic.
 //
