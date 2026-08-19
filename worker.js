@@ -36751,7 +36751,9 @@ function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETES
 // Prints the two widths that were being conflated - the VIEWPORT and the tiles' own COLUMN - plus
 // what each rule actually resolved to. The reported inversion (4-across on an iPad, 2x2 on a wider
 // desktop) is only explicable if those two quantities disagree, so print both and stop guessing.
-function tileDump_(){
+// tileDump_(seconds) - default 6s of WATCHING. Pass 0 for a single sample.
+function tileDump_(watchSec){
+  if(watchSec===undefined) watchSec=6;
   try{
     // EVERY instance, not the first. querySelector returns whichever node comes first in the DOM,
     // and this app re-renders into parallel desktop/mobile shells and re-parents cards by measured
@@ -36770,7 +36772,13 @@ function tileDump_(){
     var visible=0;
     grids.forEach(function(g,i){
       var r=g.getBoundingClientRect();
-      var vis=!!(g.offsetParent!==null && r.width>0 && r.height>0);
+      // ON SCREEN, not merely "rendered". offsetParent plus a non-zero box is satisfied by a node
+      // parked offscreen (left:-9999px, or scrolled far out of a hidden shell), and that is one of
+      // the few remaining ways a measured 4-across grid can coexist with a 2x2 screenshot. Require
+      // the rect to actually intersect the viewport.
+      var vw=window.innerWidth, vh=window.innerHeight;
+      var onScreen=(r.right>0 && r.left<vw && r.bottom>0 && r.top<vh);
+      var vis=!!(g.offsetParent!==null && r.width>0 && r.height>0 && onScreen);
       if(vis) visible++;
       var col=g.closest?g.closest('.ds-stat-col'):g.parentNode;
       var cw=col?Math.round(col.getBoundingClientRect().width):-1;
@@ -36778,11 +36786,18 @@ function tileDump_(){
       // split(' ') and filter, NOT a regex: the served template eats a backslash level, so a source
       // /\s+/ arrives at the browser as /s+/ - valid, silent, and splitting on the letter s.
       var cols=String(gc).trim().split(' ').filter(function(x){ return x!==''; }).length;
-      console.log('   ['+i+'] '+(vis?'VISIBLE':'hidden ')
+      // CHILD COUNT. Four columns with four children can only ever paint as ONE row - that is not a
+      // preference, it is how grid works. So a 2x2 screenshot against a 4-column computed style means
+      // the grid does not hold four children. Print it rather than assume it.
+      var kids=g.childElementCount;
+      console.log('   ['+i+'] '+(vis?'ON SCREEN':(onScreen?'hidden   ':'OFFSCREEN'))
         +'  cols='+cols+' ('+(cols===4?'4 across':cols===2?'2x2':cols===1?'STACKED - no rule on this screen':cols+' across, UNBALANCED')+')'
+        +'  children='+kids+(kids!==4?'  <-- NOT 4, this is the answer':'')
+        +'  rows='+(kids&&cols?Math.ceil(kids/cols):0)
         +'  gridWidth='+Math.round(r.width)+'px'
         +'  containerWidth='+(cw<0?'no .ds-stat-col ancestor':cw+'px')
-        +'  tile='+(cols>0?Math.round((r.width-(cols-1)*8)/cols):0)+'px');
+        +'  tile='+(cols>0?Math.round((r.width-(cols-1)*8)/cols):0)+'px'
+        +'  at('+Math.round(r.left)+','+Math.round(r.top)+')');
       if(vis){
         console.log('        tracks: '+gc);
         if(cw>=0) console.log('        container '+(cw>=408?'>= 408 -> should be 4 across':'< 408 -> 2x2 is CORRECT for this width; the space is lost UPSTREAM, in row 1 grid 1.3/0.92/1.55'));
@@ -36791,8 +36806,44 @@ function tileDump_(){
         console.log('        ancestor widths (nearest first): '+chain.join(' <- '));
       }
     });
-    console.log('   VISIBLE INSTANCES='+visible+(visible>1?'  <-- two are on screen at once':'')
-      +(grids.length>1?'   (read the VISIBLE row; the others are stale nodes)':''));
+    console.log('   ON-SCREEN INSTANCES='+visible+(visible>1?'  <-- two are on screen at once':'')
+      +(grids.length>1?'   (read the ON SCREEN row; the others are stale or parked nodes)':''));
+    // WATCH, DO NOT SAMPLE. Three sample-once diagnostics have now disagreed with a screenshot, and
+    // every remaining explanation involves TIME: this app re-renders repeatedly, and _balCols_
+    // re-parents cards by MEASURED height - so the card can be moved into a narrower column AFTER a
+    // reading is taken. A single sample cannot see that by construction. tileDump_(seconds) reports
+    // every change to width, column count or child count, and prints nothing if the layout is
+    // genuinely stable - which is itself the useful answer.
+    if(watchSec>0){
+      console.log('   watching '+watchSec+'s for changes (re-render, re-parent, resize)...');
+      var seen={}, t0=Date.now();
+      var snap=function(tag){
+        [].slice.call(document.querySelectorAll('.ds-stat-grid')).forEach(function(g,i){
+          var r=g.getBoundingClientRect();
+          var col=g.closest?g.closest('.ds-stat-col'):null;
+          var cw=col?Math.round(col.getBoundingClientRect().width):-1;
+          var cols=String(getComputedStyle(g).gridTemplateColumns).trim().split(' ').filter(function(x){return x!=='';}).length;
+          var key=i+'|'+cols+'|'+Math.round(r.width)+'|'+cw+'|'+g.childElementCount;
+          if(seen[i]!==key){
+            if(seen[i]!==undefined){
+              console.log('   +'+((Date.now()-t0)/1000).toFixed(1)+'s ['+i+'] CHANGED ('+tag+'): cols='+cols
+                +' children='+g.childElementCount+' gridWidth='+Math.round(r.width)+' containerWidth='+cw
+                +'   <-- the layout moved AFTER the reading');
+            }
+            seen[i]=key;
+          }
+        });
+      };
+      snap('initial');
+      var mo=new MutationObserver(function(){ snap('dom'); });
+      mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});
+      var iv=setInterval(function(){ snap('poll'); }, 250);
+      setTimeout(function(){
+        clearInterval(iv); try{ mo.disconnect(); }catch(e){}
+        console.log('   ...watch ended. No CHANGED lines above means the layout is stable and the '
+          +'reading matches what is painted - in which case the mismatch is upstream of this element.');
+      }, watchSec*1000);
+    }
   }catch(e){ console.error('[tile-dump] '+((e&&e.message)||e)); }
   return 'see console';
 }

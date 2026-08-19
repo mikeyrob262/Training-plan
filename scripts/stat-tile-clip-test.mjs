@@ -79,7 +79,22 @@ ok('the container rules come AFTER the viewport fallback, so they win where supp
   const need = 4 * 96 + 3 * 8;
   ok('the container threshold equals 4 tiles + 3 gaps (' + (m ? m[1] : '?') + ' vs ' + need + ')', m && +m[1] === need);
 }
-ok('a diagnostic exists to settle it with measurements', /function tileDump_\(\)/.test(src));
+ok('a diagnostic exists to settle it with measurements', /function tileDump_\(watchSec\)/.test(src));
+// WATCH, DO NOT SAMPLE. Three sample-once readings disagreed with a screenshot. Every remaining
+// explanation involves TIME - this app re-renders repeatedly and _balCols_ re-parents cards by
+// measured height, so the card can move into a narrower column AFTER a reading. One sample cannot
+// see that by construction.
+ok('...it WATCHES for a period rather than sampling once', /if\(watchSec===undefined\) watchSec=6;/.test(src));
+ok('...via a MutationObserver on the subtree', /new MutationObserver/.test(src) && /attributeFilter:\['style','class'\]/.test(src));
+ok('...and a poll, since a re-parent need not mutate the observed attributes', /setInterval\(function\(\)\{ snap\('poll'\); \}, ?250\)/.test(src));
+ok('...reporting a change with its timestamp', /CHANGED \('\+tag\+'\)/.test(src));
+ok('...and disconnecting when the watch ends', /mo\.disconnect\(\)/.test(src));
+ok('...saying explicitly that NO change means the reading matches the paint', /No CHANGED lines above means the layout is stable/.test(src));
+// Four columns with four children can only paint as ONE row. A 2x2 screenshot against a 4-column
+// computed style therefore means the grid does not hold four children - so print the count.
+ok('it prints the grid child count', /children='\+kids/.test(src));
+ok('...and flags a count that is not 4 as the answer', /NOT 4, this is the answer/.test(src));
+ok('...and derives the row count from children and columns', /rows='\+\(kids&&cols\?Math\.ceil\(kids\/cols\):0\)/.test(src));
 ok('...printing the viewport, one of the two quantities that were conflated', /viewport='\+window\.innerWidth/.test(src));
 // It reported "4 across" against a screenshot showing 2x2, because querySelector returns the FIRST
 // node and this app re-renders into parallel shells and re-parents cards by measured height. A
@@ -88,9 +103,15 @@ ok('...printing the viewport, one of the two quantities that were conflated', /v
 ok('it enumerates EVERY instance, not just the first', /querySelectorAll\('\.ds-stat-grid'\)/.test(src));
 ok('NEG: no querySelector-first on the grid', !/querySelector\('\.ds-stat-grid'\)/.test(src));
 ok('...and flags when more than one exists', /MORE THAN ONE, that is the bug/.test(src));
-ok('...marking which instance is VISIBLE', /vis\?'VISIBLE':'hidden/.test(src));
+ok('...marking which instance is ON SCREEN', /vis\?'ON SCREEN':\(onScreen\?'hidden/.test(src));
+// "Rendered" is not "on screen": offsetParent plus a non-zero box is satisfied by a node parked
+// offscreen, which is one of the few remaining ways a measured 4-across grid coexists with a 2x2
+// screenshot. Require the rect to intersect the viewport.
+ok('...testing that the rect intersects the viewport, not merely that it renders',
+   /r\.right>0 && r\.left<vw && r\.bottom>0 && r\.top<vh/.test(src));
+ok('...and printing each instance position, so a parked node is obvious', /at\('\+Math\.round\(r\.left\)/.test(src));
 ok('...testing visibility properly, not just presence', /g\.offsetParent!==null && r\.width>0 && r\.height>0/.test(src));
-ok('...and counting visible ones, since two on screen is its own bug', /VISIBLE INSTANCES='\+visible/.test(src));
+ok('...and counting on-screen ones, since two at once is its own bug', /ON-SCREEN INSTANCES='\+visible/.test(src));
 ok('it reports the CONTAINER width per instance, not one global figure', /containerWidth='\+\(cw<0\?/.test(src));
 ok('...and says plainly when 2x2 is CORRECT for that width', /2x2 is CORRECT for this width; the space is lost UPSTREAM/.test(src));
 ok('...printing the ancestor chain, so a narrow column can be traced upward', /ancestor widths \(nearest first\)/.test(src));
