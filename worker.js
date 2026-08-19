@@ -35997,7 +35997,64 @@ function dsShowGear(){
 // hardcoded "up to date" — this is the stale-AQI class of bug (yesterday's 150
 // shown as current). AQI lives on a separate endpoint from the core forecast,
 // so it gets its own timestamp and can age independently and visibly.
-var WX_LAT=42.9634, WX_LON=-85.6681, WX_TZ='America%2FChicago';
+// HOME is a FALLBACK, not the answer. Grand Rapids stays as the value used when nothing better is
+// known; wxCoords_() below decides what is actually fetched.
+var WX_LAT=42.9634, WX_LON=-85.6681;
+// TIMEZONE RESOLVED FROM THE COORDINATES, not stated. This read America/Chicago while the
+// coordinates are Grand Rapids, which is America/DETROIT - Eastern, not Central. Open-Meteo labels
+// its hourly series in the timezone it is given, so every series arrived shifted by an hour while
+// every consumer treated it as local wall-clock: the ride-window slice, the start-time temperature,
+// the storm-window hours and the "peak at 3PM" labels were all reading the wrong hour. A stated
+// timezone is also wrong by construction the moment the athlete travels, which is the other half of
+// this. 'auto' makes Open-Meteo derive it from the latitude/longitude in the same request, so it is
+// correct at home and correct away without anything to keep in sync.
+var WX_TZ='auto';
+// WHERE THE WEATHER IS FETCHED FOR. Order: an explicit choice, then a device fix, then home.
+//   aiq_wx_loc  - a location the athlete picked; sticky until cleared, because a deliberate choice
+//                 outranks a device that may be reporting a hotel car park.
+//   aiq_wx_geo  - a cached browser-geolocation fix, kept with its timestamp and only trusted for
+//                 WX_GEO_TTL, so a stale fix from last week's trip cannot silently price today.
+//   WX_LAT/LON  - home, when neither is available or permission was refused.
+// Always returns something, so no caller has to handle "no location" - the failure mode is a wrong
+// city, never a blank screen.
+var WX_GEO_TTL=12*60*60*1000;
+function wxCoords_(){
+  try{
+    var pick=localStorage.getItem('aiq_wx_loc');
+    if(pick){ var p=JSON.parse(pick); if(p && isFinite(p.lat) && isFinite(p.lon)) return {lat:+p.lat, lon:+p.lon, label:p.label||'', src:'picked'}; }
+  }catch(e){}
+  try{
+    var geo=localStorage.getItem('aiq_wx_geo');
+    if(geo){ var g=JSON.parse(geo);
+      if(g && isFinite(g.lat) && isFinite(g.lon) && (Date.now()-(+g.at||0))<WX_GEO_TTL)
+        return {lat:+g.lat, lon:+g.lon, label:g.label||'Current location', src:'device'}; }
+  }catch(e){}
+  return {lat:WX_LAT, lon:WX_LON, label:'Grand Rapids, MI', src:'home'};
+}
+// One-shot device fix, requested once per load and never blocking a render. On success it caches the
+// fix and CLEARS the weather cache, because a cache keyed on nothing would keep serving the previous
+// city's forecast after the coordinates moved - the whole point of asking.
+var _wxGeoAsked=false;
+function wxRequestGeo_(cb){
+  if(_wxGeoAsked) return; _wxGeoAsked=true;
+  try{
+    if(!navigator.geolocation) return;
+    if(wxCoords_().src==='picked') return;         // an explicit choice is not overridden by a device
+    navigator.geolocation.getCurrentPosition(function(pos){
+      try{
+        var la=pos&&pos.coords&&pos.coords.latitude, lo=pos&&pos.coords&&pos.coords.longitude;
+        if(!isFinite(la)||!isFinite(lo)) return;
+        var prev=wxCoords_();
+        localStorage.setItem('aiq_wx_geo', JSON.stringify({lat:la, lon:lo, at:Date.now()}));
+        // Only tear the cache down when the position actually moved enough to matter (~10 km),
+        // so a few metres of GPS jitter does not re-fetch the whole weather stack on every load.
+        var moved=(Math.abs(la-prev.lat)>0.1 || Math.abs(lo-prev.lon)>0.1);
+        if(moved){ wxCache_.weather=null; wxCache_.aqi=null; if(typeof cb==='function') cb(); }
+        try{ console.log('[wx] device fix '+la.toFixed(3)+','+lo.toFixed(3)+(moved?' - moved, weather cache cleared':' - same area')); }catch(e){}
+      }catch(e){}
+    }, function(){ /* refused or unavailable: home stays, silently */ }, {maximumAge:WX_GEO_TTL, timeout:8000, enableHighAccuracy:false});
+  }catch(e){}
+}
 var WX_TTL=15*60*1000, AQI_TTL=30*60*1000;   // refetch windows (ms)
 var wxCache_={ weather:null, aqi:null };       // each slot: {data, fetchedAt}
 function wxClock_(ts){ if(!ts) return ''; var d=new Date(ts); var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'PM':'AM'; var h12=h%12||12; return h12+':'+(m<10?'0':'')+m+' '+ap; }
@@ -36018,8 +36075,16 @@ function wxFetch_(url, slot, ttl){
 // strip, Alerts tab, Overview tab) so all four share ONE cached fetch. Adding
 // fields is backward-compatible: readers take subsets. hourly apparent_temperature
 // / winddirection_10m / windgusts_10m + current windgusts_10m are for the tabs.
-function getWeather_(){ return wxFetch_('https://api.open-meteo.com/v1/forecast?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,relativehumidity_2m,precipitation_probability,uv_index&hourly=temperature_2m,apparent_temperature,weathercode,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone='+WX_TZ+'&forecast_days=7', 'weather', WX_TTL); }
-function getAQI_(){ return wxFetch_('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=us_aqi&hourly=us_aqi&timezone='+WX_TZ+'&forecast_days=7', 'aqi', AQI_TTL); }
+function getWeather_(){
+  // Ask the device once, on the first weather read of the session. Deliberately here rather than at
+  // boot: the prompt then appears when the athlete is looking at weather, where it explains itself,
+  // instead of unprompted on a cold start. Non-blocking - this render uses whatever wxCoords_()
+  // knows now, and a fix that MOVED clears the cache so the next read is for the new place.
+  try{ if(typeof wxRequestGeo_==='function') wxRequestGeo_(function(){
+    try{ if(typeof renderWeatherTabs==='function') renderWeatherTabs(); }catch(e){}
+  }); }catch(e){}
+  return wxFetch_('https://api.open-meteo.com/v1/forecast?latitude='+wxCoords_().lat+'&longitude='+wxCoords_().lon+'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,relativehumidity_2m,precipitation_probability,uv_index&hourly=temperature_2m,apparent_temperature,weathercode,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone='+WX_TZ+'&forecast_days=7', 'weather', WX_TTL); }
+function getAQI_(){ return wxFetch_('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+wxCoords_().lat+'&longitude='+wxCoords_().lon+'&current=us_aqi&hourly=us_aqi&timezone='+WX_TZ+'&forecast_days=7', 'aqi', AQI_TTL); }
 
 // Opens the mobile Weather Coach over the desktop layout. Returns early on a surface where the
 // Coach is already reachable, so this can never double up with the mobile entry points.
@@ -39906,7 +39971,15 @@ function dsShowDashboard(){
   H+=card(nu);
   // Weather
   var wea=lbl('WEATHER',link('View Forecast','weather'));
-  wea+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">Grand Rapids, MI</div>';
+  // The label now names the location actually FETCHED, not a hardcoded city. It said "Grand Rapids,
+  // MI" unconditionally, which is the worst kind of wrong when travelling: the figures change with
+  // the coordinates while the caption insists they are home. src is appended when the fix came from
+  // the device, so a surprising forecast is traceable to a surprising position.
+  {
+    var _wc=(typeof wxCoords_==='function')?wxCoords_():{label:'Grand Rapids, MI', src:'home'};
+    wea+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">'+(_wc.label||'Grand Rapids, MI')
+      +(_wc.src==='device'?' &middot; from this device':(_wc.src==='picked'?' &middot; chosen':''))+'</div>';
+  }
   wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:var(--d-t1);line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:var(--d-t4);margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
   wea+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;margin-top:auto">';
   wea+='<div><div style="font-size:10px;color:var(--d-t4)">Humidity</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-hum">—</div></div>';
