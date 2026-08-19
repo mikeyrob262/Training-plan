@@ -1187,6 +1187,22 @@ try {
     fail('drift chart or weather alert dating regressed (see above).');
   }
 
+  // STEP 75 - THE PATTERN, not another instance of it: a number presented as measured when it is
+  //           defaulted, cached, or from another date. Pins the two found in the sweep (max HR had
+  //           TWO disagreeing defaults, so Settings showed 180 while every calculation used 172;
+  //           HR drift cited a ride up to 60 days old as current) and asserts the classes that
+  //           already hold the line stay held - W/kg refusing a guessed weight, records excluding
+  //           NP estimates, the snapshot horizon, stamp-on-answer, the weather fetchedAt wrapper.
+  console.log(`${D}. checking stale-or-guessed values are disclosed...${X}`);
+  try {
+    const so = execSync('node scripts/stale-as-current-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a guessed or stale value can be shown as measured (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

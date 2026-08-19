@@ -42,14 +42,23 @@ for(const f of CLOSURE) code+=extract(f);
 
 // ---- harness: capture the prompt instead of calling the proxy ----
 let lastPrompt=null;
+const sandboxSt = { ftp:190, maxHR:172 };
 const sandbox = {
-  st:{ ftp:190, maxHR:172 },
+  st: sandboxSt,
   SESSION_DEFS:{ z2:{name:'Endurance', type:'ride', note:'sit in zone 2'} },
   normDate:(d)=>d,
   blockPlanFor_:()=>({ sessions:[{ intent:'z2', rx:{ targets:{ powerLo:150, powerHi:180, zone:'Z2' } } }] }),
   fetch:(_u,opt)=>{ lastPrompt=JSON.parse(opt.body).messages[0].content; return Promise.resolve({ json:()=>Promise.resolve({content:[{text:'Headline here\n- a bullet\nRecommendation: none'}]}) }); },
   AbortController:function(){ this.signal={}; this.abort=()=>{}; },
   setTimeout:()=>0, clearTimeout:()=>{},
+  // Max HR now resolves through one accessor instead of a hardcoded ||172 at each site, because
+  // there were two defaults and they disagreed (Settings showed 180, every calculation used 172).
+  // Mirrored rather than pulled, since it is three lines and reads st from THIS sandbox — but the
+  // constant is asserted against real source in stale-as-current-test.mjs, so a change there is
+  // still caught somewhere.
+  _MAXHR_DEFAULT: 172,
+  maxHR_: function(){ const v = parseInt(sandboxSt.maxHR, 10); return (v > 0) ? v : 172; },
+  maxHRSrc_: function(){ const v = parseInt(sandboxSt.maxHR, 10); return (v > 0) ? 'set' : 'default'; },
   // The ordering rule the verdict card now carries. Supplied as its REAL text, pulled from source,
   // rather than a stub — so the assertions below read the prompt the model actually receives. A
   // stubbed constant here would let the rule be deleted from worker.js without this noticing.

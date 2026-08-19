@@ -8284,7 +8284,7 @@ function unifiedLoad(a){
   if(a.tss) return a.tss; // already has real power-based TSS (cycling)
 
   var durMin = (a.movingSecs ? a.movingSecs/60 : (a.duration ? parseDurToMin(a.duration) : 0));
-  var maxHR = parseInt(st.maxHR||172);
+  var maxHR = maxHR_();
   var lthr = Math.round(maxHR*0.88);
 
   if(a.avgHR && durMin){
@@ -10511,7 +10511,11 @@ function showSet(){
     +'<div><div class="ci-lbl">Weight (lbs)</div><input class="ci-in" type="number" value="'+(st.weight||'')+'" placeholder="162" id="set-wt"></div>'
     +'<div><div class="ci-lbl">FTP (watts)</div><input class="ci-in" type="number" value="'+(st.ftp||'')+'" placeholder="185" id="set-ftp"></div>'
     +'<div><div class="ci-lbl">VO2 Max</div><input class="ci-in" type="number" step="0.1" value="'+(st.vo2max||'')+'" placeholder="e.g. 47" id="set-vo2"></div>'
-    +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+(st.maxHR||180)+'" placeholder="180" id="set-maxhr"></div>'
+    // EMPTY when nothing is on file, with the fallback as the PLACEHOLDER. Pre-filling the box with
+    // the effective value makes an unset field look set, which is how the old 180-vs-172 split hid:
+    // the athlete read a number in the box and had no way to know it was not the one being used.
+    // A placeholder says "this is what will be assumed", which is the true statement.
+    +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+((st.maxHR>0)?st.maxHR:'')+'" placeholder="'+_MAXHR_DEFAULT+' (assumed)" id="set-maxhr"></div>'
     // LTHR sits at the same tier as FTP because it does the same job: FTP scores rides, LTHR scores
     // runs. Every run TSS in the app is computed off this field and nothing hardcodes it.
     +'<div><div class="ci-lbl">LTHR (run, bpm)</div><input class="ci-in" type="number" value="'+(st.lthr||'')+'" placeholder="170" id="set-lthr"></div>'
@@ -36642,6 +36646,19 @@ function _goalTargets_(){
 // an empty log returns the current st.ftp, and a date before the log uses the FIRST recorded FTP,
 // never an invented past value.
 var _FTP_DEFAULT=186;   // _FTP_RETEST_DATE is declared up with the block constants — one source
+// ONE max-HR fallback, because there were TWO and they disagreed. The Settings input rendered
+// st.maxHR||180 with a placeholder of 180, while hrTSS, the zone bands, the zone card and the HR
+// route map all computed st.maxHR||172. With no max HR on file the athlete READ 180 and every
+// number was built on 172 - an 8 bpm gap baked silently into every zone boundary, and via the
+// LTHR-as-88%-of-max rule into hrTSS, therefore into TSS, therefore into CTL/ATL/TSB.
+//
+// maxHRSrc_ exists so a surface can TELL whether the number was measured or guessed. The app
+// already holds this line elsewhere - the W/kg card refuses to divide by a guessed weight because
+// "a figure computed from a guessed weight would look exactly like a measured one" - and HR zones
+// were the place it was not held.
+var _MAXHR_DEFAULT=172;
+function maxHR_(){ var v=(typeof st!=='undefined'&&st)?parseInt(st.maxHR,10):0; return (v>0)?v:_MAXHR_DEFAULT; }
+function maxHRSrc_(){ var v=(typeof st!=='undefined'&&st)?parseInt(st.maxHR,10):0; return (v>0)?'set':'default'; }
 function _ftpToday_(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 // RAW - callers that MUTATE the log (ftpRecord_) need the real array, tombstones included.
 function _ftpHist_(){ if(typeof st==='undefined'||!st) return []; if(!Array.isArray(st.ftpHistory)) st.ftpHistory=[]; return st.ftpHistory; }
@@ -39105,6 +39122,28 @@ function _hrdCandidates_(){
 }
 // "EZ-Z2 Ride · Jul 23" — the card has to name the ride it read, or a number off a three-day-old
 // ride silently reads as a number off today's.
+// HOW OLD THE READ IS, STATED. The card can legitimately cite a ride up to _HRD_LOOKBACK_DAYS (60)
+// old and calls it "Last qualifying ride" - true, and read as CURRENT when it sits in a row of
+// cards that are all about this week. The ride's date was printed, but a date is not an age: nobody
+// subtracts Aug 12 from today while scanning a dashboard. Decoupling is a durability signal that
+// moves with fitness, so a six-week-old figure is not a stale copy of today's answer, it is a
+// different question's answer.
+//
+// Returns null under a week (fresh enough that saying so is noise), otherwise the age and whether
+// it has passed the point where it should be read as history rather than status.
+var _HRD_STALE_DAYS = 21;
+function _hrdAgeOf_(r){
+  try{
+    if(!r || !r.date || typeof normDate!=='function') return null;
+    var d=normDate(r.date); if(!d) return null;
+    var p=String(d).split('-'); if(p.length<3) return null;
+    var then=new Date(+p[0], (+p[1])-1, +p[2]);
+    var now=new Date(); now=new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var days=Math.round((now-then)/86400000);
+    if(!(days>6)) return null;
+    return { days:days, stale:days>=_HRD_STALE_DAYS };
+  }catch(e){ return null; }
+}
 function _hrdRideLabel_(r){
   if(!r) return '';
   var nm=actName_(r);
@@ -39514,6 +39553,7 @@ function dsShowDashboard(){
       var msg=dec<_HRD_COUPLED_PCT?'Aerobically coupled':(dec<10?'Mild decoupling':'High — review pacing');
       var series=_hdSeriesOf(res);
       var who=ride?_hrdRideLabel_(ride):'';
+      var _age=ride?_hrdAgeOf_(ride):null;
       return '<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>'
         +'<div style="font-size:12px;font-weight:600;color:'+col+';margin:4px 0 2px">'+msg+'</div>'
         // "Read from" PREFIX. The bare ride name was reported as a stray fragment ("Holland 100
@@ -39522,6 +39562,11 @@ function dsShowDashboard(){
         // NOT from today's ride), but a label nobody can identify as a label does not do the job it
         // was added for. Naming the relationship costs two words.
         +(who?'<div style="font-size:10px;color:var(--d-t3);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="color:var(--d-dim)">Read from</span> '+who+'</div>':'')
+        // The AGE, not just the date. A date is not an age: nobody subtracts Aug 12 from today while
+        // scanning a dashboard. Beyond _HRD_STALE_DAYS it is dimmed and named as history so it
+        // cannot read as this week's status; under a week _hrdAgeOf_ returns null and nothing prints.
+        +(_age?('<div style="font-size:10px;font-weight:700;color:'+(_age.stale?ACC.amber:'var(--d-t3)')+'">'
+            +(_age.stale?'&#9888; ':'')+_age.days+' days ago'+(_age.stale?' &middot; not a current read':'')+'</div>'):'')
         +'<div style="font-size:10px;color:var(--d-dim);margin-bottom:8px">Steady segment, warm-up dropped · '+res.durMin+' min</div>'
         +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(series.length>3?_hrdChart_(series,col,res.durMin):'')+'</div>';
     }
@@ -41999,7 +42044,7 @@ function _actProfile_(r){
 // the same ride (recurring bug pattern #1: extract one shared function, never build it twice).
 function _rideTelemetryFacts_(r){
   var FTP=parseInt(st.ftp||186);
-  var maxHR=parseInt(st.maxHR||172);
+  var maxHR=maxHR_();
   var zonePct = r.avgHR ? Math.round((r.avgHR/maxHR)*100) : null;
   var prof=_actProfile_(r);
   var noun=prof.noun, Noun=noun.charAt(0).toUpperCase()+noun.slice(1);
@@ -42727,7 +42772,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>Z5</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444"></span>Z6+</span>'].join('');
     } else if(routeColorMode==='hr'){
-      mapCard.innerHTML=buildRouteMapHR(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartHR||[], parseInt(st.maxHR||172), r.laps);
+      mapCard.innerHTML=buildRouteMapHR(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartHR||[], maxHR_(), r.laps);
       legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:var(--d-t4)"></span>Z1</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z2</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z3</span>',
@@ -42854,7 +42899,7 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
 
   var hrColHtml='';
   if(r.avgHR){
-    var cMaxHR=parseInt(st.maxHR||172);
+    var cMaxHR=maxHR_();
     var cZones=[
       {n:'Z1 Recovery',lo:0,hi:Math.round(cMaxHR*0.6),c:'#8a8a8a'},
       {n:'Z2 Endurance',lo:Math.round(cMaxHR*0.6)+1,hi:Math.round(cMaxHR*0.7),c:'#0F6E56'},
@@ -42864,6 +42909,12 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
     ];
     var avgZone=cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;})||cZones[0];
     hrColHtml+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">HR Zone (avg '+r.avgHR+' &mdash; '+avgZone.n+')</div>';
+    // SAY SO WHEN THE BANDS ARE BUILT ON AN ASSUMED MAX HR. Every boundary below is a percentage of
+    // it, so with nothing on file the zone name is a guess wearing the same typeface as a
+    // measurement. Same rule the W/kg card already follows for a missing weight.
+    if(typeof maxHRSrc_==='function' && maxHRSrc_()==='default'){
+      hrColHtml+='<div style="font-size:9px;color:var(--t3);margin:-3px 0 6px;font-weight:600">Zones assume a max HR of '+_MAXHR_DEFAULT+' &mdash; set yours in Settings</div>';
+    }
     hrColHtml+='<div style="display:flex;flex-direction:column;align-items:flex-start;gap:5px">';
     cZones.forEach(function(z){
       var isActive=z.n===avgZone.n;
