@@ -31,36 +31,51 @@ const ok = (l, c) => { if (!c) fails++; console.log('  ' + (c ? G+'PASS'+X : R+'
 
 function matchBrace(from){ let i = src.indexOf('{', from), d = 0;
   for (; i < src.length; i++){ const c = src[i]; if (c === '{') d++; else if (c === '}'){ d--; if (!d) return i; } } return -1; }
-const i0 = src.indexOf('function renderRideMap_(');
-if (i0 < 0) { console.log(R + 'renderRideMap_ missing' + X); process.exit(1); }
-const FN = src.slice(i0, matchBrace(i0) + 1);
 // Strip comments so an assertion counts CODE, not prose that happens to quote it. Every guard in
 // this file has been broken once by a comment mentioning the thing it greps for.
-const CODE = FN.replace(/^\s*\/\/.*$/gm, '');
+const noCmt = (s) => s.replace(/^\s*\/\/.*$/gm, '');
+const exFn = (n) => { const i = src.indexOf('function ' + n + '('); if (i < 0) { console.log(R + n + ' missing' + X); process.exit(1); } return src.slice(i, matchBrace(i) + 1); };
+const MOUNT = noCmt(exFn('_mountMap_'));
+const RENDER = noCmt(exFn('renderRideMap_'));
 
 console.log('\n' + Y + '=== the previous map on this container is torn down first ===' + X);
-ok('a registry keyed by container id exists', /window\._rideMapReg_/.test(CODE));
-ok('...and the prior instance is removed', /_oldMap\s*=\s*window\._rideMapReg_\[mapId\]/.test(CODE) && /_oldMap\.remove\(\)/.test(CODE));
+ok('a registry keyed by container id exists', /window\._rideMapReg_/.test(MOUNT));
+ok('...and the prior instance is removed', /_old\s*=\s*window\._rideMapReg_\[key\]/.test(MOUNT) && /_old\.remove\(\)/.test(MOUNT));
 ok('...before the new map is constructed',
-   CODE.indexOf('_oldMap.remove()') < CODE.indexOf('L.map(mapId'));
-ok('a stale stamp left by an innerHTML replacement is cleared too', /_mc\._leaflet_id\s*=\s*null/.test(CODE));
+   MOUNT.indexOf('_old.remove()') < MOUNT.indexOf('L.map(el'));
+ok('a stale stamp left by an innerHTML replacement is cleared too', /el\._leaflet_id\s*=\s*null/.test(MOUNT));
 ok('...and that clearing also happens BEFORE construction',
-   CODE.indexOf('_mc._leaflet_id=null') > -1 && CODE.indexOf('_mc._leaflet_id=null') < CODE.indexOf('L.map(mapId'));
-ok('the new map is registered for the next render to find', /window\._rideMapReg_\[mapId\]\s*=\s*map/.test(CODE));
-ok('...and deregisters itself on unload, so the registry cannot leak', /delete window\._rideMapReg_\[mapId\]/.test(CODE));
+   MOUNT.indexOf('el._leaflet_id=null') > -1 && MOUNT.indexOf('el._leaflet_id=null') < MOUNT.indexOf('L.map(el'));
+ok('the new map is registered for the next render to find', /window\._rideMapReg_\[key\]\s*=\s*m/.test(MOUNT));
+ok('...and deregisters itself on unload, so the registry cannot leak', /delete window\._rideMapReg_\[key\]/.test(MOUNT));
+ok('an element without an id still gets the stamp guard', /key=\(typeof target==='string'\)\?target:\(el\.id\|\|null\)/.test(MOUNT));
 
 console.log('\n' + Y + '=== a mount failure is LOUD and returns null, never an escaping throw ===' + X);
-ok('the construction is wrapped', /try\{[\s\S]{0,120}map=L\.map\(mapId/.test(CODE));
-ok('...it logs which container failed', /\[ridemap\] mount failed for/.test(CODE));
-ok('...and returns null so the caller\'s own fallback runs', /mount failed for[\s\S]{0,160}return null/.test(CODE));
-// The exact shape that caused the silent blank must not come back.
-ok('NEG: L.map is no longer called bare', !/^\s*var map=L\.map\(mapId/m.test(CODE));
+ok('the construction is wrapped', /try\{[\s\S]{0,80}m=L\.map\(el/.test(MOUNT));
+ok('...it logs which container failed', /\[map\] mount failed for/.test(MOUNT));
+ok('...and returns null so the caller\'s own fallback runs', /mount failed for[\s\S]{0,180}return null/.test(MOUNT));
+
+console.log('\n' + Y + '=== EVERY mount routes through the guard, not just the reported one ===' + X);
+{
+  // The audit that found this bug found three more unguarded mounts. A fix that covered only the
+  // ride map would have left the ride-planner wind map able to throw inside a bare try and blank in
+  // silence. Count constructions in CODE, so the explanatory comments above cannot mask a live one.
+  const bare = (noCmt(src).match(/=L\.map\(/g) || []).length;
+  ok('exactly one L.map() construction remains, inside the helper (' + bare + ')', bare === 1);
+  ok('...and it is the helper\'s', /m=L\.map\(el/.test(MOUNT));
+  const routed = (noCmt(src).match(/_mountMap_\(/g) || []).length - 1;   // minus the definition
+  ok('all four mount sites route through it (' + routed + ')', routed === 4);
+  ok('the ride renderer uses it and bails on null', /var map=_mountMap_\(mapId,/.test(RENDER) && /if\(!map\) return null;/.test(RENDER));
+  ok('the segment map now also removes its previous instance', /if\(_saMap && _saMap!==map\) _saMap\.remove\(\)/.test(noCmt(src)));
+  ok('the wind map reports a failed mount instead of swallowing it', /WM: mount failed/.test(noCmt(src)));
+  ok('the weather map keeps its own separate teardown too', /weatherMapInstance\.remove\(\)/.test(noCmt(src)));
+}
 
 console.log('\n' + Y + '=== the earlier zero-size fix is untouched ===' + X);
-ok('the ResizeObserver is still there', /new ResizeObserver\(/.test(CODE));
-ok('...still ignores a still-collapsed container', /if\(w<2 \|\| h<2\) return;/.test(CODE));
-ok('...still re-fits only once', /if\(!map\.__sizedOnce\)/.test(CODE));
-ok('...and still disconnects with the map', /_ro\.disconnect\(\)/.test(CODE));
+ok('the ResizeObserver is still there', /new ResizeObserver\(/.test(RENDER));
+ok('...still ignores a still-collapsed container', /if\(w<2 \|\| h<2\) return;/.test(RENDER));
+ok('...still re-fits only once', /if\(!map\.__sizedOnce\)/.test(RENDER));
+ok('...and still disconnects with the map', /_ro\.disconnect\(\)/.test(RENDER));
 
 console.log('\n' + Y + '=== the semantics, exercised against Leaflet\'s actual rule ===' + X);
 {
@@ -107,11 +122,10 @@ console.log('\n' + Y + '=== the semantics, exercised against Leaflet\'s actual r
   ok('an orphaned stamp with no tracked instance is recovered', !!mount('other-map', orphan));
 }
 
-console.log('\n' + Y + '=== every caller benefits, because there is one renderer ===' + X);
+console.log('\n' + Y + '=== every ride map still shares one renderer ===' + X);
 {
-  const calls = (src.match(/renderRideMap_\(/g) || []).length - 1;   // minus the definition
+  const calls = (noCmt(src).match(/renderRideMap_\(/g) || []).length - 1;   // minus the definition
   ok('all ride maps still route through renderRideMap_ (' + calls + ' call sites)', calls >= 5);
-  ok('the weather map keeps its own separate teardown', /weatherMapInstance\.remove\(\)/.test(src));
 }
 
 console.log('');

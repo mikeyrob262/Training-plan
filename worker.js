@@ -28149,8 +28149,12 @@ function _saMapMount_(){
   // preferCanvas: ~1,900 segments is ~3,800 vector layers, a slideshow in SVG and smooth on canvas.
   // zoomSnap 0.25 because Leaflet snaps fitBounds to INTEGER zoom by default, so bounds wanting z9.6
   // open at z9 - about 1.5x too far out, which is most of why the old default view read as sparse.
-  var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
+  // Guarded mount: this host is freshly appended so it cannot carry a stale stamp, but the PREVIOUS
+  // map was never removed - it and its listeners survived every re-render of this screen.
+  var map=_mountMap_(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
                       preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
+  if(!map) return;
+  try{ if(_saMap && _saMap!==map) _saMap.remove(); }catch(e){}
   _saMap=map;
   addRideMapBase_(map,'light','aiq_segMapBase');
   // ON THE LIGHT BASE THE ROADS ARE NOT A SEPARATE LAYER - Voyager bakes them into the base tile
@@ -42271,6 +42275,48 @@ function addRideLapMarkers_(map,pts,laps){
 //   opts.colorAt    optional fn(i, pts, frac) -> color, for zone recoloring
 //   opts.laps       optional lap array for lap markers
 //   opts.scrollWheelZoom / opts.zoomControl / opts.maxZoom / opts.onReady
+// THE ONLY PLACE THAT CONSTRUCTS A LEAFLET MAP.
+//
+// L.map() THROWS 'Map container is already initialized.' on a div that still carries a _leaflet_id,
+// and a throw from a bare call escapes whatever render armed it. On the ride map that produced a
+// silent blank box - no map, no route, and not even the caller's own fallback, which runs on a null
+// RETURN and never on an exception. Intermittent, because it needs the NODE to survive a re-render:
+// a surface that rebuilds its innerHTML gets a fresh div and works, while navigation between rides
+// or two armed mount timers reuse one and throw. A reload always cleared it.
+//
+// The ride renderer got this guard first. Routing every mount through here closes the same exposure
+// on the other three, which an audit found unguarded: the ride-planner wind map could throw inside a
+// bare try and blank in silence, and the segment map leaked its previous instance (and that map's
+// ResizeObserver) on every re-render. Removing the old map fires 'unload', so the leak closes too.
+//
+// Accepts an id or an element - Leaflet takes either, and the segment map appends its own host.
+function _mountMap_(target, opts){
+  if(typeof L==='undefined') return null;
+  var el=(typeof target==='string')?document.getElementById(target):target;
+  if(!el) return null;
+  var key=(typeof target==='string')?target:(el.id||null);
+  if(!window._rideMapReg_) window._rideMapReg_={};
+  if(key){
+    try{ var _old=window._rideMapReg_[key]; if(_old) _old.remove(); }catch(e){}
+    try{ delete window._rideMapReg_[key]; }catch(e){}
+  }
+  // A container replaced by innerHTML never ran .remove(), so a stale stamp can outlive the instance
+  // we were tracking. Clear it directly - Leaflet only tests it for truthiness.
+  try{ if(el._leaflet_id){ el._leaflet_id=null; el.innerHTML=''; } }catch(e){}
+  var m;
+  try{
+    m=L.map(el,opts||{});
+  }catch(e){
+    // Fail LOUD and return null, so each caller's own fallback runs instead of a blank box.
+    try{ console.error('[map] mount failed for '+(key||'(element)')+': '+(e&&e.message)); }catch(e2){}
+    return null;
+  }
+  if(key){
+    window._rideMapReg_[key]=m;
+    m.on('unload', function(){ try{ if(window._rideMapReg_[key]===m) delete window._rideMapReg_[key]; }catch(e){} });
+  }
+  return m;
+}
 function renderRideMap_(mapId, lats, lons, opts){
   opts=opts||{};
   if(typeof L==='undefined') return null;
@@ -42278,39 +42324,10 @@ function renderRideMap_(mapId, lats, lons, opts){
   var nt=normalizeTrack_(lats,lons);
   if(!nt.ok || nt.lats.length<2) return null;
   var pts=nt.lats.map(function(la,i){ return [la,nt.lons[i]]; });
-  // ONE MAP PER CONTAINER, AND A SECOND MOUNT MUST NOT THROW.
-  //
-  // L.map() throws 'Map container is already initialized' when the div still carries a
-  // _leaflet_id. Nothing caught that, so the throw escaped mid-function: no map, no route, and
-  // not even the 'GPS data unavailable' fallback at the call site - that runs on a null RETURN
-  // and never on an exception. A silent blank box, which is exactly the reported symptom.
-  //
-  // It is intermittent because it needs the NODE to survive. A surface that rebuilds its
-  // innerHTML hands us a fresh div and works; ride -> ride navigation, a re-render storm, or two
-  // armed mount timers reuse the same one and throw. A reload always clears it - the tell that
-  // the container, not the data, is the variable.
-  //
-  // Tearing the old map down also fires 'unload', which disconnects its ResizeObserver, so this
-  // closes a listener leak that previously survived every re-render.
-  if(!window._rideMapReg_) window._rideMapReg_={};
-  try{ var _oldMap=window._rideMapReg_[mapId]; if(_oldMap) _oldMap.remove(); }catch(e){}
-  try{ delete window._rideMapReg_[mapId]; }catch(e){}
-  // A container replaced by innerHTML never ran .remove(), so a stale stamp can outlive the
-  // instance we were tracking. Clear it directly - Leaflet only tests it for truthiness.
-  try{
-    var _mc=document.getElementById(mapId);
-    if(_mc && _mc._leaflet_id){ _mc._leaflet_id=null; _mc.innerHTML=''; }
-  }catch(e){}
-  var map;
-  try{
-    map=L.map(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
-  }catch(e){
-    // Fail LOUD and return null, so the caller's own fallback runs instead of a blank box.
-    try{ console.error('[ridemap] mount failed for '+mapId+': '+(e&&e.message)); }catch(e2){}
-    return null;
-  }
-  window._rideMapReg_[mapId]=map;
-  map.on('unload', function(){ try{ if(window._rideMapReg_[mapId]===map) delete window._rideMapReg_[mapId]; }catch(e){} });
+  // Guarded mount - see _mountMap_. Returns null rather than throwing, so the caller's own
+  // 'GPS data unavailable' fallback runs instead of the athlete getting a blank box.
+  var map=_mountMap_(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
+  if(!map) return null;
   addRideMapBase_(map);
   // REVERTED: gap-split removed — draw the whole track as one polyline (chord
   // present but coordinates correct). Do not re-add a split until the index math
@@ -52259,7 +52276,8 @@ function renderMapContent(body, ride, wind, forTime){
     if(weatherMapInstance){ try{weatherMapInstance.remove();}catch(e){} weatherMapInstance=null; try{delete window['_wxmap_overview'];}catch(e){} }
 
     var lats=ride.gpsLats, lons=ride.gpsLons;
-    var map=L.map(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
+    var map=_mountMap_(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
+    if(!map) return;
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
     var pts=lats.map(function(la,i){return[la,lons[i]];});
 
@@ -52353,7 +52371,10 @@ function drawWindMap(containerEl, ride, wind){
     try{
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       console.log('WM: init', mapId, 'pts:', pts.length, 'el.offsetHeight:', el.offsetHeight);
-      var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false,tap:false});
+      // Guarded mount. This one had NO teardown and sat inside a bare try, so a second mount threw
+      // and was swallowed - a blank wind map with the reason caught and discarded.
+      var map=_mountMap_(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false,tap:false});
+      if(!map){ console.error('WM: mount failed', mapId); return; }
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
       function classifySeg(idx){
         if(!wind||wind.winddirection_10m==null) return '#378ADD';
