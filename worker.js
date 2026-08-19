@@ -36193,7 +36193,7 @@ function dsShowWeather(){
     // Refresh beside it, accented so it reads as a destination rather than another toggle.
     H+='<div data-act="coach" role="button" tabindex="0" title="Overview, Map, Run/Ride Planner, Alerts, History" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-accent,#fc5200);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:700;color:var(--d-accent,#fc5200);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg>Weather Coach</div>';
     H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
-    H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'+(((typeof wxCoords_==='function')?wxCoords_().label:'')||'Grand Rapids, MI')+'</div>';
     H+='</div></div>';
 
     // ===== ROW 1 =====
@@ -52392,6 +52392,99 @@ function fetchStravaGPS(stravaId, rideRef) {
 // existing ride-list/GPS-map feature (showWeatherHistory) unchanged.
 var weatherActiveTab = 'overview';
 
+// THE LOCATION PICKER. wxCoords_() has always honoured a picked location; nothing wrote one, so the
+// priority order it implements (picked > device > home) had an unreachable top rung. This is the
+// writer.
+//
+// Geocoding uses Open-Meteo's own search endpoint - the same provider already supplying the
+// forecast, so no second key, no second account, and the coordinates it returns are the ones the
+// forecast will be fetched with rather than a different provider's idea of where a town is.
+//
+// A picked location is STICKY until cleared, deliberately. The device fix is a guess about where the
+// athlete is; a choice is a statement, and a statement should not be silently overridden by a phone
+// reporting a hotel car park - which is exactly the case this exists for.
+var _wxLocBusy=false;
+function wxLocSearch_(q, cb){
+  q=String(q||'').trim();
+  if(q.length<2){ cb([]); return; }
+  if(_wxLocBusy){ return; }
+  _wxLocBusy=true;
+  fetch('https://geocoding-api.open-meteo.com/v1/search?count=6&language=en&format=json&name='+encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      _wxLocBusy=false;
+      var out=[];
+      ((j&&j.results)||[]).forEach(function(x){
+        if(!x || !isFinite(x.latitude) || !isFinite(x.longitude)) return;
+        // admin1 disambiguates the many identically-named towns; without it "Springfield" is a
+        // coin toss and the athlete has no way to tell which one he picked.
+        var bits=[x.name]; if(x.admin1) bits.push(x.admin1); if(x.country_code) bits.push(x.country_code);
+        out.push({ lat:x.latitude, lon:x.longitude, label:bits.join(', ') });
+      });
+      cb(out);
+    })
+    .catch(function(){ _wxLocBusy=false; cb(null); });   // null = the lookup failed, distinct from no matches
+}
+function wxLocSet_(loc){
+  try{
+    if(loc){ localStorage.setItem('aiq_wx_loc', JSON.stringify({lat:loc.lat, lon:loc.lon, label:loc.label})); }
+    else { localStorage.removeItem('aiq_wx_loc'); }
+    // The cache is keyed on nothing, so it would happily keep serving the previous city. Clearing it
+    // is not an optimisation here, it is the difference between the picker working and appearing to.
+    wxCache_.weather=null; wxCache_.aqi=null;
+    try{ console.log('[wx] location '+(loc?('set to '+loc.label+' ('+loc.lat.toFixed(3)+','+loc.lon.toFixed(3)+')'):'cleared - back to device or home')); }catch(e){}
+  }catch(e){}
+  try{ if(typeof showWeather==='function') showWeather(); }catch(e){}
+}
+function wxLocOpen_(){
+  var cur=(typeof wxCoords_==='function')?wxCoords_():{label:'',src:'home'};
+  var wrap=document.createElement('div');
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px';
+  var card=document.createElement('div');
+  card.style.cssText='background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:16px;width:100%;max-width:420px;box-shadow:0 18px 50px rgba(0,0,0,.45)';
+  card.innerHTML='<div style="font-size:15px;font-weight:800;color:var(--t1);margin-bottom:4px">Weather location</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:12px">Currently '+(cur.label||'Grand Rapids, MI')
+      +(cur.src==='picked'?' (chosen)':cur.src==='device'?' (from this device)':' (default)')+'</div>';
+  var inp=document.createElement('input');
+  inp.type='text'; inp.placeholder='Search a town or city';
+  inp.style.cssText='width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;outline:none';
+  var list=document.createElement('div');
+  list.style.cssText='margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto';
+  var note=function(t){ list.innerHTML='<div style="font-size:12px;color:var(--t3);padding:6px 2px">'+t+'</div>'; };
+  var render=function(rows){
+    if(rows===null){ note('Could not reach the location search. Check your connection and try again.'); return; }
+    if(!rows.length){ note('No matches.'); return; }
+    list.innerHTML='';
+    rows.forEach(function(r){
+      var b=document.createElement('button');
+      b.textContent=r.label;
+      b.style.cssText='text-align:left;padding:9px 11px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer';
+      b.onclick=function(){ document.body.removeChild(wrap); wxLocSet_(r); };
+      list.appendChild(b);
+    });
+  };
+  // Debounced, because a keystroke-per-request would rate-limit the endpoint and race its own
+  // replies - the last response to arrive is not necessarily the last query typed.
+  var t=null;
+  inp.oninput=function(){ clearTimeout(t); var q=inp.value; t=setTimeout(function(){ wxLocSearch_(q, render); }, 300); };
+  inp.onkeydown=function(e){ if(e.key==='Escape'){ document.body.removeChild(wrap); } };
+  card.appendChild(inp); card.appendChild(list);
+  var row=document.createElement('div');
+  row.style.cssText='display:flex;gap:8px;margin-top:14px';
+  var clr=document.createElement('button');
+  clr.textContent=(cur.src==='picked')?'Use my location instead':'Close';
+  clr.style.cssText='flex:1;padding:9px 12px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--t3);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer';
+  clr.onclick=function(){
+    document.body.removeChild(wrap);
+    if(cur.src==='picked') wxLocSet_(null);       // back to device fix, or home if there is none
+  };
+  row.appendChild(clr); card.appendChild(row);
+  wrap.appendChild(card);
+  wrap.onclick=function(e){ if(e.target===wrap) document.body.removeChild(wrap); };
+  document.body.appendChild(wrap);
+  try{ inp.focus(); }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window.wxLocOpen_=wxLocOpen_; window.wxLocSet_=wxLocSet_; } }catch(e){}
 function showWeather(){
   showScreen('WEATHER');
   var scr=document.getElementById('WEATHER');
@@ -52410,6 +52503,27 @@ function showWeather(){
   hdrTop.appendChild(titleEl);
   hdrTop.appendChild(moreBtn);
   scr.appendChild(hdrTop);
+
+  // WHERE THE WEATHER IS FOR, under the title, so every tab shows it. It was previously stated only
+  // on one dashboard card and stated wrongly - a fixed "Grand Rapids, MI" that kept insisting the
+  // athlete was home while the figures moved with him. Naming the place AND making it the control
+  // that changes it means the caption can never drift from what was actually fetched, because there
+  // is only one of them.
+  {
+    var _lc=(typeof wxCoords_==='function')?wxCoords_():{label:'Grand Rapids, MI', src:'home'};
+    var locRow=document.createElement('button');
+    locRow.style.cssText='display:flex;align-items:center;gap:6px;margin:0 16px 2px;padding:5px 9px;border-radius:9px;'
+      +'border:1px solid var(--b1);background:var(--s2);color:var(--t3);font-size:12px;font-weight:600;'
+      +'font-family:inherit;cursor:pointer;max-width:calc(100% - 32px)';
+    locRow.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+      +'stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">'
+      +'<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>'
+      +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(_lc.label||'Grand Rapids, MI')+'</span>'
+      +'<span style="color:var(--t4);flex-shrink:0">'
+        +(_lc.src==='picked'?'chosen':_lc.src==='device'?'this device':'default')+' &middot; change</span>';
+    locRow.onclick=function(){ if(typeof wxLocOpen_==='function') wxLocOpen_(); };
+    scr.appendChild(locRow);
+  }
 
   var tabsRow=document.createElement('div');
   tabsRow.style.cssText='display:flex;gap:4px;overflow-x:auto;padding:4px 16px 12px;-webkit-overflow-scrolling:touch';

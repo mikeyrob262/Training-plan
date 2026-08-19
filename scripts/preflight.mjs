@@ -1255,6 +1255,25 @@ try {
     fail('a revived ride can be re-tombstoned by a stale remote (see above).');
   }
 
+  // STEP 79 - the weather follows the athlete, and says where it is. Two defects: WX_TZ stated
+  //           America/Chicago while the coordinates are Grand Rapids (America/DETROIT), so every
+  //           hourly series arrived an hour out and every time-based consumer read the wrong hour -
+  //           at home, before travel enters into it - across FIVE fetches, two of which send the
+  //           ride's own position and then ask for Central hours. And the coordinates were a
+  //           constant, so a trip produced Grand Rapids' weather under a caption insisting it was
+  //           home. Pins timezone=auto everywhere, the picked > device > home priority order, that
+  //           a device fix never overrides an explicit choice, and that every caption reads the
+  //           resolver rather than a hardcoded city.
+  console.log(`${D}. checking weather location + timezone...${X}`);
+  try {
+    const so = execSync('node scripts/wx-location-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('weather can be fetched for the wrong place or the wrong hour (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
