@@ -36766,8 +36766,24 @@ function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETES
 // what each rule actually resolved to. The reported inversion (4-across on an iPad, 2x2 on a wider
 // desktop) is only explicable if those two quantities disagree, so print both and stop guessing.
 // tileDump_(seconds) - default 6s of WATCHING. Pass 0 for a single sample.
+// STALE-CODE GUARD, PRINTED FIRST BY EVERY DIAGNOSTIC. Four rounds of dashboard layout changes were
+// made against a symptom whose cause was that the BROWSER was running older code than the server was
+// serving. The build stamp existed the whole time and was only ever checked against the SERVER; one
+// line of it in the console would have shown the mismatch immediately. A diagnostic that does not
+// first establish WHICH BUILD produced the thing it is measuring can describe the wrong program with
+// total confidence - which is exactly what happened, repeatedly, for hours.
+function _dumpBuild_(){
+  try{
+    var b=(typeof window!=='undefined' && window.__BUILD__)?String(window.__BUILD__):'(absent)';
+    var stale=(b.indexOf('BUILD_STAMP')>-1);
+    console.log('[build] this TAB is running: '+b
+      +(stale?'   <-- UNSTAMPED: served mid-deploy, reload before trusting anything below'
+             :'   <-- compare with the deployed build; if it differs you are measuring OLD code'));
+  }catch(e){}
+}
 function tileDump_(watchSec){
   if(watchSec===undefined) watchSec=6;
+  _dumpBuild_();
   try{
     // EVERY instance, not the first. querySelector returns whichever node comes first in the DOM,
     // and this app re-renders into parallel desktop/mobile shells and re-parents cards by measured
@@ -36888,6 +36904,7 @@ function tileDump_(watchSec){
   return 'see console';
 }
 function ftpDump_(){
+  _dumpBuild_();
   try{
     var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
     var raw=(typeof st!=='undefined'&&st&&Array.isArray(st.ftpHistory))?st.ftpHistory:[];
