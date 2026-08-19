@@ -43,7 +43,7 @@ const TELE = exFn('_rideTelemetryFacts_');
 const INSIGHT = src.slice(src.indexOf('function fetchRideCoachInsight('), src.indexOf('// ONE SETTLED VERDICT PER RIDE'));
 
 console.log('\n' + Y + '=== the effort verdict is COMPUTED, not left to be weighed ===' + X);
-ok('NP is compared to the band in code', /if\(rx && rx\.lo!=null && rx\.hi!=null && r\.np>0\)/.test(TELE));
+ok('NP is compared to the band in code', /if\(rx && rx\.lo!=null && rx\.hi!=null && r\.np>0/.test(TELE));
 ok('...above the band is stated as a verdict', /NP '\+r\.np\+'W is ABOVE the top of the prescribed band/.test(TELE));
 ok('...inside the band too', /sits INSIDE the prescribed band/.test(TELE));
 ok('...and below it, so all three cases are covered', /is BELOW the bottom of the prescribed band/.test(TELE));
@@ -93,6 +93,21 @@ ok('the ride insight card carries no conviction layer', INSIGHT.indexOf('_SM_CON
 ok('...and the layer still exists on the surfaces it belongs to', (src.match(/_SM_CONVICTION/g) || []).length === 5);
 ok('the facts floor on this surface is intact', /Describe ONLY what the data above states/.test(TELE));
 ok('...including the not-recorded rule that predates all of this', /never substitute zero/.test(TELE));
+
+console.log('');
+console.log('\n' + Y + '=== the verdict is for CONTINUOUS rides only ===' + X);
+{
+  // Written for a GROUP RIDE, where the whole ride IS the work. On an INTERVAL session the
+  // whole-ride NP includes warm-up and recoveries, so it sits under the band BY CONSTRUCTION - a
+  // VO2 NP of 171W against 209-228W - and an emphatic capitalised verdict then says the athlete
+  // failed a session he executed. It also contradicted the WORK INTERVALS block directly below it.
+  const tele = src.slice(src.indexOf('function _rideTelemetryFacts_'), src.indexOf('function fetchRideCoachInsight'));
+  ok('the verdict is gated on there being NO measured intervals', /var _hasWork=!!\(_work && _work\.vals && _work\.vals\.length\);/.test(tele));
+  ok('...and the gate is applied', /r\.np>0 && !_hasWork\)/.test(tele));
+  ok('NEG: it is no longer emitted whenever a band exists', !/if\(rx && rx\.lo!=null && rx\.hi!=null && r\.np>0\)\{/.test(tele));
+  ok('the work-intervals block still says the whole-ride figure is NOT the prescribed effort',
+     /it is NOT the/.test(tele) && /judge execution on the WORK INTERVALS/.test(tele));
+}
 
 console.log('');
 if (fails) { console.log(R + 'NP verdict: ' + fails + ' check(s) failed' + X + '\n'); process.exit(1); }

@@ -41779,7 +41779,15 @@ function _rideTelemetryFacts_(r){
     //
     // Same failure family as the whole-ride-average dilution above and the VO2-vs-threshold
     // misclassification: check the softer number, then call the agreement real.
-    if(rx && rx.lo!=null && rx.hi!=null && r.np>0){
+    // ONLY WHEN THE SESSION IS CONTINUOUS. This verdict was written for a GROUP RIDE, where the whole
+    // ride IS the work and NP is the honest read of it. Applied to an interval session it is the
+    // dilution error this file already documents twice over: a VO2 whole-ride NP of 171W includes the
+    // warm-up and three recoveries, so it lands under a 209-228W interval band BY CONSTRUCTION and
+    // an emphatic capitalised VERDICT says the athlete failed a session he executed. It contradicted
+    // the WORK INTERVALS block directly below, which states that this very number is NOT the
+    // prescribed effort. Where intervals were measured, THEY are the verdict and this stays silent.
+    var _hasWork=!!(_work && _work.vals && _work.vals.length);
+    if(rx && rx.lo!=null && rx.hi!=null && r.np>0 && !_hasWork){
       var _ifv=(FTP>0)?(Math.round(r.np/FTP*100)/100):null;
       tele+='NP is '+(FTP>0?(Math.round(r.np/FTP*100)+'% of FTP'):'an unknown share of FTP')
         +(_ifv!=null?(' (IF '+_ifv.toFixed(2)+')'):'')+'. ';
