@@ -204,6 +204,19 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
    minmax(0,1fr) because an explicit count cannot wrap - a px minimum would overflow instead. */
 .ds-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media (min-width:1040px){.ds-stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* THE CONTAINER DECIDES, NOT THE VIEWPORT — and this rule is last so it wins where supported.
+   The viewport breakpoint above is only a FALLBACK. It was the real defect: these tiles sit in a
+   sub-column that is ~41% of the content width, so viewport width was a PROXY for the width that
+   actually matters, and a proxy that anything can break. Reported inverted - 4-across on an iPad,
+   stuck at 2x2 on a WIDER desktop - which is exactly what a broken proxy looks like: shell chrome,
+   a sidebar, or OS display scaling changes the column without changing the viewport, or changes the
+   viewport without changing the column. No breakpoint value can fix that, because the quantity being
+   measured is the wrong one.
+   408px is not a guess: four 96px tiles plus three 8px gaps. The container is asked whether it can
+   hold four readable tiles, which is the actual question. */
+.ds-stat-col{container-type:inline-size}
+@container (min-width:408px){.ds-stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (max-width:407.98px){.ds-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1024px){
   body{background:var(--d-back);overflow:hidden}
   #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:var(--d-shell)!important;display:block!important;height:100vh;overflow:hidden;position:relative}
@@ -36734,6 +36747,35 @@ function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETES
 // mergeState_ resolved numbers with Math.max and 190 beat a corrected 183 on every sync. LWW stops
 // that recurring; it cannot retroactively undo what max-merge already cemented. Re-enter the value
 // once in Settings and it will now persist.
+// READ-ONLY. Settles the dashboard tile layout with measurements instead of assumptions.
+// Prints the two widths that were being conflated - the VIEWPORT and the tiles' own COLUMN - plus
+// what each rule actually resolved to. The reported inversion (4-across on an iPad, 2x2 on a wider
+// desktop) is only explicable if those two quantities disagree, so print both and stop guessing.
+function tileDump_(){
+  try{
+    var col=document.querySelector('.ds-stat-col');
+    var grid=document.querySelector('.ds-stat-grid');
+    var cq=(window.CSS && CSS.supports && CSS.supports('container-type:inline-size'));
+    console.log('[tile-dump] viewport='+window.innerWidth+'x'+window.innerHeight
+      +' dpr='+(window.devicePixelRatio||1)
+      +' | media(min-width:1040px)='+(window.matchMedia?window.matchMedia('(min-width:1040px)').matches:'?')
+      +' | container-queries='+(cq?'supported':'NOT SUPPORTED (viewport fallback in use)'));
+    if(!col){ console.log('   .ds-stat-col NOT FOUND - the dashboard is not rendered, or this is the mobile renderer'); return 'see console'; }
+    var cw=Math.round(col.getBoundingClientRect().width);
+    console.log('   column width='+cw+'px  (needs >=408 for four 96px tiles + three 8px gaps)');
+    if(!grid){ console.log('   .ds-stat-grid NOT FOUND inside the column'); return 'see console'; }
+    var gc=getComputedStyle(grid).gridTemplateColumns;
+    // split(' ') and filter, NOT a regex: the served template eats a backslash level, so a source
+    // /\s+/ arrives at the browser as /s+/ - valid, silent, and splitting on the letter s.
+    var cols=String(gc).trim().split(' ').filter(function(x){ return x!==''; }).length;
+    console.log('   grid-template-columns='+gc);
+    console.log('   RESOLVED COLUMNS='+cols+'  -> '+(cols===4?'4 across':(cols===2?'2x2':(cols===1?'STACKED - the class has no rule on this screen':cols+' across - unbalanced'))));
+    console.log('   tile width='+Math.round((cw-(cols-1)*8)/cols)+'px');
+    console.log('   VERDICT: '+(cols===4||cols===2?'balanced':'NOT balanced')
+      +(cols!==1 && cw<408 && cols===4?' (four tiles in a column too narrow for them)':''));
+  }catch(e){ console.error('[tile-dump] '+((e&&e.message)||e)); }
+  return 'see console';
+}
 function ftpDump_(){
   try{
     var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
@@ -39466,7 +39508,9 @@ function dsShowDashboard(){
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
-  var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
+  // ds-stat-col makes this column a query container, so the tile grid inside can size itself off
+  // THIS column's width instead of the viewport's. See the .ds-stat-grid rules in the head sheet.
+  var rc='<div class="ds-stat-col" style="display:flex;flex-direction:column;gap:10px;min-width:0">';
   // THE VALUE GETS ITS OWN LINE, AND THE TILES ARE ALLOWED TO WRAP.
   //
   // Reported as TSS/W-kg/Total Time/Activities showing "12", "2.", "2h", "3" - roughly two

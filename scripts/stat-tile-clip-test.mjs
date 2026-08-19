@@ -62,6 +62,29 @@ ok('the call site uses the class, not an inline grid', /rc\+='<div class="ds-sta
 ok('NEG: no auto-fit is left on this grid', !/auto-fit/.test(CSS));
 ok('the default is a balanced 2x2', /\.ds-stat-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(CSS));
 ok('...widening to 4 across at a breakpoint', /@media \(min-width:(\d+)px\)\{\.ds-stat-grid\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\}\}/.test(CSS));
+
+// THE CONTAINER DECIDES, NOT THE VIEWPORT. Reported inverted: 4-across on an iPad, stuck at 2x2 on
+// a WIDER desktop. A viewport breakpoint is a PROXY for the width that matters - these tiles sit in
+// a sub-column ~41% of the content width - and shell chrome, a sidebar or OS display scaling moves
+// one without moving the other. No breakpoint VALUE fixes that; the measured quantity was wrong.
+ok('the column is declared a query container', /\.ds-stat-col\{container-type:inline-size\}/.test(CSS));
+ok('...and the markup applies that class to the tiles\' own column', /var rc='<div class="ds-stat-col"/.test(src));
+ok('the grid asks the CONTAINER whether four tiles fit', /@container \(min-width:408px\)\{\.ds-stat-grid\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\}\}/.test(CSS));
+ok('...and drops to 2x2 below that', /@container \(max-width:407\.98px\)\{\.ds-stat-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/.test(CSS));
+ok('the container rules come AFTER the viewport fallback, so they win where supported',
+   CSS.indexOf('@container') > CSS.indexOf('@media (min-width:1040px)'));
+{
+  // 408 must be the real requirement, not a round number: four tiles at the 96px floor + three gaps.
+  const m = CSS.match(/@container \(min-width:(\d+)px\)/);
+  const need = 4 * 96 + 3 * 8;
+  ok('the container threshold equals 4 tiles + 3 gaps (' + (m ? m[1] : '?') + ' vs ' + need + ')', m && +m[1] === need);
+}
+ok('a diagnostic exists to settle it with measurements', /function tileDump_\(\)/.test(src));
+ok('...printing viewport AND column width, the two that were conflated',
+   /viewport='\+window\.innerWidth/.test(src) && /column width='\+cw/.test(src));
+ok('...and the RESOLVED column count, which is what the screen actually shows', /RESOLVED COLUMNS='\+cols/.test(src));
+ok('...naming a stacked result as a missing rule, the failure mode seen once already',
+   /STACKED - the class has no rule on this screen/.test(src));
 ok('...using minmax(0,1fr), since an explicit count cannot wrap and a px min would OVERFLOW',
    !/repeat\((2|4),minmax\(\d+px/.test(CSS));
 {
