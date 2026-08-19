@@ -45076,8 +45076,17 @@ function pbDump_(){
             if(h){
               var hi=rideResolveIdx_(h);
               var rec=(hi>=0 && st && st.rides)?st.rides[hi]:null;
+              // A TOMBSTONE'S PROVENANCE IS THE WHOLE QUESTION. "Deleted" does not say whether the
+              // athlete deleted it or a bug did. deleteReason distinguishes them, and deletedAt
+              // separates a bulk event (many records sharing a timestamp - the quota bug) from
+              // scattered manual deletes. aiTombBreakdown_() gives the library-wide table and
+              // aiReviveNulls_() the guarded dry-run; this prints it for THIS row, which is the
+              // question actually being asked.
+              var why=(rec&&(rec.deleteReason==null||rec.deleteReason===''))?'<null>':String(rec&&rec.deleteReason);
+              var whn=(rec&&rec.deletedAt)?new Date(rec.deletedAt).toISOString().slice(0,16).replace('T',' '):'(no deletedAt)';
               t1=(hi<0)?('MISS (handle '+h+' resolves to nothing)')
-                 :(rec&&rec.deleted)?('MISS (handle '+h+' resolves to a TOMBSTONE)')
+                 :(rec&&rec.deleted)?('MISS (handle '+h+' -> TOMBSTONE idx '+hi+'  deleteReason='+why+'  deletedAt='+whn
+                     +(why==='<null>'?'   [null reason = quota-bug candidate; see aiReviveNulls_()]':'   [explicit reason: deleted on purpose]')+')')
                  :('HIT idx '+hi);
             } else t1='MISS (no handle)';
           }
@@ -45130,8 +45139,12 @@ function pbDump_(){
         console.log('     -> ref='+JSON.stringify(ref)+'  rideRefOk_='+okv+'   '+(okv===true?'LINKS':'plain text'));
       });
     });
-    console.log('  READ: tier3 MISS with 0 same-day runs = the library has no record for that run '
+    console.log('  READ: tier3 MISS with 0 same-day runs = the library has no LIVE record for that run '
       +'(a data gap, not a code fault). AMBIGUOUS = two runs it cannot tell apart, deliberately not linked.');
+    console.log('  If tier1 reports a TOMBSTONE, the record is not gone - it is deleted. deleteReason '
+      +'says by what: an explicit reason means it was deleted on purpose and the plain text is correct; '
+      +'<null> is the quota-bug signature. Next: aiTombBreakdown_() for the library-wide table, then '
+      +'aiReviveNulls_() for a DRY RUN (it mutates nothing without an explicit true).');
   }catch(e){ console.error('[pb-dump] '+((e&&e.message)||e)); }
   return 'see console';
 }
