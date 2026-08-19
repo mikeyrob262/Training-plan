@@ -45148,6 +45148,37 @@ function pbDump_(){
   }catch(e){ console.error('[pb-dump] '+((e&&e.message)||e)); }
   return 'see console';
 }
+// REACHABLE BY NAME, EXPLICITLY. These are console tools and their only caller is a human typing
+// them, so relying on "top-level functions happen to be global" is resting the whole diagnostic path
+// on an assumption. Attaching them removes the doubt, and dumps() lists what exists - so a tool that
+// is missing reports itself as missing instead of producing the silence that is indistinguishable
+// from a tool that ran and found nothing.
+//
+// That silence is exactly what happened: pbDump_() returning NO OUTPUT AT ALL cannot mean it failed,
+// because its first line is _dumpBuild_(), which logs unconditionally inside its own try/catch. No
+// output means it was never called - the function does not exist in that tab - which is a build
+// problem, not a data problem. window.__BUILD__ is the check for that, and being a plain value it
+// still answers when every function is missing.
+function dumps(){
+  var names=['pbDump_','tileDump_','ftpDump_','calDump_','aiTombBreakdown_','aiLossReport_','aiReviveNulls_','aiReviveOrphans_','aiBackupCompare_'];
+  try{
+    console.log('[dumps] build='+((typeof window!=='undefined'&&window.__BUILD__)?window.__BUILD__:'(absent)'));
+    names.forEach(function(n){
+      var f=(typeof window!=='undefined')?window[n]:null;
+      console.log('  '+(typeof f==='function'?'ok      ':'MISSING ')+n+'()');
+    });
+    console.log('  a MISSING tool means this tab is running an older build - reload before reading anything else');
+  }catch(e){}
+  return 'see console';
+}
+try{
+  if(typeof window!=='undefined'){
+    window.pbDump_=pbDump_; window.dumps=dumps;
+    if(typeof tileDump_==='function') window.tileDump_=tileDump_;
+    if(typeof ftpDump_==='function') window.ftpDump_=ftpDump_;
+    if(typeof _dumpBuild_==='function') window._dumpBuild_=_dumpBuild_;
+  }
+}catch(e){}
 function _prCompute_(){
   var cov=(typeof _covFor_==='function')?_covFor_('run'):null;
   if(!cov) return null;                                    // unprimed or run cannot be ranked
