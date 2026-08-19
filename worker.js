@@ -45035,6 +45035,106 @@ function _runOpenRef_(ref){
 }
 // Both cards build HTML strings with inline onclick, so the opener has to be reachable by name.
 try{ if(typeof window!=='undefined'){ window._runOpenRef_=_runOpenRef_; window._runRefFor_=_runRefFor_; } }catch(e){}
+// READ-ONLY. Why a Personal Bests row is plain text instead of a link, per row and per TIER.
+//
+// The board renders a link only when rideRefOk_(_runRefFor_(run)) holds, and _runRefFor_ has three
+// tiers that fail for completely different reasons. "No links" is therefore five different possible
+// findings wearing one symptom, and guessing between them is what a diagnostic is for:
+//   1 HANDLE   - rideHandle_ + rideResolveIdx_. Fails when the projection keys as k:<date>_<mi>_<s>
+//                while the library record keys as s<id>; also refuses a TOMBSTONE (83% of st.rides).
+//   2 STRAVAID - a direct scan. Has nothing to scan for when the run carries no stravaId, which is
+//                every snapshot run (measured: 0 of 2201).
+//   3 CONTENT  - date + distance within tolerance, duration breaking ties, and a UNIQUE hit
+//                REQUIRED. Reports 0 hits (no library record for that day) or 2+ (ambiguous, and
+//                deliberately not linked, because opening the wrong run beats no link).
+// Prints the candidate counts, so a data gap is distinguishable from a code fault without another
+// round trip. Mirrors _runRefFor_ tier for tier rather than calling it, because the whole question
+// is WHICH tier gave up.
+function pbDump_(){
+  _dumpBuild_();
+  try{
+    if(typeof _prCompute_!=='function'){ console.log('[pb-dump] _prCompute_ missing'); return 'see console'; }
+    var res=_prCompute_();
+    if(!res){ console.log('[pb-dump] _prCompute_ returned null - run coverage unprimed, or getRuns() is empty. Check getRuns().length first.'); return 'see console'; }
+    var rows=(res&&res.rows)?res.rows:(Array.isArray(res)?res:[]);
+    console.log('[pb-dump] rows='+rows.length+'  st.rides='+((st&&st.rides)?st.rides.length:0)
+      +'  live='+((st&&st.rides)?st.rides.filter(function(x){return x&&!x.deleted;}).length:0)
+      +'  getRuns='+((typeof getRuns==='function')?getRuns().length:'?'));
+    rows.forEach(function(row){
+      ['career','band','season'].forEach(function(slot){
+        var p=row?row[slot]:null; if(!p||!p.run) return;
+        var r=p.run;
+        // row is {ev, career, band, season, reachable} - the name lives on ev, not on the row.
+        var name=((row.ev&&row.ev.name)||row.id||'?')+' / '+slot
+          +(row.reachable===false?' [row marked unreachable]':'');
+        var sid=(r.stravaId!=null)?String(r.stravaId):'(none)';
+        // Tier 1
+        var t1='n/a', h='';
+        try{
+          if(typeof rideHandle_==='function' && typeof rideResolveIdx_==='function'){
+            h=rideHandle_(r)||'';
+            if(h){
+              var hi=rideResolveIdx_(h);
+              var rec=(hi>=0 && st && st.rides)?st.rides[hi]:null;
+              t1=(hi<0)?('MISS (handle '+h+' resolves to nothing)')
+                 :(rec&&rec.deleted)?('MISS (handle '+h+' resolves to a TOMBSTONE)')
+                 :('HIT idx '+hi);
+            } else t1='MISS (no handle)';
+          }
+        }catch(e){ t1='threw: '+(e&&e.message); }
+        // Tier 2
+        var t2='MISS (run carries no stravaId)';
+        try{
+          if(r.stravaId!=null && st && st.rides){
+            var want=String(r.stravaId), found=-1;
+            for(var i=0;i<st.rides.length;i++){ var x=st.rides[i]; if(x&&!x.deleted&&String(x.stravaId)===want){ found=i; break; } }
+            t2=(found>=0)?('HIT idx '+found):('MISS (no live record with stravaId '+want+')');
+          }
+        }catch(e){ t2='threw: '+(e&&e.message); }
+        // Tier 3
+        var t3='n/a';
+        try{
+          if(st && st.rides && typeof normDate==='function'){
+            var wantD=normDate(r.date||''), wantMi=parseFloat(r.distance);
+            var wantSec=(typeof _durSec_==='function')?_durSec_(r):0;
+            if(!wantD || !isFinite(wantMi) || !(wantMi>0)) t3='MISS (projection has no usable date/distance)';
+            else{
+              var sameDay=0, hits=[];
+              for(var j=0;j<st.rides.length;j++){
+                var y=st.rides[j]; if(!y||y.deleted) continue;
+                var sp=String((typeof rideSport_==='function')?rideSport_(y):'').split(' ').join('').split('_').join('').split('-').join('');
+                if(!/^(run|trailrun|virtualrun|treadmill)$/i.test(sp)) continue;
+                if(normDate(y.date||'')!==wantD) continue;
+                sameDay++;
+                var yMi=parseFloat(y.distance);
+                if(!isFinite(yMi) || Math.abs(yMi-wantMi)>Math.max(0.05, wantMi*0.01)) continue;
+                hits.push(j);
+              }
+              var before=hits.length;
+              if(hits.length>1 && wantSec>0 && typeof _durSec_==='function'){
+                var tight=hits.filter(function(j){ var s2=_durSec_(st.rides[j]); return s2>0 && Math.abs(s2-wantSec)<=60; });
+                if(tight.length) hits=tight;
+              }
+              t3=(hits.length===1)?('HIT idx '+hits[0])
+                 :(before===0)?('MISS (0 runs in st.rides on '+wantD+' within tolerance of '+wantMi.toFixed(2)+' mi; '+sameDay+' run(s) that day at any distance)')
+                 :('MISS (AMBIGUOUS - '+before+' matched, '+hits.length+' after the duration tie-break; a unique hit is required)');
+            }
+          }
+        }catch(e){ t3='threw: '+(e&&e.message); }
+        var ref=(typeof _runRefFor_==='function')?_runRefFor_(r):'';
+        var okv=(typeof rideRefOk_==='function')?rideRefOk_(ref):'(rideRefOk_ missing)';
+        console.log('  '+name+'  '+(r.date||'?')+'  '+(parseFloat(r.distance)||0).toFixed(2)+' mi  stravaId='+sid);
+        console.log('     tier1 handle : '+t1);
+        console.log('     tier2 strava : '+t2);
+        console.log('     tier3 content: '+t3);
+        console.log('     -> ref='+JSON.stringify(ref)+'  rideRefOk_='+okv+'   '+(okv===true?'LINKS':'plain text'));
+      });
+    });
+    console.log('  READ: tier3 MISS with 0 same-day runs = the library has no record for that run '
+      +'(a data gap, not a code fault). AMBIGUOUS = two runs it cannot tell apart, deliberately not linked.');
+  }catch(e){ console.error('[pb-dump] '+((e&&e.message)||e)); }
+  return 'see console';
+}
 function _prCompute_(){
   var cov=(typeof _covFor_==='function')?_covFor_('run'):null;
   if(!cov) return null;                                    // unprimed or run cannot be ranked
