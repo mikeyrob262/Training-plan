@@ -36193,7 +36193,17 @@ function dsShowWeather(){
     // Refresh beside it, accented so it reads as a destination rather than another toggle.
     H+='<div data-act="coach" role="button" tabindex="0" title="Overview, Map, Run/Ride Planner, Alerts, History" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-accent,#fc5200);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:700;color:var(--d-accent,#fc5200);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg>Weather Coach</div>';
     H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
-    H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'+(((typeof wxCoords_==='function')?wxCoords_().label:'')||'Grand Rapids, MI')+'</div>';
+    // DESKTOP'S location control. The picker was first wired only into showWeather() - the MOBILE
+    // shell titled "Weather Coach" - while this page, titled "Weather", kept a static pill. Exactly
+    // the parallel-renderer drift this codebase has a standing rule about, and it made a shipped
+    // feature invisible on the surface actually being used. Both surfaces now resolve the same
+    // wxCoords_() and open the same wxLocOpen_(), so neither can be changed without the other.
+    {
+      var _dwc=(typeof wxCoords_==='function')?wxCoords_():{label:'Grand Rapids, MI', src:'home'};
+      H+='<button onclick="wxLocOpen_()" title="Change weather location" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);font-family:inherit;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'
+        +((_dwc.label)||'Grand Rapids, MI')
+        +'<span style="color:var(--d-t4);font-weight:600">'+(_dwc.src==='picked'?'chosen':_dwc.src==='device'?'this device':'default')+' &middot; change</span></button>';
+    }
     H+='</div></div>';
 
     // ===== ROW 1 =====
@@ -52434,7 +52444,14 @@ function wxLocSet_(loc){
     wxCache_.weather=null; wxCache_.aqi=null;
     try{ console.log('[wx] location '+(loc?('set to '+loc.label+' ('+loc.lat.toFixed(3)+','+loc.lon.toFixed(3)+')'):'cleared - back to device or home')); }catch(e){}
   }catch(e){}
-  try{ if(typeof showWeather==='function') showWeather(); }catch(e){}
+  // RE-RENDER THE SURFACE THE ATHLETE IS ON. Calling showWeather() unconditionally would swap a
+  // desktop user onto the mobile shell as a side effect of picking a city - the same
+  // parallel-renderer trap that hid this control on desktop in the first place.
+  try{
+    var _desk=(typeof isDesktop==='function') && isDesktop();
+    if(_desk && typeof dsShowWeather==='function') dsShowWeather();
+    else if(typeof showWeather==='function') showWeather();
+  }catch(e){}
 }
 function wxLocOpen_(){
   var cur=(typeof wxCoords_==='function')?wxCoords_():{label:'',src:'home'};

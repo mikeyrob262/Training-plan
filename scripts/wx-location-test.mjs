@@ -55,9 +55,30 @@ ok('...debounced rather than firing per keystroke', /setTimeout\(function\(\)\{ 
 ok('...and disambiguating same-named towns with admin1', /if\(x\.admin1\) bits\.push\(x\.admin1\)/.test(SRC));
 ok('a setter writes aiq_wx_loc', /localStorage\.setItem\('aiq_wx_loc'/.test(SRC));
 ok('...clears the weather cache, or the picker only APPEARS to work', /wxCache_\.weather=null; ?wxCache_\.aqi=null;/.test(SRC));
-ok('...and re-renders', /if\(typeof showWeather==='function'\) showWeather\(\);/.test(SRC));
+ok('...and re-renders the surface the athlete is ON, not always the mobile one',
+   /_desk && typeof dsShowWeather==='function'\) dsShowWeather\(\);/.test(SRC) && /else if\(typeof showWeather==='function'\) showWeather\(\);/.test(SRC));
 ok('clearing removes the key, falling back to device or home', /localStorage\.removeItem\('aiq_wx_loc'\)/.test(SRC));
 ok('a device fix never overrides an explicit choice', /if\(wxCoords_\(\)\.src==='picked'\) return;/.test(SRC));
+
+console.log('\n' + Y + '=== BOTH surfaces, because this project has parallel renderers ===' + X);
+// The picker was first wired only into showWeather() - the MOBILE shell titled "Weather Coach" -
+// while dsShowWeather(), titled "Weather", kept a static pill. The feature shipped, deployed, and
+// was invisible on the surface actually in use. This project's standing rule is that every change
+// lands on both renderers; this section is that rule made enforceable for this control.
+{
+  const fnAt = (name) => { const i = SRC.indexOf('function ' + name + '('); if (i < 0) return '';
+    let d = 0, end = -1;
+    for (let k = SRC.indexOf('{', i); k < SRC.length; k++){ const c = SRC[k];
+      if (c === '{') d++; else if (c === '}'){ d--; if (!d){ end = k; break; } } }
+    return SRC.slice(i, end + 1); };
+  const mob = fnAt('showWeather'), desk = fnAt('dsShowWeather');
+  ok('the MOBILE shell opens the picker', /wxLocOpen_\(\)/.test(mob));
+  ok('the DESKTOP page opens the picker', /wxLocOpen_\(\)/.test(desk));
+  ok('the mobile shell names the resolved location', /wxCoords_\(\)/.test(mob));
+  ok('the desktop page names the resolved location', /wxCoords_\(\)/.test(desk));
+  ok('NEG: desktop no longer renders a static city', !/>Grand Rapids, MI<\/div>/.test(desk));
+  ok('the desktop control is a BUTTON, not an inert div', /<button onclick="wxLocOpen_\(\)"/.test(desk));
+}
 
 console.log('\n' + Y + '=== the label is the control, so they cannot drift ===' + X);
 ok('the header names the resolved location', /_lc\.label\|\|'Grand Rapids, MI'/.test(SRC));
