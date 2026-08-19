@@ -1125,6 +1125,38 @@ try {
     fail('a debrief can open on a verdict of failure (see above).');
   }
 
+  // STEP 71 - the ride map mounts once per container. L.map() THROWS on a div that still carries a
+  //           _leaflet_id, and the bare call let that throw escape mid-render: no map, and not even
+  //           the 'GPS data unavailable' fallback, which only runs on a null return. Intermittent
+  //           because it needs the NODE to survive a re-render, which is why a reload always
+  //           "fixed" it. Second lifecycle bug on this renderer; the zero-size ResizeObserver fix
+  //           is asserted still intact, since it does nothing for a map never constructed.
+  console.log(`${D}. checking ride map mount guard...${X}`);
+  try {
+    const so = execSync('node scripts/map-mount-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a second mount on the same map container can blank the map (see above).');
+  }
+
+  // STEP 72 - the dashboard stat tiles stay readable when the column is narrow. repeat(4,1fr) with
+  //           no floor, in row 1's 1.55fr column, collapsed the value box to ~20px near a 900px
+  //           viewport - TSS/W-kg/Total Time/Activities rendered as "12", "2.", "2h", "3". The chop
+  //           was SILENT, so a layout collapse presented as a wrong number and sat in the
+  //           "probably a data bug" pile for several sessions. Values now own a full-width line and
+  //           truncate with an ellipsis if they ever still overflow.
+  console.log(`${D}. checking dashboard stat tile widths...${X}`);
+  try {
+    const so = execSync('node scripts/stat-tile-clip-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('dashboard stat values can be silently clipped (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

@@ -39234,9 +39234,38 @@ function dsShowDashboard(){
 
   // -- Right column: mini stats + attention --
   var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
-  rc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
+  // THE VALUE GETS ITS OWN LINE, AND THE TILES ARE ALLOWED TO WRAP.
+  //
+  // Reported as TSS/W-kg/Total Time/Activities showing "12", "2.", "2h", "3" - roughly two
+  // characters each. Two causes, and both had to go:
+  //
+  //   1. repeat(4,1fr) forces four tiles across at ANY width, with no floor. These sit in row 1's
+  //      THIRD column (1.55fr of 1.3/0.92/1.55), so around a 900px viewport each tile lands near
+  //      82px; take off 24px padding, a fixed 30px icon and the 6px gap and the value box is about
+  //      20px. Two characters, exactly as reported. It looks fine on a wide monitor, which is why
+  //      this reads as intermittent rather than broken.
+  //   2. the value shared its line with that fixed-width icon, so it was competing for room it
+  //      never needed to - and white-space:nowrap + overflow:hidden then CHOPPED it silently.
+  //
+  // auto-fit/minmax gives the tiles a real floor: still four across when there is room, two or
+  // three when there is not, instead of four unreadable ones. The value now owns a full-width line
+  // below the icon+label (the Apple Health stat-card shape this app already follows), which roughly
+  // doubles the room it had. text-overflow:ellipsis replaces the silent chop, so if a value ever
+  // does outgrow its tile it SAYS so rather than quietly printing a wrong-looking number - a
+  // truncated "2h" is indistinguishable from a real reading, which is what made this so easy to
+  // mis-see as a data bug.
+  rc+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:var(--d-t2);font-weight:700">'+label+'</div><div style="font-size:9px;color:var(--d-t4);margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
+    var _v=String(val);
+    var _fs=_v.length>7?'13px':(_v.length>5?'14.5px':'16px');
+    return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:11px 12px;min-width:0">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
+        +'<div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+        +'<div style="flex:1;min-width:0;font-size:12px;color:var(--d-t2);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</div>'
+      +'</div>'
+      +'<div title="'+_v+'" style="font-size:'+_fs+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">'+_v+'</div>'
+      +'<div style="font-size:9px;color:var(--d-t4);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+sub+'</div>'
+      +'<div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkgStr_(wkg),'W/kg',(wkg==null?'needs a weight':'FTP + weight'),spark(wkgSeries.length>1?wkgSeries:(wkg==null?[]:[wkg,wkg]),ACC.blue,100,22));
@@ -42249,7 +42278,39 @@ function renderRideMap_(mapId, lats, lons, opts){
   var nt=normalizeTrack_(lats,lons);
   if(!nt.ok || nt.lats.length<2) return null;
   var pts=nt.lats.map(function(la,i){ return [la,nt.lons[i]]; });
-  var map=L.map(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
+  // ONE MAP PER CONTAINER, AND A SECOND MOUNT MUST NOT THROW.
+  //
+  // L.map() throws 'Map container is already initialized' when the div still carries a
+  // _leaflet_id. Nothing caught that, so the throw escaped mid-function: no map, no route, and
+  // not even the 'GPS data unavailable' fallback at the call site - that runs on a null RETURN
+  // and never on an exception. A silent blank box, which is exactly the reported symptom.
+  //
+  // It is intermittent because it needs the NODE to survive. A surface that rebuilds its
+  // innerHTML hands us a fresh div and works; ride -> ride navigation, a re-render storm, or two
+  // armed mount timers reuse the same one and throw. A reload always clears it - the tell that
+  // the container, not the data, is the variable.
+  //
+  // Tearing the old map down also fires 'unload', which disconnects its ResizeObserver, so this
+  // closes a listener leak that previously survived every re-render.
+  if(!window._rideMapReg_) window._rideMapReg_={};
+  try{ var _oldMap=window._rideMapReg_[mapId]; if(_oldMap) _oldMap.remove(); }catch(e){}
+  try{ delete window._rideMapReg_[mapId]; }catch(e){}
+  // A container replaced by innerHTML never ran .remove(), so a stale stamp can outlive the
+  // instance we were tracking. Clear it directly - Leaflet only tests it for truthiness.
+  try{
+    var _mc=document.getElementById(mapId);
+    if(_mc && _mc._leaflet_id){ _mc._leaflet_id=null; _mc.innerHTML=''; }
+  }catch(e){}
+  var map;
+  try{
+    map=L.map(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
+  }catch(e){
+    // Fail LOUD and return null, so the caller's own fallback runs instead of a blank box.
+    try{ console.error('[ridemap] mount failed for '+mapId+': '+(e&&e.message)); }catch(e2){}
+    return null;
+  }
+  window._rideMapReg_[mapId]=map;
+  map.on('unload', function(){ try{ if(window._rideMapReg_[mapId]===map) delete window._rideMapReg_[mapId]; }catch(e){} });
   addRideMapBase_(map);
   // REVERTED: gap-split removed — draw the whole track as one polyline (chord
   // present but coordinates correct). Do not re-add a split until the index math
