@@ -36101,7 +36101,7 @@ function dsShowWeather(){
     H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
     // Weather Coach was reachable only by knowing the URL on this surface. Same control shape as
     // Refresh beside it, accented so it reads as a destination rather than another toggle.
-    H+='<div data-act="coach" role="button" tabindex="0" title="Overview, Map, Ride Planner, Alerts, History" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-accent,#fc5200);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:700;color:var(--d-accent,#fc5200);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg>Weather Coach</div>';
+    H+='<div data-act="coach" role="button" tabindex="0" title="Overview, Map, Run/Ride Planner, Alerts, History" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-accent,#fc5200);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:700;color:var(--d-accent,#fc5200);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg>Weather Coach</div>';
     H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
     H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
     H+='</div></div>';
@@ -51971,7 +51971,7 @@ function showWeather(){
   var tabDefs=[
     {id:'overview',label:'Overview'},
     {id:'map',label:'Map'},
-    {id:'planner',label:'Ride Planner'},
+    {id:'planner',label:'Run/Ride Planner'},
     {id:'alerts',label:'Alerts'},
     {id:'history',label:'History'}
   ];
@@ -52013,7 +52013,7 @@ function showWeather(){
 }
 
 function renderWeatherComingSoonTab(body, tabId){
-  var labelMap={planner:'Ride Planner', alerts:'Alerts'};
+  var labelMap={planner:'Run/Ride Planner', alerts:'Alerts'};
   var label=labelMap[tabId]||tabId;
   body.innerHTML='<div style="padding:60px 24px;text-align:center;color:var(--t3)">'
     +'<div style="font-size:15px;font-weight:700;margin-bottom:8px">'+label+' is coming soon</div>'
