@@ -52411,9 +52411,28 @@ function renderWeatherHistoryTab(body){
 function renderWeatherPlannerTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
     +'<div style="margin-bottom:10px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>'
-    +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Plan your ride</div>'
-    +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Pick a route, choose a departure time, and see forecast conditions for that ride.</div>'
+    // "run or ride", matching the tab rename - this screen plans both, and the heading was the last
+    // place still saying otherwise.
+    +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Plan your run or ride</div>'
+    +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Pick a route, choose a departure time, and see forecast conditions for that session.</div>'
     +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:var(--s2);border:1px solid var(--b1);border-radius:12px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">Choose a Route</button>'
+    // BUILD A NEW ROUTE somewhere that already does it well. Deliberately a quiet secondary link
+    // rather than a second button: the primary action here is choosing an EXISTING route, and two
+    // equal-weight buttons would make the athlete decide which one he wanted before reading either.
+    // Styled as a link with an external-arrow glyph so it reads as leaving the app, which it does.
+    // rel="noopener noreferrer" because target=_blank without it hands the opened page a live
+    // window.opener reference back into this one.
+    +'<div style="margin-top:18px;font-size:12px;line-height:1.5">'
+      +'<span style="color:var(--t3)">Need a new route? </span>'
+      +'<a href="https://connect.garmin.com/modern/courses" target="_blank" rel="noopener noreferrer" '
+        +'style="color:var(--c-green);font-weight:700;text-decoration:none;white-space:nowrap">'
+        +'Build one in Garmin Connect '
+        +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" '
+        +'stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px">'
+        +'<path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/>'
+        +'<path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>'
+      +'<div style="color:var(--t4);margin-top:5px">Then sync it to Strava and it will appear in the list here.</div>'
+    +'</div>'
     +'</div>';
 }
 
