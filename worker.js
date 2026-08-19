@@ -33866,6 +33866,32 @@ var _SM_CONVICTION='COMMIT TO THE READ AND SELL IT. This is the part that matter
   +'FACTS ARE NOT PART OF THIS TRADE. Every figure you cite stays exactly as given - never invent one, '
   +'never round a not-recorded to zero, never claim a session, place or result you were not told '
   +'about. Be bold about what the numbers MEAN and exact about what they ARE.';
+// ORDER. Separate from _SM_CONVICTION on purpose, and it applies where conviction does not.
+//
+// Conviction governs a GOOD result: commit to it, sell it, do not audit it. This governs a BAD one,
+// which is the case that has actually been failing. The rule the persona has always claimed - lead
+// with what went right, then the shortfall - is an ORDERING rule, and it kept being written as
+// character guidance inside _SM_PERSONA where a terse call site could simply out-rank it.
+//
+// WHY NINE PASSES DID NOT HOLD: they all edited _SM_PERSONA, and the surface producing the complaint
+// - the ride-detail verdict card - carries NEITHER the persona NOR conviction. Its format line asked
+// for "a headline reflecting whether the ride matched its prescription", which DEMANDS a verdict in
+// the first line. No persona edit could out-rank a format instruction on a prompt that never
+// included the persona. The fix is to put the ordering rule on the surfaces that judge a session,
+// and to stop the format asking for a verdict first.
+//
+// THIS IS NOT A LICENCE TO SOFTEN. The shortfall is still stated, still with its number, still
+// unhedged. Leading with the good is about ORDER, never about omission - a debrief that buries a
+// real miss is worth less than one that opens with it.
+var _SM_LEAD='ORDER, AND IT IS NOT NEGOTIABLE. Name what went RIGHT first, with the figure that proves '
+  +'it, before you state any shortfall. This holds hardest when the news is bad. A session that missed '
+  +'its target still contains something done well - showing up at all, holding the structure, pacing '
+  +'the early efforts, stopping when stopping was the right call - and naming that is what earns the '
+  +'right to be told the rest. A verdict of failure in the opening line makes everything after it '
+  +'unreadable, which is how a true finding ends up ignored. '
+  +'THEN STATE THE SHORTFALL PLAINLY. Do not bury it, do not soften the number, do not skip it, do not '
+  +'end on it either - close on what to do next. Leading with the good is about ORDER, never omission: '
+  +'a debrief that hides a real miss is worth less than one that opens with it.';
 // LONG-FORM ONLY: the Plan-page debrief, the one surface with room to breathe. Tables earn their
 // place where numbers are being compared directly - prescribed against actual reads in one glance,
 // the same numbers in prose do not.
@@ -33951,6 +33977,7 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
     // verbatim quote in a comment reads as the banned instruction coming back.
     // PROPORTION directly above travels the same direction - it already forbids inventing a setback -
     // so the two reinforce rather than fight.
+    +_SM_LEAD+NL+NL
     +_SM_CONVICTION+NL+NL
     +'Put each section heading on its own line, as either "## Name" or "**Name**" - both are drawn as '
     +'headings. Never bold inside a sentence: mid-sentence asterisks are not rendered and reach the '
@@ -41876,8 +41903,12 @@ function fetchRideCoachInsight(r, callback){
       // BRIEF by design. This card sits on the activity page; the full debrief — weekly context,
       // zone breakdown, scorecard, what to do next — is Dr. Smurkel's on the Plan page. Two places
       // saying the same thing at different lengths is how they end up contradicting each other.
-      +'Respond in this exact format, no markdown, no preamble: first line one short punchy headline (max 8 words) reflecting whether the ride matched its prescription. '
-      +'Then EXACTLY 2 short "- " bullets on execution versus the prescription. Nothing else — no recommendation line, no next-session advice.';
+      +' '+_SM_LEAD+' '
+      // The FORMAT asked for a verdict in the opening line, which no amount of persona could
+      // out-rank - and this prompt never carried the persona anyway. The headline now names the
+      // session and what held up in it; the shortfall keeps its own bullet, with its number.
+      +'Respond in this exact format, no markdown, no preamble: first line one short punchy headline (max 9 words) naming what this ride WAS and what held up in it - NEVER a verdict of failure, and never leading with a shortfall. '
+      +'Then EXACTLY 2 short "- " bullets: the FIRST names what went right with the figure that proves it, the SECOND states the shortfall against the prescription with its figure, plainly and unsoftened. If nothing fell short, the second bullet says what moved instead. Nothing else — no recommendation line, no next-session advice.';
   } else {
     prompt='You are a '+prof.persona+' describing a completed '+noun+' that has NO prescription on file. '+tele+FACTS
       +'There is no target to compare against. Describe it factually ONLY: do NOT judge it good or bad, do NOT suggest what to do differently, do NOT frame anything as a shortfall, missed opportunity, or power left on the table. '
@@ -43349,6 +43380,7 @@ function renderRideAnalysisTab(body, r, idx, FTP, BWT){
     +'YOUR SIMILAR PAST RIDES (similar distance): '+similarRides.map(function(sr){
       return sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm';
     }).join('; ')+'. '
+    +' '+_SM_LEAD+' '
     +'Give 3-4 short bullet-style insights (each starting with "- "), each one connecting two different signals '
     +'(e.g. comparing this ride to a similar past one, noting if power was higher despite similar effort, or any other genuine pattern in the data provided). '
     +'Be specific and use the actual numbers given. If there is not enough data for a genuine comparison, say so plainly rather than inventing detail.';

@@ -1110,6 +1110,21 @@ try {
     fail('the comparison view mislabels a session, or shows a target it cannot justify (see above).');
   }
 
+  // STEP 70 - lead with what went right. Reported ten times; nine passes edited _SM_PERSONA and none
+  //           held, because the surface producing the complaint carried NEITHER the persona NOR the
+  //           conviction layer, and its format line DEMANDED a verdict in the opening line. Ordering
+  //           is now its own rule, on every surface that judges a session, and the format no longer
+  //           asks whether the ride matched. Verified against a GENUINE shortfall, not a data bug.
+  console.log(`${D}. checking Smurkel ordering rule...${X}`);
+  try {
+    const so = execSync('node scripts/smurkel-lead-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a debrief can open on a verdict of failure (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
