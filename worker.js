@@ -45065,7 +45065,31 @@ function _pbRefWhy_(r){
     }
     if(near===1) return 'resolved, but the link was not built - please report this';
     if(near>1)   return near+' activities that day match this distance, so it cannot tell which one you mean';
-    if(deadNear) return 'the matching activity is still deleted in your library ('+deadNear+' tombstoned copy'+(deadNear===1?'':'ies')+' on '+wantD+')';
+    // A TOMBSTONE NAMES ITS OWN REASON AND DATE, because "still deleted" does not say why a revive
+    // pass missed it, and the two passes have narrow, very different scopes:
+    //   aiReviveNulls_   - deleteReason <null> ONLY, and skips anything with a live twin
+    //   aiReviveOrphans_ - reasons containing 'dupe' ONLY, group must have zero live copies, AND
+    //                      every copy must carry deletedAt on ONE day, defaulting to 2026-07-17
+    // So a dupe tombstone deleted on any OTHER day falls outside both, as does any reason that is
+    // neither null nor a dupe. Printing reason + day here is what makes that visible without a
+    // console, and aiReviveOrphans_ takes a day argument precisely for this case.
+    if(deadNear){
+      var why='', when='';
+      for(var q=0;q<st.rides.length;q++){
+        var z=st.rides[q]; if(!z||!z.deleted) continue;
+        if(((typeof normDate==='function')?normDate(z.date||''):'')!==wantD) continue;
+        var zMi=parseFloat(z.distance);
+        if(!(isFinite(zMi) && Math.abs(zMi-wantMi)<=Math.max(0.05, wantMi*0.01))) continue;
+        why=(z.deleteReason==null||z.deleteReason==='')?'<null>':String(z.deleteReason);
+        when=z.deletedAt?String(new Date(z.deletedAt).toISOString()).slice(0,10):'(no date)';
+        break;
+      }
+      var scope=(why==='<null>')?'in scope for the null-reason revive'
+        :(why.indexOf('dupe')>=0)?((when==='2026-07-17')?'in scope for the orphan revive':'OUTSIDE the orphan revive, which only covers copies deleted 2026-07-17')
+        :'outside both revive passes (reason is neither null nor a dupe)';
+      return 'the matching activity is still deleted ('+deadNear+' tombstoned cop'+(deadNear===1?'y':'ies')
+        +'; reason='+why+', deleted '+when+' - '+scope+')';
+    }
     if(sameDay)  return sameDay+' activity(ies) on '+wantD+' but none within '+wantMi.toFixed(2)+' mi';
     return 'no activity on '+wantD+' in your library - this record exists only in the uploaded snapshot';
   }catch(e){ return ''; }
