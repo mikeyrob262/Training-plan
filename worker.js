@@ -36800,6 +36800,32 @@ function tileDump_(watchSec){
         +'  at('+Math.round(r.left)+','+Math.round(r.top)+')');
       if(vis){
         console.log('        tracks: '+gc);
+        // WHERE THE TILES ACTUALLY ARE. Every previous reading measured the grid's STYLE - what the
+        // CSS intends. This measures the RESULT: each child's own rectangle. Distinct top values are
+        // painted rows, with no interpretation in between. If this says 2 rows while the tracks say
+        // 4 columns, the contradiction is real and reproducible rather than a reading error; if it
+        // says 1 row, whatever is in the screenshot is not this element.
+        var tops={}, kidLines=[];
+        [].slice.call(g.children).forEach(function(k,ki){
+          var kr=k.getBoundingClientRect();
+          var t=Math.round(kr.top);
+          tops[t]=(tops[t]||0)+1;
+          // Neither a regex nor an escape sequence here, and none NAMED here either. The served
+          // template eats one backslash level and does it to COMMENTS as well as code, so writing
+          // the offending sequences out - even to warn about them - splits this comment and turns
+          // the remainder into code. Preflight caught exactly that. fromCharCode(10) is a newline
+          // that no such transform can corrupt.
+          var lbl=(k.textContent||'').split(String.fromCharCode(10)).join(' ').trim().slice(0,18);
+          kidLines.push('          child['+ki+'] top='+t+' left='+Math.round(kr.left)
+            +' w='+Math.round(kr.width)+' h='+Math.round(kr.height)+'  ['+lbl+']');
+        });
+        kidLines.forEach(function(l){ console.log(l); });
+        var rowTops=Object.keys(tops);
+        var perRow=rowTops.map(function(t){ return tops[t]; }).join('+');
+        console.log('        PAINTED ROWS='+rowTops.length+' ('+perRow+' per row)'
+          +'   tracks say '+cols+' column'+(cols===1?'':'s')
+          +(rowTops.length*cols!==g.childElementCount && rowTops.length>1 && cols>=g.childElementCount
+             ? '   <-- CONTRADICTION: the tracks cannot produce these positions' : ''));
         if(cw>=0) console.log('        container '+(cw>=408?'>= 408 -> should be 4 across':'< 408 -> 2x2 is CORRECT for this width; the space is lost UPSTREAM, in row 1 grid 1.3/0.92/1.55'));
         var p=g.parentNode, chain=[];
         for(var k=0;k<4 && p && p.getBoundingClientRect;k++){ chain.push(Math.round(p.getBoundingClientRect().width)); p=p.parentNode; }
