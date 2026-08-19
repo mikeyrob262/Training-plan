@@ -41376,7 +41376,7 @@ function openDesktopRideDetail(idx, _noFetch){
       var h1=document.getElementById('rp-hum'); if(h1) h1.textContent=(hum!=null)?(Math.round(hum)+'%'):'--';
     };
     if(_wxIsToday){
-      fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+      fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto')
         .then(function(res){return res.json();})
         .then(function(wx){
           if(wx&&wx.current){
@@ -43490,7 +43490,7 @@ function renderRideWeatherTab(body, r, idx){
   fetch('https://archive-api.open-meteo.com/v1/archive?latitude=42.9634&longitude=-85.6681'
     +'&start_date='+r.date+'&end_date='+r.date
     +'&hourly=temperature_2m,windspeed_10m,winddirection_10m,windgusts_10m,precipitation'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto')
   .then(function(res){ if(!res.ok) throw new Error('Weather history returned '+res.status); return res.json(); })
   .then(function(data){
     renderRideWeatherContent(wrap, r, data && data.hourly);
@@ -53043,7 +53043,7 @@ function wxRouteCoords_(ride){
 function wxRouteWindUrl_(lat,lon){
   return 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
     +'&hourly=windspeed_10m,winddirection_10m,windgusts_10m,temperature_2m,precipitation_probability'
-    +'&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=7';
+    +'&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=auto&forecast_days=7';
 }
 function renderWeatherMapTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
@@ -54110,7 +54110,7 @@ function windArrowSVG(fromDeg,color,sw){
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
       +'&minutely_15=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,windgusts_10m,winddirection_10m,relativehumidity_2m,dewpoint_2m'
       +'&hourly=uv_index'
-      +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago'
+      +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto'
       +'&start_date='+rideDate+'&end_date='+endDate)
     .then(function(r){return r.json();}).then(function(data){
       if(!data||!data.minutely_15) return;
