@@ -189,6 +189,21 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
   #app-shell .bnav{max-width:480px;left:50%;transform:translateX(-50%)}
   #app-shell .toast{max-width:480px}
 }
+/* THE FOUR DASHBOARD STAT TILES. Lives in the GLOBAL head stylesheet on purpose.
+   It was first written into aiSegTargetsHtml_'s style block, beside the .sm-* rules - that sheet is
+   only injected when the AI Segment Targets panel renders, so on the Dashboard the class had no
+   rule at all and the tiles fell back to display:block: one per row, the whole column wasted. The
+   rule existed in source and was unreachable from the surface that needed it, which is a different
+   failure from a wrong value and is why a test asserting the CSS text passed while the screen was
+   broken. A shared class belongs in the shared sheet.
+
+   A COUNT, NOT A FIT. repeat(auto-fit,...) packs as many as WILL fit, so at a middling width it
+   returns 3 and strands the fourth; no minmax can forbid 3. With exactly four items the only
+   balanced answers are 4x1 and 2x2, so the count is stated. 1040px is where the tiles' column
+   (1.55fr of row 1's 1.3/0.92/1.55) gives four tiles ~99px each, just past the 96px floor.
+   minmax(0,1fr) because an explicit count cannot wrap - a px minimum would overflow instead. */
+.ds-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (min-width:1040px){.ds-stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (min-width:1024px){
   body{background:var(--d-back);overflow:hidden}
   #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:var(--d-shell)!important;display:block!important;height:100vh;overflow:hidden;position:relative}
@@ -28749,23 +28764,9 @@ function aiSegTargetsHtml_(ctx){
       +'border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;white-space:nowrap}'
     +'.sa-tbtn:hover{color:var(--d-head);border-color:#3a4457}'
     // ---- Segment Map chrome: legend row, filter controls, summary bar ----
-    // THE FOUR DASHBOARD STAT TILES. A COUNT, NOT A FIT.
-    //
-    // repeat(auto-fit,minmax(96px,1fr)) fits as many tiles as WILL fit, so at a middling width 3 is
-    // a perfectly legal answer and the fourth strands on a row of its own. auto-fit has no concept
-    // of balance - it packs, it does not distribute - and no minmax value can forbid 3, because 3 is
-    // always reachable between the widths that give 4 and 2.
-    //
-    // With exactly four items the only balanced answers are 4x1 and 2x2, so the count is stated
-    // outright at a breakpoint instead of being inferred from available space. 1040px is where the
-    // tiles' column (1.55fr of row 1's 1.3/0.92/1.55, ~41% of content width) is wide enough to give
-    // four tiles ~99px each - just past the 96px floor the clipping fix established.
-    //
-    // minmax(0,1fr) rather than minmax(96px,1fr): with an EXPLICIT column count a px minimum cannot
-    // wrap, it can only overflow the container, which is worse than a snug tile. The floor's job is
-    // done by the breakpoint now.
-    +'.ds-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}'
-    +'@media (min-width:1040px){.ds-stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}'
+    // NOTE: .ds-stat-grid used to be declared here, beside the .sm-* rules. It is a DASHBOARD class
+    // and this sheet is only injected when the AI Segment Targets panel renders, so the Dashboard
+    // got no rule and the tiles stacked one per row. It now lives in the global head stylesheet.
     +'.sm-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:12px 0 9px}'
     +'.sm-leg{display:flex;gap:16px;flex-wrap:wrap;align-items:center}'
     +'.sm-leg-i{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--d-t3);font-weight:600}'

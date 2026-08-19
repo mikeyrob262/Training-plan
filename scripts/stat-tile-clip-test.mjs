@@ -43,7 +43,21 @@ console.log('\n' + Y + '=== the tile row is a COUNT, not a fit: 4 or 2, never a 
 // fourth on its own row. It has no notion of balance, and no minmax value can forbid 3 - 3 is always
 // reachable between the widths that give 4 and 2. With exactly four items the only balanced answers
 // are 4x1 and 2x2, so the count is STATED at a breakpoint rather than inferred from space.
-const CSS = noCmt(src).slice(noCmt(src).indexOf('.ds-stat-grid{'), noCmt(src).indexOf('.sm-row{'));
+// THE RULE MUST BE REACHABLE FROM THE DASHBOARD, NOT MERELY PRESENT IN SOURCE.
+// First attempt declared .ds-stat-grid inside aiSegTargetsHtml_'s style block, beside the .sm-*
+// rules. That sheet is injected only when the AI Segment Targets panel renders, so on the Dashboard
+// the class had NO rule and the tiles fell back to display:block - one per row. The previous version
+// of this file asserted the CSS text and passed, because the text was there. Presence is not
+// applicability. So: slice the GLOBAL head stylesheet and require the rule to be in THAT.
+const HEAD = src.slice(src.indexOf('<style>'), src.indexOf('</style>'));
+const CSS = HEAD.slice(HEAD.indexOf('.ds-stat-grid{'));
+ok('the rule is in the global head stylesheet, which every screen loads', HEAD.indexOf('.ds-stat-grid{') > -1);
+{
+  const i = src.indexOf('function aiSegTargetsHtml_(');
+  const seg = i < 0 ? '' : src.slice(i, i + 12000);
+  ok('NEG: it is NOT declared in the segment-panel sheet, which the dashboard never loads',
+     !/\+'\.ds-stat-grid\{/.test(seg));
+}
 ok('the call site uses the class, not an inline grid', /rc\+='<div class="ds-stat-grid">'/.test(noCmt(src)));
 ok('NEG: no auto-fit is left on this grid', !/auto-fit/.test(CSS));
 ok('the default is a balanced 2x2', /\.ds-stat-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(CSS));
