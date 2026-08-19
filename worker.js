@@ -44998,19 +44998,38 @@ function _runRefFor_(r){
       var wantD=normDate(r.date||''), wantMi=parseFloat(r.distance);
       if(wantD && isFinite(wantMi) && wantMi>0){
         var wantSec=(typeof _durSec_==='function')?_durSec_(r):0;
-        var hits=[];
+        // SPORT-LESS RECORDS GET A SECOND PASS, and only ever a second one. rideSport_ returns
+        // sportType||type||'', so a record carrying NEITHER - which older library entries can -
+        // fails this filter and stays invisible even when it is live, the right date and the right
+        // distance. That is a resolution gap the athlete cannot see or act on: the run is there and
+        // the board still says plain text.
+        //
+        // The filter is NOT loosened, because a sport-less record could be a ride and linking a PB
+        // to the wrong activity is worse than not linking. Instead the strict pass runs first and
+        // the sport-less pass is consulted ONLY when the strict one found nothing, so this can never
+        // override a correct match - it can only fill a hole where there was no answer at all.
+        // Gated on rideSport_ EXISTING. "This record has no sport" is only a meaningful category
+        // when sports are readable at all; without the accessor every candidate looks sport-less and
+        // the fallback would happily match a RIDE of the same date and distance. Caught by
+        // run-pb-link-test, which asserts a no-stravaId projection is refused rather than guessed.
+        var canSport=(typeof rideSport_==='function');
+        var hits=[], hitsNoSport=[];
         for(var j=0;j<st.rides.length;j++){
           var y=st.rides[j];
           if(!y || y.deleted) continue;
           var sp=String((typeof rideSport_==='function')?rideSport_(y):'').replace(/[ _-]/g,'');
-          if(!/^(run|trailrun|virtualrun|treadmill)$/i.test(sp)) continue;
+          var spOk=/^(run|trailrun|virtualrun|treadmill)$/i.test(sp);
+          if(!spOk && sp!=='') continue;               // a NAMED non-run sport is still excluded
           if(normDate(y.date||'')!==wantD) continue;
           var yMi=parseFloat(y.distance);
           // Tolerance, not equality: the snapshot stores metres and converts, so the same run can
           // differ in the second decimal from the library's own figure.
           if(!isFinite(yMi) || Math.abs(yMi-wantMi)>Math.max(0.05, wantMi*0.01)) continue;
-          hits.push(j);
+          if(spOk) hits.push(j); else hitsNoSport.push(j);
         }
+        // Strict first. Only if a properly-typed run answered nothing does the sport-less pool get
+        // a look, so a correct match is never displaced by an untyped record.
+        if(canSport && !hits.length && hitsNoSport.length) hits=hitsNoSport;
         // Two runs, same day, same distance: let duration break the tie before giving up on it.
         if(hits.length>1 && wantSec>0 && typeof _durSec_==='function'){
           var tight=hits.filter(function(j){ var s2=_durSec_(st.rides[j]); return s2>0 && Math.abs(s2-wantSec)<=60; });
@@ -45021,6 +45040,35 @@ function _runRefFor_(r){
     }
   }catch(e){}
   return '';
+}
+// ONE SHORT SENTENCE saying why a run could not be resolved, for the hover on an unlinked PB row.
+// Mirrors _runRefFor_'s tiers in the same order and reports the FIRST thing that actually blocks,
+// so the phrasing points at the real obstacle rather than the last one tried. Kept to plain
+// language because its reader is the athlete, not a console: "no matching activity in your library"
+// is actionable, "tier 3 miss" is not. Never throws; an empty string means say nothing.
+function _pbRefWhy_(r){
+  try{
+    if(!r) return '';
+    if(typeof st==='undefined' || !st || !st.rides) return 'activity library not loaded yet';
+    var wantD=(typeof normDate==='function')?normDate(r.date||''):'';
+    var wantMi=parseFloat(r.distance);
+    if(!wantD || !isFinite(wantMi) || !(wantMi>0)) return 'this record has no usable date or distance';
+    var sameDay=0, near=0, deadNear=0;
+    for(var i=0;i<st.rides.length;i++){
+      var y=st.rides[i]; if(!y) continue;
+      if(((typeof normDate==='function')?normDate(y.date||''):'')!==wantD) continue;
+      var yMi=parseFloat(y.distance);
+      var close=(isFinite(yMi) && Math.abs(yMi-wantMi)<=Math.max(0.05, wantMi*0.01));
+      if(y.deleted){ if(close) deadNear++; continue; }
+      sameDay++;
+      if(close) near++;
+    }
+    if(near===1) return 'resolved, but the link was not built - please report this';
+    if(near>1)   return near+' activities that day match this distance, so it cannot tell which one you mean';
+    if(deadNear) return 'the matching activity is still deleted in your library ('+deadNear+' tombstoned copy'+(deadNear===1?'':'ies')+' on '+wantD+')';
+    if(sameDay)  return sameDay+' activity(ies) on '+wantD+' but none within '+wantMi.toFixed(2)+' mi';
+    return 'no activity on '+wantD+' in your library - this record exists only in the uploaded snapshot';
+  }catch(e){ return ''; }
 }
 // ONE opener for every run reference on this page, so the PB board and the 10k card cannot drift
 // apart on the surface split (desktop reveals the right-hand panel; mobile opens the overlay).
@@ -45244,7 +45292,14 @@ function _prSection_(){
   // rideRefAttr_ quotes a handle and leaves a position bare, so both forms are safe in the
   // double-quoted attribute. The dotted underline marks it as a link without adding a button.
   var link=function(p, inner){
-    if(!p || typeof rideRefOk_!=='function' || !rideRefOk_(p.ref)) return inner;
+    // WHY IT IS NOT A LINK, ON THE PAGE. A row that silently falls back to plain text tells the
+    // athlete nothing and forces a console session to find out - which is not a reasonable thing to
+    // ask of someone who just wants to click a PB. _pbRefWhy_ names the reason on hover, so the
+    // answer lives where the question is asked.
+    if(!p || typeof rideRefOk_!=='function' || !rideRefOk_(p.ref)){
+      var _why=(p && typeof _pbRefWhy_==='function')?_pbRefWhy_(p.run):'';
+      return _why ? ('<span title="Not linked: '+_why+'" style="cursor:help;border-bottom:1px dotted var(--d-t4)">'+inner+'</span>') : inner;
+    }
     return '<span onclick="_runOpenRef_('+rideRefAttr_(p.ref)+')" title="Open this run" '
       +'style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px">'
       +inner+'</span>';
