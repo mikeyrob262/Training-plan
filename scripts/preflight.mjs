@@ -1203,6 +1203,23 @@ try {
     fail('a guessed or stale value can be shown as measured (see above).');
   }
 
+  // STEP 76 - a session is graded against the band in force WHEN IT WAS RIDDEN. _planZoneFromPct_
+  //           had no date parameter at all, so every power band was pctFtp x today's st.ftp and no
+  //           consumer could ask what the band WAS. That single date-blind builder is the shared
+  //           cause behind the VO2/Smurkel/checklist false failures - three consumers, not three
+  //           bugs. ftpOn_(date) now threads through every call site; it returns the latest log
+  //           entry on or before the date, so today and future dates still price off the current
+  //           FTP and prescribing is unchanged. Rests on the ftpHistory merge-key fix (step 73).
+  console.log(`${D}. checking bands are priced on the ride date...${X}`);
+  try {
+    const so = execSync('node scripts/band-on-date-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a past session can be graded against today\'s band (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

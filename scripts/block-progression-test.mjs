@@ -132,7 +132,9 @@ console.log('\n' + Y + '=== wired into BOTH resolvers, so tile and detail cannot
 {
   const bp = src.slice(src.indexOf('function blockPlanFor_('), src.indexOf('function blockPlanFor_(') + 3000);
   ok('the block resolver gates by date', /_blockProgWeekFor_\(dateKey, weekInPhase\)/.test(bp));
-  ok('...passes the rung into the prescription', /_planSessionFromDef_\(_int, weekInPhase, _pw\)/.test(bp));
+  ok(// Matches the rung in its THIRD position rather than the whole arg list: a fourth argument (dateKey,
+// added so a past session is graded against the FTP in force then) is not a regression in this rule.
+'...passes the rung into the prescription', /_planSessionFromDef_\(_int, weekInPhase, _pw[,)]/.test(bp));
   ok('...and displays the progressed struct, not the week-1 table value', /rx&&rx\.progStruct/.test(bp));
   const pr = src.slice(src.indexOf('function planResolve_('), src.indexOf('function planResolve_(') + 1800);
   ok('the stored-row resolver reads progWeek off the session', /s\.block&&s\.block\.progWeek/.test(pr));

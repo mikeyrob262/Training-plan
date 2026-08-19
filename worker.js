@@ -6645,13 +6645,16 @@ function computeExecutionScore_(sess){
 // was completed AND correctly linked to the Brookfield ride and still could not produce a number.
 // Stored targets win field by field; the def only fills gaps, so a hand-edited target still rules.
 // blockWeek only affects the exercise list (strength), never a ride's duration/TSS band.
-function _sessEffTargets_(sess){
+// dateKey: the date the session is being GRADED against, so the derived band is priced off the FTP
+// in force then rather than today's. Omitted, this behaves exactly as before and prices off the
+// current FTP - correct for prescribing, and the safe default for any caller with no date to give.
+function _sessEffTargets_(sess, dateKey){
   var stored=(sess && sess.targets && typeof sess.targets==='object') ? sess.targets : {};
   var derived={};
   try{
     if(sess && sess.intent && typeof _planSessionFromDef_==='function'){
       var wk=(sess.block && +sess.block.week)||1;
-      var built=_planSessionFromDef_(sess.intent, wk);
+      var built=_planSessionFromDef_(sess.intent, wk, 0, dateKey||(sess&&sess.date)||null);
       if(built && built.targets) derived=built.targets;
     }
   }catch(e){}
@@ -6663,7 +6666,8 @@ function _sessEffTargets_(sess){
 function computeRideExecutionScore_(sess, ride){
   if(!sess || typeof sess!=='object' || !ride || typeof ride!=='object') return null;
   function _num_(v){ var n = Number(v); return isFinite(n) ? n : 0; }
-  var tgt = (typeof _sessEffTargets_==='function') ? _sessEffTargets_(sess) : (sess.targets || {});
+  var _gd = (ride && ride.date) ? ((typeof normDate==='function') ? normDate(ride.date) : ride.date) : null;
+  var tgt = (typeof _sessEffTargets_==='function') ? _sessEffTargets_(sess, _gd) : (sess.targets || {});
   var target = null, actual = null;
   var tssTarget = _num_(tgt.tssTarget), rideTss = _num_(ride.tss);
   if(tssTarget > 0 && rideTss > 0){ target = tssTarget; actual = rideTss; }                 // preferred: TSS
@@ -26859,7 +26863,7 @@ function _trjRxTarget_(sess){
   // carry no targets at all. Re-derive from the definition rather than treating it as unprescribed.
   try{
     if(sess.intent && typeof _planSessionFromDef_==='function'){
-      var fr=_planSessionFromDef_(sess.intent, (sess.block && sess.block.week) || 1);
+      var fr=_planSessionFromDef_(sess.intent, (sess.block && sess.block.week) || 1, 0, (sess&&sess.date)||null);
       if(fr && fr.targets && +fr.targets.tssTarget>0) return +fr.targets.tssTarget;
     }
   }catch(e){}
@@ -30929,7 +30933,7 @@ function blockPlanFor_(dateKey){
     // SCHED_PROGRESSION_FROM the rung for this week-in-phase replaces it, so the displayed struct
     // and the derived TSS come from the SAME source and cannot drift apart.
     var _pw=(typeof _blockProgWeekFor_==='function')?_blockProgWeekFor_(dateKey, weekInPhase):0;
-    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_int, weekInPhase, _pw):null;
+    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_int, weekInPhase, _pw, dateKey):null;
     var _st=((rx&&rx.progStruct)||sl.s||'');
     // The Ven-Top climb rehearsal rides ALONG WITH the Saturday session rather than replacing it —
     // the group ride keeps being a group ride, with a named sustained block inside it. Only the
@@ -30986,7 +30990,7 @@ function blockPlanFor_(dateKey){
         // overwriting the day's ride, which sharing one matcher would have done.
         var match=_isRide(s.intent)?_isRide:(_isStr(s.intent)?_isStr:null);
         if(!match) return;
-        var rx2=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(s.intent, weekInPhase):null;
+        var rx2=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(s.intent, weekInPhase, 0, dateKey):null;
         var repl={ intent:s.intent, struct:(s.block&&s.block.struct)||'', rx:rx2 };
         var at=-1;
         for(var i2=0;i2<sessions.length;i2++){ if(match(sessions[i2].intent)){ at=i2; break; } }
@@ -32296,7 +32300,17 @@ function _blockWorkMeasure_(r, dateKey, intent){
       var lp=_blockLapPowers_(r, s.struct, t);
       if(lp && lp.vals.length) return { vals:lp.vals, lo:t.powerLo, hi:t.powerHi, n:lp.n, source:'laps' };
       var out=(typeof _cvStreamIntervals_==='function')?_cvStreamIntervals_(r, intent, t, s.struct, true):null;
-      if(out && out.vals && out.vals.length) return { vals:out.vals, lo:out.lo, hi:out.hi, n:out.vals.length, source:'stream' };
+      // THE BAND COMES BACK FROM t, NOT FROM out. t is the adjudicated band - the .zwo stamp if one
+      // exists, otherwise the date-priced band from blockPlanFor_(dateKey). out.lo/out.hi are
+      // _cvStreamIntervals_'s own view, and returning those threw the stamp away on this branch
+      // only: the lap path graded against the right band while the stream path silently reverted to
+      // the current one. Two paths, two answers, and which one you got depended on whether the ride
+      // happened to carry usable laps. Fall back to out only where t has nothing to offer.
+      if(out && out.vals && out.vals.length) return {
+        vals:out.vals,
+        lo:(t.powerLo!=null?t.powerLo:out.lo),
+        hi:(t.powerHi!=null?t.powerHi:out.hi),
+        n:out.vals.length, source:'stream' };
     }
     return null;
   }catch(e){ return null; }
@@ -32863,7 +32877,7 @@ function _zwoFor_(s0, dateKey){
     // Derive-at-read, exactly like the session detail sheet.
     var t=s.targets||{};
     try{ if(intent && typeof _planSessionFromDef_==='function'){
-      var fr=_planSessionFromDef_(intent,(s.block&&s.block.week)||1);
+      var fr=_planSessionFromDef_(intent,(s.block&&s.block.week)||1, 0, dateKey||null);
       if(fr && fr.targets && fr.targets.powerLo!=null) t=fr.targets; } }catch(e){}
     var lo=parseFloat(t.powerLo), hi=parseFloat(t.powerHi);
     if(!(lo>0) || !(hi>0)) return null;               // no band -> no ERG target
@@ -34562,7 +34576,7 @@ function showSessionDetail_(dateKey, sid){
   var targets=s.targets||{};
   var rsv=(typeof planResolve_==='function')?planResolve_(s):s;
   var exercises=(rsv&&rsv.exercises)||s.exercises||[];
-  try{ if(s.intent && typeof _planSessionFromDef_==='function'){ var fr=_planSessionFromDef_(s.intent, (s.block&&s.block.week)||1); if(fr && fr.targets && fr.targets.powerLo!=null) targets=fr.targets; } }catch(e){}
+  try{ if(s.intent && typeof _planSessionFromDef_==='function'){ var fr=_planSessionFromDef_(s.intent, (s.block&&s.block.week)||1, 0, dateKey||null); if(fr && fr.targets && fr.targets.powerLo!=null) targets=fr.targets; } }catch(e){}
   var steps=isRide?_sessionSteps_(s.intent, struct, targets):_sessionMoveSteps_(exercises);
   var done=(s.status==='completed');
   var ACC=(typeof sportColor_==='function')?sportColor_(isRide?'Ride':(s.type==='mobility'?'Yoga':'WeightTraining')):'#2FA8E0';
@@ -42003,7 +42017,7 @@ function _sessionRxFor_(dateKey, ride){
   var derived={};
   try{
     var bp2=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
-    var built=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(pick.intent, bp2?bp2.weekInPhase:1):null;
+    var built=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(pick.intent, bp2?bp2.weekInPhase:1, 0, dateKey||null):null;
     derived=(built&&built.targets)||{};
   }catch(e){}
   var t={}; Object.keys(derived).forEach(function(k){ t[k]=derived[k]; });
@@ -46747,10 +46761,33 @@ function strengthRx_(exName, pct1RM, topReps, block, extra){
 // Watts from a % of FTP band. Reads the app's MANUAL FTP (st.ftp), default 186 to match every
 // other call site. FTP is user-entered, never auto-estimated — a stale value shows stale watts,
 // which is why the band is shown with the FTP inline (§3.8 Z-fix). Update st.ftp to reprice all.
-function _planZoneFromPct_(pct){
+// dateKey OPTIONAL, and it is the whole point. Without it this prices the band off the CURRENT
+// st.ftp, which is right for prescribing. With it, the band is priced off ftpOn_(dateKey) - the FTP
+// that was actually in force on that date - which is the only honest way to GRADE a past session.
+//
+// This was the shared cause behind every "you missed the band" complaint on a session that was
+// ridden correctly. The function simply had no date parameter, so every consumer - the Plan
+// checklist, the ride-detail debrief, the block measurer - had no way to ask what the band WAS. They
+// were not three surfaces that forgot to sweep; they were three consumers of one date-blind builder,
+// and _zwoStampRx_ was a patch over it that only covered sessions exported after it shipped.
+//
+// ftpOn_ returns the latest log entry on or before the date, so for today and any future date it
+// yields the current FTP anyway. One path serves both prescribing and grading - no past/future
+// branch, which is what keeps this from drifting apart again.
+//
+// Falls back to st.ftp when the log cannot answer, so a missing history degrades to exactly the old
+// behaviour rather than to a fabricated band. ftpSrc/ftpDate are carried so a surface can SAY which
+// FTP it priced against, per the standing rule that a guessed or historical number must disclose it.
+function _planZoneFromPct_(pct, dateKey){
   if(!pct || pct.length<2) return null;
-  var ftp=(typeof st!=='undefined' && st && st.ftp)?(parseInt(st.ftp,10)||186):186;
-  return { powerLo:Math.round(ftp*pct[0]/100), powerHi:Math.round(ftp*pct[1]/100), pctLo:pct[0], pctHi:pct[1], ftp:ftp };
+  var ftp=0, src='current';
+  if(dateKey && typeof ftpOn_==='function'){
+    ftp=parseInt(ftpOn_(dateKey),10)||0;
+    if(ftp>0) src='on-date';
+  }
+  if(!(ftp>0)) ftp=(typeof st!=='undefined' && st && st.ftp)?(parseInt(st.ftp,10)||_FTP_DEFAULT):_FTP_DEFAULT;
+  return { powerLo:Math.round(ftp*pct[0]/100), powerHi:Math.round(ftp*pct[1]/100), pctLo:pct[0], pctHi:pct[1],
+           ftp:ftp, ftpSrc:src, ftpDate:(src==='on-date')?dateKey:null };
 }
 // Build a full session prescription from SESSION_DEFS[intent]. THE resolver every consumer uses
 // (generator, editor prefill, Today's Plan card). blockWeek applies within-block volume
@@ -46950,7 +46987,7 @@ function _blockProgWeekFor_(dateKey, weekInPhase){
   var w=parseInt(weekInPhase,10);
   return (w>0)?w:0;
 }
-function _planSessionFromDef_(intent, blockWeek, progWeek){
+function _planSessionFromDef_(intent, blockWeek, progWeek, dateKey){
   var def=SESSION_DEFS[intent]; if(!def) return null;
   // The rung REPLACES struct/duration for this week. progWeek is 0 (or absent) everywhere the date
   // gate said no, and on every caller that has no date at all — so the base def is the default and
@@ -46975,7 +47012,7 @@ function _planSessionFromDef_(intent, blockWeek, progWeek){
   }
   if(def.durationMin) s.targets.durationMin=def.durationMin;
   if(def.zone) s.targets.zone=def.zone;
-  if(def.pctFtp){ var z=_planZoneFromPct_(def.pctFtp); if(z){ s.targets.powerLo=z.powerLo; s.targets.powerHi=z.powerHi; s.targets.pctLo=z.pctLo; s.targets.pctHi=z.pctHi; s.targets.ftp=z.ftp; } }
+  if(def.pctFtp){ var z=_planZoneFromPct_(def.pctFtp, dateKey); if(z){ s.targets.powerLo=z.powerLo; s.targets.powerHi=z.powerHi; s.targets.pctLo=z.pctLo; s.targets.pctHi=z.pctHi; s.targets.ftp=z.ftp; s.targets.ftpSrc=z.ftpSrc; s.targets.ftpDate=z.ftpDate; } }
   if(def.hr){ s.targets.hrLo=def.hr[0]; s.targets.hrHi=def.hr[1]; }
   if(def.hrCap) s.targets.hrCap=def.hrCap;
   // Target TSS DERIVED (not stored): TSS = duration_hr x IF^2 x 100, IF = midpoint of the power
@@ -47009,7 +47046,7 @@ function planResolve_(s){
   // rung. That is what keeps the day detail agreeing with the calendar tile without re-grading
   // anything already ridden.
   var _pw=(s.block&&s.block.progWeek)||0;
-  var def=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(s.block&&s.block.week)||1,_pw):null;
+  var def=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(s.block&&s.block.week)||1,_pw,(s&&s.date)||null):null;
   if(!def) return s;                               // unknown intent — nothing to derive
   var out={}; for(var k in def) out[k]=def[k];     // derived prescription (targets/exercises/note)
   ['id','source','status','block','completedRideKey','executionScore','strengthLog','editedAt','_edited','deleted','gen','migrated','actualDurationMin','completed'].forEach(function(f){ if(s[f]!==undefined) out[f]=s[f]; });
@@ -54505,7 +54542,7 @@ function openDayEditor(dateKey, targetId){
   // the user-vs-generated line source already tracks. A generated session pulls fresh from FTP.
   function _effRx_(type){
     var key=(type==='rest')?'rest':_selIntent;
-    var derived=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(sess&&sess.block&&sess.block.week)||1):null;
+    var derived=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(sess&&sess.block&&sess.block.week)||1,0,(sess&&sess.date)||null):null;
     var base=derived||{type:type,targets:{}};
     var isUser=sess && sess.type===type && ((typeof _planSource_==='function'?_planSource_(sess):(sess.source||'user'))==='user');
     if(isUser){ return { type:type, name:(sess.name||base.name), note:(sess.note||base.note), targets:Object.assign({}, base.targets||{}, sess.targets||{}), exercises:((sess.exercises&&sess.exercises.length)?sess.exercises:(base.exercises||[])) }; }
