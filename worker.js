@@ -18103,6 +18103,31 @@ function _aiRich_(r){ var s=0; if(r.stravaId)s+=1000; if((r.lats&&r.lats.length)
 // copies AND (2) have EVERY copy tombstoned on that day — so we isolate the rides OUR
 // 07-17 merge fully killed, and exclude old over-collapses whose rich copy died in
 // the 07-11 quota event (those belong to the null-reason revival path, not this one).
+// THE ONLY CORRECT WAY TO UN-DELETE A RIDE. Every revive path must go through this.
+//
+// A bare delete of the deleted property does not survive a sync, and that is why 1,770 restored
+// activities came back tombstoned with their ORIGINAL deletedAt intact. Two reasons, both in mergeItemFast_:
+//
+//   1. NO CLOCK, SO NO CONTEST. The ride LWW block is gated on aEdit or bEdit or a mask being set.
+//      A revive that stamps no editedAt leaves both sides at 0, so the block never runs and the merge
+//      falls through to the generic path where booleans OR - so remote's deleted:true always wins.
+//      RIDE_LWW_FIELDS_ has ALWAYS listed 'deleted' and 'deletedAt' for exactly this case; the rule
+//      was complete and inert, waiting on a writer to stamp the clock it reads. Third time this
+//      shape has appeared this week.
+//   2. A DELETED PROPERTY CANNOT WIN. The winner is applied only when win[f] is not undefined, and a
+//      property removed with the delete operator reads undefined - indistinguishable from "no opinion". So the
+//      un-delete has to be ASSERTED as false, not erased.
+//
+// Stamping editedAt=now also gives the correct semantics in the other direction: a device that
+// deletes the ride LATER carries a higher editedAt and its tombstone wins, as it should.
+function rideUndelete_(r){
+  if(!r) return false;
+  r.deleted=false;              // asserted, not erased - see (2)
+  r.deletedAt=0;
+  r.deleteReason='';
+  r.editedAt=Date.now();        // the clock the LWW block is gated on - see (1)
+  return true;
+}
 function _aiOrphanKeys_(day){
   day=day||'2026-07-17';
   var all=(st.rides||[]), byKey={};
@@ -18143,7 +18168,7 @@ function aiReviveOrphans_(execute, day){
       console.log('[orphan-revive] to EXECUTE after approval, run: aiReviveOrphans_(true)');
       return picks.length;
     }
-    var n=0; picks.forEach(function(r){ delete r.deleted; try{delete r.deletedAt;}catch(e){} try{delete r.deleteReason;}catch(e){} n++; });
+    var n=0; picks.forEach(function(r){ rideUndelete_(r); n++; });
     try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
     var liveNow=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
     try{ saveLocal_(); }catch(e){ console.log('[orphan-revive] saveLocal error '+(e&&e.message)); }
@@ -18369,8 +18394,8 @@ function _recoverLocalExec_(backup){
       for(var j=i+1;j<gr.length;j++){ if(!used[j] && durClose(bd, _durSec_(gr[j]))) used[j]=1; }
       if(wasLive[k]) continue;
       var dead=deadByKey[k]||[];
-      if(dead.length && !usedDeadKey[k]){ dead.sort(function(a,b){return rich_(b)-rich_(a);}); var p=dead[0]; delete p.deleted; delete p.deletedAt; delete p.deleteReason; usedDeadKey[k]=1; revived++; }
-      else { var c=JSON.parse(JSON.stringify(gr[i])); delete c.deleted; delete c.deletedAt; delete c.deleteReason; all.push(c); added++; }
+      if(dead.length && !usedDeadKey[k]){ dead.sort(function(a,b){return rich_(b)-rich_(a);}); var p=dead[0]; rideUndelete_(p); usedDeadKey[k]=1; revived++; }
+      else { var c=JSON.parse(JSON.stringify(gr[i])); rideUndelete_(c); all.push(c); added++; }
     }
   });
   try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
@@ -18625,7 +18650,7 @@ function aiReviveNulls_(execute){
     }
     // EXECUTE.
     var flipped=0;
-    toRevive.forEach(function(r){ delete r.deleted; try{delete r.deletedAt;}catch(e){} try{delete r.deleteReason;}catch(e){} flipped++; });
+    toRevive.forEach(function(r){ rideUndelete_(r); flipped++; });
     try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
     var liveAfter=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
     // Persist + force-push NOW so the 5s Firebase poll can't re-apply the tombstones

@@ -1237,6 +1237,24 @@ try {
     fail('the humidity gauge and the ride score can disagree (see above).');
   }
 
+  // STEP 78 - an un-deleted ride survives the next sync. 1,770 revived activities came back
+  //           tombstoned with their ORIGINAL deletedAt, because the revive erased the flag and
+  //           stamped no clock: the ride LWW block is gated on an editedAt, so it never ran, and the
+  //           generic path ORs booleans. RIDE_LWW_FIELDS_ always listed deleted/deletedAt - the rule
+  //           was complete and INERT for want of a stamping writer, the third time that shape has
+  //           appeared in a week. Fixed in the WRITERS only; the merge layer is untouched so
+  //           boolean-OR still holds for the segment target list. Exercised in both clock
+  //           directions, because an un-delete that ALWAYS wins is as wrong as one that never does.
+  console.log(`${D}. checking an un-deleted ride survives a merge...${X}`);
+  try {
+    const so = execSync('node scripts/ride-undelete-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a revived ride can be re-tombstoned by a stale remote (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
