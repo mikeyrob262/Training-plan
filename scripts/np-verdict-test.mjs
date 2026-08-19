@@ -30,6 +30,11 @@ import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
+// Count real USES, not mentions. A comment that names the variable is not a call site — and this
+// assertion broke the moment _SM_LEAD's comment explained how it differs from _SM_CONVICTION. Same
+// mistake as counting stravaHarvestDetail_ occurrences: count the thing, not the word.
+const uses = (name) => src.replace(/^\s*\/\/.*$/gm, '').split(name).length - 1;
+
 const asServed = (s) => s.replace(/\\([\s\S])/g, (_, c) => (c === '\\' ? '\\' : c));
 function matchBrace(from){ let i = src.indexOf('{', from), d = 0;
   for (; i < src.length; i++){ const c = src[i]; if (c === '{') d++; else if (c === '}'){ d--; if (!d) return i; } } return -1; }
@@ -90,7 +95,7 @@ console.log('\n' + Y + '=== scope: the conviction layer is not on this surface =
 // failure reproduces on this prompt, which never received it, and the base-ride dispensation that
 // caused it predates that pass by three weeks.
 ok('the ride insight card carries no conviction layer', INSIGHT.indexOf('_SM_CONVICTION') < 0);
-ok('...and the layer still exists on the surfaces it belongs to', (src.match(/_SM_CONVICTION/g) || []).length === 5);
+ok('...and the layer still exists on the surfaces it belongs to', uses('_SM_CONVICTION') === 5);
 ok('the facts floor on this surface is intact', /Describe ONLY what the data above states/.test(TELE));
 ok('...including the not-recorded rule that predates all of this', /never substitute zero/.test(TELE));
 

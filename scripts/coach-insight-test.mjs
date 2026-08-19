@@ -50,6 +50,21 @@ const sandbox = {
   fetch:(_u,opt)=>{ lastPrompt=JSON.parse(opt.body).messages[0].content; return Promise.resolve({ json:()=>Promise.resolve({content:[{text:'Headline here\n- a bullet\nRecommendation: none'}]}) }); },
   AbortController:function(){ this.signal={}; this.abort=()=>{}; },
   setTimeout:()=>0, clearTimeout:()=>{},
+  // The ordering rule the verdict card now carries. Supplied as its REAL text, pulled from source,
+  // rather than a stub — so the assertions below read the prompt the model actually receives. A
+  // stubbed constant here would let the rule be deleted from worker.js without this noticing.
+  _SM_LEAD: (function(){
+    const i = src.indexOf('var _SM_LEAD=');
+    if (i < 0) return '';
+    const nl = src.indexOf('\n//', i), nv = src.indexOf('\nvar ', i);
+    const end = (nl > i && (nl < nv || nv < 0)) ? nl : nv;
+    return src.slice(i, end)
+      .replace(/^var _SM_LEAD=/, '')
+      .split('\n').map((x) => x.trim()).join('')
+      .replace(/;$/, '')
+      .split(/'\s*\+\s*'/).join('')
+      .replace(/^'/, '').replace(/'$/, '');
+  })(),
 };
 const fn = new Function(...Object.keys(sandbox), code + '\n;return {_actElevGain_,_actProfile_,_insightSuppressDeficit_,fetchRideCoachInsight,_ciHash_,_CI_INFLIGHT};');
 const M = fn(...Object.values(sandbox));

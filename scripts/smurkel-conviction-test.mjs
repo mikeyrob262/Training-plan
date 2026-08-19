@@ -25,6 +25,11 @@ import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
+// Count real USES, not mentions. A comment that names the variable is not a call site — and this
+// assertion broke the moment _SM_LEAD's comment explained how it differs from _SM_CONVICTION. Same
+// mistake as counting stravaHarvestDetail_ occurrences: count the thing, not the word.
+const uses = (name) => src.replace(/^\s*\/\/.*$/gm, '').split(name).length - 1;
+
 
 const R='\x1b[31m', G='\x1b[32m', Y='\x1b[33m', X='\x1b[0m';
 let fails = 0;
@@ -76,8 +81,7 @@ ok('bold about meaning, exact about value', /bold about what the numbers MEAN an
 }
 
 console.log('\n' + Y + '=== it reaches BOTH surfaces ===' + X);
-const uses = (src.match(/_SM_CONVICTION/g) || []).length;
-ok('one definition plus four call sites', uses === 5);
+ok('one definition plus four call sites', uses('_SM_CONVICTION') === 5);
 {
   const i = src.indexOf('function fetchSmurkelDebrief_(');
   const debrief = src.slice(i, src.indexOf('var key=_ciHash_(prompt);', i));
