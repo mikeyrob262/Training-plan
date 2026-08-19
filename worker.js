@@ -39535,6 +39535,202 @@ function dsShowDashboard(){
   });
 }
 
+// ==================== WORKOUT-TYPE COMPARISON ====================
+//
+// "Did I hit today's target" is one ride. "Am I hitting it more often" needs the same session
+// compared against itself over time, which is what this builds.
+//
+// BUCKETED BY MEASURED IDENTITY, NOT BY NAME. Measured on the live library: 231 virtual rides carry
+// 146 distinct names, and they are ROUTE names - "Zwift - Big Flat 8 in Watopia", "Evening Ride" -
+// because Zwift names by course, not by workout. Exactly 3 rides are literally named for the session
+// they were. A name filter would find those 3 and silently under-report everything else, and it
+// would get worse as the library grows. _blockSessionOf_ already answers "what session was this",
+// and it is what the grader trusts.
+//
+// BLOCK WINDOW ONLY, and this is ONE constraint rather than two. _blockSessionOf_ resolves structure
+// first, then intensity, then a whole-ride ratio - and BOTH structure paths consult blockPlanFor_.
+// Outside the block they return null and it falls through to the ratio, which averages in warm-up
+// and recoveries: the file already records three verbatim VO2 sessions relabelled THRESHOLD that
+// way. So a pre-block ride is not merely missing a band, it is likely in the WRONG BUCKET. Those
+// rides are EXCLUDED rather than shown blank, because a mislabelled row pollutes the trend silently
+// while an absent one does not.
+//
+// FTP IS READ PER RIDE. ftpOn_(date) gives the FTP in force that day; using today's would re-price
+// every historical ride and move rows between buckets.
+function _wcIntentOf_(r){
+  try{
+    if(!r || r.deleted || !r.date) return null;
+    var dk=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    if(!dk) return null;
+    // The block window IS the gate - asked of blockPlanFor_ rather than hardcoding a start date,
+    // so moving the block moves this with it.
+    var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+    if(!bp) return null;
+    var ftp=(typeof ftpOn_==='function')?parseFloat(ftpOn_(dk)):parseFloat((typeof st!=='undefined'&&st&&st.ftp)||0);
+    if(!(ftp>0)) return null;
+    var id=(typeof _blockSessionOf_==='function')?_blockSessionOf_(r, ftp, dk):null;
+    return (id==='vo2'||id==='threshold'||id==='z2')?id:null;
+  }catch(e){ return null; }
+}
+// Weight in force on a date, or NULL. Mirrors ftpOn_: walk the log to the last entry on or before
+// the date. NEVER falls back to stWeightLb_() - that is today's weight, and pricing a June ride with
+// August's weight fabricates the very trend this table exists to show. Null renders as a dash.
+function weightOn_(dateStr){
+  try{
+    if(!dateStr) return null;
+    var log=(typeof settingsArrLive_==='function')?settingsArrLive_('weightLog'):((typeof st!=='undefined'&&st&&st.weightLog)||[]);
+    var sorted=(log||[]).filter(function(w){ return w && w.date && parseFloat(w.weight)>0; })
+      .sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; });
+    var eff=null;
+    for(var i=0;i<sorted.length;i++){ if(String(sorted[i].date)<=String(dateStr)) eff=sorted[i]; else break; }
+    return eff?parseFloat(eff.weight):null;
+  }catch(e){ return null; }
+}
+// One row per ride of the chosen type, OLDEST FIRST so the trend reads down the table.
+function _wcRows_(intent){
+  var out=[];
+  try{
+    if(!intent) return out;
+    var pool=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+    (pool||[]).forEach(function(r){
+      if(_wcIntentOf_(r)!==intent) return;
+      var dk=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+      var lb=weightOn_(dk), avg=parseFloat(r.avgPwr)||0;
+      // TSS through the canonical guard. Summing r.tss raw once turned one corrupt import into
+      // 1,593,772 TSS across three activities.
+      var tss=(typeof constRideTSS_==='function')?constRideTSS_(r):null;
+      // TARGET-HIT ONLY WHERE A BAND WAS ACTUALLY SENT. zwoRx is stamped at export time and is
+      // PROSPECTIVE - nothing before it carries one. Falling back to the derived band here would
+      // reintroduce the exact false miss the stamp exists to prevent, so an unstamped row is a dash.
+      var band=(typeof _stampedRxFor_==='function')?_stampedRxFor_(dk, intent):null;
+      var hit=null, vals=null;
+      if(band && typeof _blockWorkMeasure_==='function'){
+        var wm=_blockWorkMeasure_(r, dk, intent);
+        if(wm && wm.vals && wm.vals.length){
+          vals=wm.vals;
+          var inB=0;
+          wm.vals.forEach(function(v){ if(v>=wm.lo && v<=wm.hi) inB++; });
+          hit={ inBand:inB, n:wm.vals.length, lo:wm.lo, hi:wm.hi, source:wm.source };
+        }
+      }
+      var ref=(typeof rideRefOf_==='function')?rideRefOf_(r):null;
+      out.push({
+        date:dk, ref:ref, name:(typeof actName_==='function')?actName_(r):(r.name||''),
+        avgPwr:avg||null,
+        wkg:(avg>0 && lb>0)?(Math.round(avg/(lb/2.20462)*100)/100):null,
+        tss:(tss>0)?Math.round(tss):null,
+        avgHR:parseFloat(r.avgHR)||null,
+        secs:(typeof _durSec_==='function')?_durSec_(r):null,
+        band:band, hit:hit, vals:vals
+      });
+    });
+    out.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+  }catch(e){ try{ console.error('[wc] '+((e&&e.message)||e)); }catch(_e){} }
+  return out;
+}
+// How many buckets actually have repeats worth comparing. One session is not a trend.
+function _wcTypes_(){
+  var counts={};
+  try{
+    var pool=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+    (pool||[]).forEach(function(r){ var k=_wcIntentOf_(r); if(k) counts[k]=(counts[k]||0)+1; });
+  }catch(e){}
+  return counts;
+}
+// ---- render ----------------------------------------------------------------------------------
+// Flat and restrained, per the house style: no pill bars, no neon. The trend is read by looking
+// DOWN the table, which is why the rows are chronological rather than newest-first.
+var _WC_LBL={ vo2:'VO2', threshold:'Threshold', z2:'Z2 Endurance' };
+var _wcSel='';
+function _wcFmtDur_(s){
+  if(!(s>0)) return '&mdash;';
+  var m=Math.round(s/60);
+  return (m>=60?(Math.floor(m/60)+'h '+(m%60)+'m'):(m+' min'));
+}
+function _wcHTML_(){
+  // ONE SESSION IS NOT A TREND. The section hides itself entirely until some bucket repeats, so it
+  // never occupies the page promising a comparison it cannot make.
+  var counts=_wcTypes_(), keys=Object.keys(counts).filter(function(k){ return counts[k]>1; });
+  if(!keys.length) return '';
+  // DEFAULT TO THE QUALITY SESSION, NOT THE MOST FREQUENT ONE. Z2 will always be the busiest bucket
+  // - it is most of the week - so opening on it buries the sessions this table exists for. The
+  // target-hit column only says something interesting where there are work intervals to hit, so
+  // interval types win the default and Z2 is a click away.
+  if(!_wcSel || !counts[_wcSel]){
+    var pref=['vo2','threshold'].filter(function(k){ return counts[k]>1; });
+    _wcSel=pref.length
+      ? pref.sort(function(a,b){ return counts[b]-counts[a]; })[0]
+      : keys.slice().sort(function(a,b){ return counts[b]-counts[a]; })[0];
+  }
+  var rows=_wcRows_(_wcSel);
+  var chips=keys.map(function(k){
+    var on=(k===_wcSel);
+    return '<span onclick="_wcPick_(&#39;'+k+'&#39;)" style="cursor:pointer;font-size:12px;font-weight:700;'
+      +'padding:5px 11px;border-radius:9px;border:1px solid '+(on?'#FC4C02':'var(--d-edge)')+';'
+      +'color:'+(on?'#FC4C02':'var(--d-t3)')+';background:'+(on?'rgba(252,76,2,.08)':'transparent')+'">'
+      +(_WC_LBL[k]||k)+' <span style="opacity:.7">'+counts[k]+'</span></span>';
+  }).join(' ');
+  var TH='font-size:9.5px;color:var(--d-dim);letter-spacing:.05em;text-transform:uppercase;padding-bottom:7px;border-bottom:1px solid var(--d-edge)';
+  var TD='font-size:12.5px;color:var(--d-soft);padding:7px 0;border-bottom:1px solid var(--d-edge2);white-space:nowrap';
+  var h='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">Same session, over time</div>'
+    +'<div style="font-size:11px;color:#60a5fa;font-weight:700">'+rows.length+' session'+(rows.length===1?'':'s')+'</div></div>'
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap;margin:11px 0 4px">'+chips+'</div>';
+  if(!rows.length) return h+'<div style="font-size:12px;color:var(--d-dim);padding:10px 0">Nothing to compare yet.</div></div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-top:6px">'
+    +'<tr><th style="'+TH+';text-align:left">Date</th>'
+    +'<th style="'+TH+';text-align:right">Avg power</th>'
+    +'<th style="'+TH+';text-align:right">W/kg</th>'
+    +'<th style="'+TH+';text-align:right">TSS</th>'
+    +'<th style="'+TH+';text-align:right">Avg HR</th>'
+    +'<th style="'+TH+';text-align:right">Time</th>'
+    +'<th style="'+TH+';text-align:right">Target</th></tr>';
+  var anyBand=false, anyWkg=false;
+  rows.forEach(function(r){
+    if(r.band) anyBand=true;
+    if(r.wkg!=null) anyWkg=true;
+    // A dead reference renders as PLAIN TEXT, never as a click that does nothing. Same rule the PB
+    // board and the pace curve follow.
+    var live=(typeof rideRefOk_==='function' && rideRefOk_(r.ref));
+    var dcell=live
+      ? ('<span onclick="if(window.recOpenRide_)recOpenRide_('+rideRefAttr_(r.ref)+')" title="Open this ride" '
+         +'style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px">'+r.date+'</span>')
+      : r.date;
+    var tgt='&mdash;';
+    if(r.hit){
+      var all=(r.hit.inBand===r.hit.n);
+      tgt='<span style="color:'+(all?'var(--c-green,#4ade80)':'var(--c-amber,#f59e0b)')+';font-weight:700">'
+        +r.hit.inBand+'/'+r.hit.n+'</span>'
+        +'<span style="font-size:10px;color:var(--d-dim)"> '+r.hit.lo+'-'+r.hit.hi+'W</span>';
+    }
+    h+='<tr><td style="'+TD+'">'+dcell+'</td>'
+      +'<td style="'+TD+';text-align:right">'+(r.avgPwr?Math.round(r.avgPwr)+'W':'&mdash;')+'</td>'
+      +'<td style="'+TD+';text-align:right">'+(r.wkg!=null?r.wkg.toFixed(2):'&mdash;')+'</td>'
+      +'<td style="'+TD+';text-align:right">'+(r.tss!=null?r.tss:'&mdash;')+'</td>'
+      +'<td style="'+TD+';text-align:right">'+(r.avgHR?Math.round(r.avgHR):'&mdash;')+'</td>'
+      +'<td style="'+TD+';text-align:right">'+_wcFmtDur_(r.secs)+'</td>'
+      +'<td style="'+TD+';text-align:right">'+tgt+'</td></tr>';
+  });
+  h+='</table></div>';
+  // PROVENANCE, because every dash in this table means something different and a reader cannot tell
+  // them apart otherwise.
+  var notes=['Grouped by what each ride measurably WAS, not by its name &mdash; Zwift names by route.',
+             'Only sessions inside the current training block: outside it the classifier falls back to a whole-ride average and mislabels interval work.'];
+  if(!anyBand) notes.push('Target is blank on every row here: the band a session was SENT is recorded from the export onward, and none of these were exported since. It is not a miss.');
+  else notes.push('Target compares each ride against the band that session was actually sent, not the current one.');
+  if(!anyWkg) notes.push('W/kg needs a logged weight on or before the ride date; there is none for these.');
+  h+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:9px;line-height:1.55">'+notes.join('<br>')+'</div>';
+  return h+'</div>';
+}
+function _wcPick_(k){
+  _wcSel=k;
+  try{
+    var host=document.getElementById('wc-host');
+    if(host) host.innerHTML=_wcHTML_();
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window._wcPick_=_wcPick_; window._wcHTML_=_wcHTML_; } }catch(e){}
 function dsShowRidesList(){
   // Open the most recent activity by default — must match the list panel's
   // ordering (dedup + drop deleted + newest-first) so the default selection is
@@ -39606,6 +39802,18 @@ function dsShowRidesList(){
       return true;
     });
   }
+
+  // WORKOUT COMPARISON. Above the list and self-hiding: _wcHTML_ returns '' until a session type
+  // actually repeats, so on a thin library this costs no vertical space at all. Own scroll, so a
+  // long comparison cannot squeeze the activity list it sits above.
+  var wcHost=document.createElement('div');
+  wcHost.id='wc-host';
+  wcHost.style.cssText='flex-shrink:0;max-height:44vh;overflow-y:auto;padding:12px 18px 0';
+  try{
+    var _wcH=(typeof _wcHTML_==='function')?_wcHTML_():'';
+    wcHost.innerHTML=_wcH;
+    if(!_wcH) wcHost.style.display='none';
+  }catch(e){ wcHost.style.display='none'; }
 
   var list=document.createElement('div');
   list.style.cssText='overflow-y:auto;flex:1';
@@ -39693,6 +39901,7 @@ function dsShowRidesList(){
   tbFilters.appendChild(addAct);
   titleBar.appendChild(tbFilters);
   wrap.appendChild(titleBar);
+  wrap.appendChild(wcHost);
   wrap.appendChild(list);
   renderList();
   mc.innerHTML='';

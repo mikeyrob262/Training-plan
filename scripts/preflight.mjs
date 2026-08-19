@@ -1095,6 +1095,21 @@ try {
     fail('a session can be graded against a band it was never sent (see above).');
   }
 
+  // STEP 69 - workout comparison. Bucketed by what a ride measurably WAS, never by name: 231 virtual
+  //           rides carry 146 ROUTE names and only 3 are named for the session. Block-window only,
+  //           because outside it the classifier falls through to a whole-ride ratio and mislabels
+  //           interval work - so pre-block rides are EXCLUDED, not blanked. Target-hit only where a
+  //           band was actually sent; W/kg historical or absent, never today's weight.
+  console.log(`${D}. checking workout comparison...${X}`);
+  try {
+    const so = execSync('node scripts/workout-compare-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the comparison view mislabels a session, or shows a target it cannot justify (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
