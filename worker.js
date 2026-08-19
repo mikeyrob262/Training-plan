@@ -39723,6 +39723,18 @@ function _wcHTML_(){
   h+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:9px;line-height:1.55">'+notes.join('<br>')+'</div>';
   return h+'</div>';
 }
+// Renders the comparison into the DETAIL panel, replacing the selected ride. Selecting any ride
+// from the list re-renders that panel through openDesktopRideDetail, so there is nothing to undo.
+function _wcShow_(){
+  try{
+    var host=document.getElementById('act-detail-panel');
+    if(!host) return;
+    var h=(typeof _wcHTML_==='function')?_wcHTML_():'';
+    host.innerHTML='<div style="overflow-y:auto;height:100%;padding:16px 18px;box-sizing:border-box">'
+      +'<div id="wc-host">'+(h||'<div style="font-size:13px;color:var(--d-dim)">No session type has repeated inside the current training block yet, so there is nothing to compare.</div>')+'</div></div>';
+  }catch(e){ try{ console.error('[wc] '+((e&&e.message)||e)); }catch(_e){} }
+}
+try{ if(typeof window!=='undefined') window._wcShow_=_wcShow_; }catch(e){}
 function _wcPick_(k){
   _wcSel=k;
   try{
@@ -39802,18 +39814,6 @@ function dsShowRidesList(){
       return true;
     });
   }
-
-  // WORKOUT COMPARISON. Above the list and self-hiding: _wcHTML_ returns '' until a session type
-  // actually repeats, so on a thin library this costs no vertical space at all. Own scroll, so a
-  // long comparison cannot squeeze the activity list it sits above.
-  var wcHost=document.createElement('div');
-  wcHost.id='wc-host';
-  wcHost.style.cssText='flex-shrink:0;max-height:44vh;overflow-y:auto;padding:12px 18px 0';
-  try{
-    var _wcH=(typeof _wcHTML_==='function')?_wcHTML_():'';
-    wcHost.innerHTML=_wcH;
-    if(!_wcH) wcHost.style.display='none';
-  }catch(e){ wcHost.style.display='none'; }
 
   var list=document.createElement('div');
   list.style.cssText='overflow-y:auto;flex:1';
@@ -39901,7 +39901,6 @@ function dsShowRidesList(){
   tbFilters.appendChild(addAct);
   titleBar.appendChild(tbFilters);
   wrap.appendChild(titleBar);
-  wrap.appendChild(wcHost);
   wrap.appendChild(list);
   renderList();
   mc.innerHTML='';
@@ -40200,7 +40199,16 @@ function openDesktopRideDetail(idx, _noFetch){
   // Inject two-column layout
   main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
     +'<div id="act-list-panel" style="width:260px;flex-shrink:0;border-right:1px solid var(--d-line);display:flex;flex-direction:column;overflow:hidden">'
-      +'<div style="padding:10px 14px 8px;border-bottom:1px solid var(--d-line);font-size:15px;font-weight:700;color:var(--d-t1);flex-shrink:0">Activities</div>'
+      +'<div style="padding:10px 14px 8px;border-bottom:1px solid var(--d-line);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+        +'<span style="font-size:15px;font-weight:700;color:var(--d-t1)">Activities</span>'
+        // COMPARE lives HERE, not above the list. dsShowRidesList opens the newest ride and returns
+        // on any populated library, so anything mounted below that branch is unreachable - which is
+        // exactly where this started. The list the athlete actually sees is this panel, and the
+        // comparison needs the WIDE side: seven columns do not fit in 260px.
+        +'<span id="wc-btn" onclick="if(window._wcShow_)_wcShow_()" style="font-size:11px;font-weight:700;'
+        +'padding:3px 9px;border-radius:9px;border:1px solid var(--d-edge,rgba(255,255,255,.12));'
+        +'color:var(--d-t3);cursor:pointer">Compare</span>'
+      +'</div>'
       +'<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--d-line);font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0"><span>Activity</span><span>W/kg</span></div>'
       +'<div style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
     +'</div>'

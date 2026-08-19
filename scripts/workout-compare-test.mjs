@@ -162,12 +162,25 @@ console.log('\n' + Y + '=== the table ===' + X);
   ok('NEG: no var() inside an SVG presentation attribute', !/<(circle|rect|path)[^>]*fill="var\(/.test(h));
 }
 
-console.log('\n' + Y + '=== it is mounted, and self-hides ===' + X);
-ok('mounted on the Activities page', /wcHost\.id='wc-host';/.test(src));
-ok('...between the title bar and the list', src.indexOf('wrap.appendChild(wcHost);') > src.indexOf('wrap.appendChild(titleBar);')
-   && src.indexOf('wrap.appendChild(wcHost);') < src.indexOf('wrap.appendChild(list);'));
-ok('...hidden entirely when there is nothing to compare', /if\(!_wcH\) wcHost\.style\.display='none';/.test(src));
-ok('...with its own scroll so it cannot squeeze the list', /max-height:44vh;overflow-y:auto/.test(src));
+console.log('\n' + Y + '=== it is mounted where the list ACTUALLY renders ===' + X);
+{
+  // The first mount was UNREACHABLE. dsShowRidesList opens the newest activity and RETURNS on any
+  // populated library, so everything below that branch — including the comparison — only ran when
+  // there were no rides at all. _wcTypes_() returned {z2:6, vo2:4, threshold:6} while the card
+  // rendered nowhere, and that combination is the tell: qualifying data plus no output means the
+  // MOUNT is wrong, not the gate.
+  const listFn = src.slice(src.indexOf('function dsShowRidesList('), src.indexOf('function openDesktopRideDetail('));
+  ok('NEG: nothing is mounted below the early return any more', !/wcHost/.test(listFn));
+  ok('the early return that made it unreachable is still there',
+     /if\(_firstOk\)\{ openDesktopRideDetail\(_firstIdx\); return; \}/.test(listFn));
+  ok('a Compare control sits in the list-panel header', /id="wc-btn" onclick="if\(window\._wcShow_\)_wcShow_\(\)"/.test(src));
+  ok('...between the list panel and the detail panel in the markup',
+     src.indexOf('id="wc-btn"') > src.indexOf('id="act-list-panel"') && src.indexOf('id="wc-btn"') < src.indexOf('id="act-detail-panel"'));
+  ok('_wcShow_ renders into the WIDE detail panel', /getElementById\('act-detail-panel'\)/.test(exFn('_wcShow_')));
+  ok('...wrapping in wc-host so the type chips re-render in place', /id="wc-host"/.test(exFn('_wcShow_')));
+  ok('...and says so plainly when there is nothing to compare', /nothing to compare/.test(exFn('_wcShow_')));
+  ok('_wcShow_ is reachable from the inline handler', /window\._wcShow_=_wcShow_/.test(src));
+}
 
 console.log('');
 if (fails) { console.log(R + 'workout compare: ' + fails + ' check(s) failed' + X + '\n'); process.exit(1); }
