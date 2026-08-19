@@ -2,3 +2,5 @@
 node_modules/
 .syntax-check/
 .sc/
+
+live_now.html
