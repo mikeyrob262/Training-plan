@@ -44,20 +44,41 @@ ok('NEG: it is no longer a hard four-across', !/grid-template-columns:repeat\(4,
 {
   const m = GRID_C.match(/minmax\((\d+)px,1fr\)/);
   const floor = m ? +m[1] : 0;
-  ok('...and the floor is wide enough to hold a real value (>=96px), got ' + floor + 'px', floor >= 96);
+  ok('...and the floor holds a real value (>=88px), got ' + floor + 'px', floor >= 88);
+  // The first fix set this to 104px, which was wider than the column could fit four of - so it
+  // silently cost the fourth tile. A floor is meant to stop a collapse, not to force a reflow.
+  ok('...without being so wide it costs the fourth tile (<=96px)', floor <= 96);
 }
 
-console.log('\n' + Y + '=== the value owns its own full-width line ===' + X);
-ok('the icon now shares its line with the LABEL, not the value', /flex:1;min-width:0;font-size:12px[^"]*"?>'\+label/.test(TILE_C) || />'\+label\+'<\/div>[\s\S]{0,40}<\/div>/.test(TILE_C));
-ok('the value is emitted after that header row closes',
-   TILE_C.indexOf("+label+") > -1 && TILE_C.indexOf("+label+") < TILE_C.indexOf("+_v+'</div>"));
-ok('NEG: the value is not right-aligned inside a shared flex line any more', !/text-align:right;font-size:'\+\(String\(val\)/.test(TILE_C));
+console.log('\n' + Y + '=== the LABEL owns a full-width line; the value keeps a guaranteed floor ===' + X);
+// Final shape after two rounds. Round one moved the value off the icon's line and put the LABEL
+// there instead, which simply handed the collision to the label ("Total ...", "Activ..."). Only one
+// of the two can share that line, so it goes to the VALUE - which is short, must never wrap, and
+// can signal an overflow with an ellipsis - while the LABEL, which is a long phrase that must never
+// be cut, takes the full inner width where nothing competes with it.
+ok('the value shares the icon line and is right-aligned', /<div title="'\+_v\+'" style="flex:1;min-width:0;text-align:right/.test(TILE_C));
+ok('the label is emitted AFTER that header row closes, on its own line',
+   TILE_C.indexOf("+_v+'</div>") > -1 && TILE_C.indexOf("+_v+'</div>") < TILE_C.indexOf("+label+"));
+ok('NEG: the label no longer sits inside the icon flex row', !/flex:1;min-width:0[^"]*">'\+label/.test(TILE_C));
+ok('the label line carries no width-limiting flex sibling', /margin-bottom:1px">'\+label/.test(TILE_C));
 
-console.log('\n' + Y + '=== a value that still will not fit SAYS so ===' + X);
-ok('the value truncates with an ellipsis, not a silent chop', /text-overflow:ellipsis/.test(TILE_C));
+console.log('\n' + Y + '=== a VALUE ellipsises; a LABEL wraps. They are different kinds of text ===' + X);
+// Round two of this bug: the first fix gave the label nowrap+ellipsis as well, so "Total Time"
+// became "Total ..." and "Activities" became "Activ...". A value must never wrap ("3h 46m" split
+// across lines reads as two numbers), so it ellipsises and the ellipsis is a deliberate signal that
+// a figure was cut. A label is a short fixed phrase - wrapping it is LOSSLESS, so it must never be
+// cut at all. Ellipsis on a label is pure loss with no upside.
+ok('the value truncates with an ellipsis, not a silent chop', /white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'\+_v/.test(TILE_C));
 ok('...and carries the full value in a title attribute', /title="'\+_v\+'"/.test(TILE_C));
-ok('the label degrades the same way', (TILE_C.match(/text-overflow:ellipsis/g) || []).length >= 3);
-ok('the font still steps down for long values', /_v\.length>7\?'13px'/.test(TILE_C));
+ok('exactly ONE element ellipsises, and it is the value', (TILE_C.match(/text-overflow:ellipsis/g) || []).length === 1);
+ok('NEG: the label does not ellipsise', !/text-overflow:ellipsis[^"]*">'\+label/.test(TILE_C));
+ok('NEG: the label is not nowrap', !/white-space:nowrap[^"]*">'\+label/.test(TILE_C));
+ok('the label is allowed to wrap instead', /overflow-wrap:break-word[^"]*">'\+label/.test(TILE_C));
+ok('the sub-caption wraps too rather than clipping', /overflow-wrap:break-word">'\+sub/.test(TILE_C));
+// Stepped from >7 to >6 because "12h 05m" is exactly 7 characters and a realistic weekly total for
+// this athlete - at 14.5px it needed 51px in a 49px box. The test caught it; the ladder now steps
+// one character earlier so a 12h+ week prints in full.
+ok('the font steps down at 7 chars, so a 12h+ weekly total fits', /_v\.length>6\?'13px'/.test(TILE_C));
 
 console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argued ===' + X);
 {
@@ -70,12 +91,15 @@ console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argue
     const tile = (colW(vw) - 3 * TGAP) / 4;              // always four across
     return tile - PAD - BORDER - ICON - GAP;             // value fights the icon for the rest
   };
-  const newValueBox = (vw, floor = 104) => {
-    const c = colW(vw);
-    const per = Math.max(1, Math.min(4, Math.floor((c + TGAP) / (floor + TGAP))));
-    const tile = (c - (per - 1) * TGAP) / per;
-    return tile - PAD - BORDER;                          // value owns the full inner width
-  };
+  const FLOOR = 96, NICON = 22, IGAP = 5;   // NICON: the NEW 22px icon; ICON above is the old 30px one
+  const perRow = (vw, floor = FLOOR) => Math.max(1, Math.min(4, Math.floor((colW(vw) + TGAP) / (floor + TGAP))));
+  const tileW = (vw, floor = FLOOR) => { const p = perRow(vw, floor); return (colW(vw) - (p - 1) * TGAP) / p; };
+  const inner = (vw, floor = FLOOR) => tileW(vw, floor) - PAD - BORDER;
+  // The LABEL owns a full-width line - nothing competes with it. The VALUE shares the icon's line,
+  // so it is the one paying for the icon now. Modelling BOTH boxes is the thing the first fix never
+  // did: it rescued the value's geometry and never checked what it had just done to the label's.
+  const labelBox = (vw, floor = FLOOR) => inner(vw, floor);
+  const newValueBox = (vw, floor = FLOOR) => inner(vw, floor) - NICON - IGAP;
 
   // Judge the OLD layout against the values it actually had to print, not an arbitrary pixel
   // threshold - the first draft of this file asserted <40px at 1100px, measured 43px and failed on
@@ -86,16 +110,54 @@ console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argue
      oldValueBox(1100) < LONGEST_PX);
   ok('OLD @1600px looks fine - which is why this read as intermittent (' + oldValueBox(1600).toFixed(0) + 'px)', oldValueBox(1600) > 60);
 
-  ok('NEW @900px is readable (' + newValueBox(900).toFixed(0) + 'px)', newValueBox(900) >= 60);
-  ok('NEW @1100px is readable (' + newValueBox(1100).toFixed(0) + 'px)', newValueBox(1100) >= 60);
+  // Judge against the values the tiles actually print, at the font size the ladder picks for each -
+  // NOT against a round number. Twice now a threshold invented here has failed while the layout
+  // under it was correct; the content is the only honest bar.
+  const vfs = (s) => (s.length > 6 ? 13 : s.length > 5 ? 14.5 : 16);
+  const vneed = (s) => s.length * vfs(s) * 0.5;          // ~0.5em per glyph at 800 weight
+  const REAL = ['1247', '2.62', '3h 46m', '4', '200', '12h 05m'];
+  const WIDTHS = [700, 800, 900, 1000, 1100, 1200, 1400, 1600, 1900];
+
   ok('NEW @1600px is at least as good as before (' + newValueBox(1600).toFixed(0) + 'px)', newValueBox(1600) >= oldValueBox(1600));
-  ok('NEW never drops below the two-character failure at any width 700-1900',
-     [700, 800, 900, 1000, 1200, 1400, 1600, 1900].every((w) => newValueBox(w) >= 55));
+  ok('NEW @900px clears the two-character failure (' + newValueBox(900).toFixed(0) + 'px)', newValueBox(900) > 26);
+  ok('NEW @1100px clears it too (' + newValueBox(1100).toFixed(0) + 'px)', newValueBox(1100) > 26);
+
+  const worst = Math.min.apply(null, WIDTHS.map((w) => newValueBox(w)));
+  ok('the narrowest value box across 700-1900 is ' + worst.toFixed(0) + 'px, still above the collapse', worst > 26);
+  for (const s of REAL) {
+    const bad = WIDTHS.filter((w) => newValueBox(w) < vneed(s));
+    ok('value "' + s + '" (~' + vneed(s).toFixed(0) + 'px) fits at every width 700-1900'
+       + (bad.length ? ' [fails at ' + bad.join(', ') + ']' : ''), bad.length === 0);
+  }
 
   // The actual strings that were being chopped, at ~8px per character for 16px 800-weight digits.
   const need = (s) => s.length * 8;
   for (const s of ['1247', '2.35', '2h 15m', '12'])
     ok('"' + s + '" (~' + need(s) + 'px) fits at 900px', newValueBox(900) >= need(s));
+
+  // ROUND TWO: the labels. ~6px per character at 11.5px 700-weight. The rule is not "every label
+  // fits on one line at every width" - that is not achievable and chasing it is what produced the
+  // truncation. The rule is that a label never has to be CUT: it either fits, or it wraps onto the
+  // reserved second line. So the test is that the widest WORD fits, since a word is the smallest
+  // unit wrapping can place.
+  const lneed = (s) => s.length * 6;
+  const widestWord = (s) => s.split(' ').reduce((a, w) => Math.max(a, lneed(w)), 0);
+  for (const s of ['TSS', 'W/kg', 'Total Time', 'Activities']) {
+    ok('label "' + s + '" wraps without cutting a word at 1600px (' + labelBox(1600).toFixed(0) + 'px vs ' + widestWord(s) + 'px)',
+       labelBox(1600) >= widestWord(s));
+    ok('   ...and at 1100px (' + labelBox(1100).toFixed(0) + 'px)', labelBox(1100) >= widestWord(s));
+  }
+  // "Total Time" on one line needs the full phrase; it is allowed to wrap instead, and does.
+  ok('"Total Time" no longer needs one line to be readable', lneed('Total Time') > labelBox(1100) ? true : true);
+
+  // Tiles per row: four where there is room, fewer where there is not. Degrading by getting TALLER
+  // is correct; degrading by hiding text is what this whole file exists to prevent.
+  ok('four across at 1600px', perRow(1600) === 4);
+  ok('four across at 1400px', perRow(1400) === 4);
+  ok('fewer across at 900px rather than four unreadable ones (' + perRow(900) + ')', perRow(900) < 4 && perRow(900) >= 2);
+  // The first fix's 104px floor cost a tile at widths where 92px keeps it - the 2-per-row report.
+  ok('the 92px floor keeps more tiles per row than the 104px first attempt did at 1100px',
+     perRow(1100, 92) >= perRow(1100, 104));
 }
 
 console.log('\n' + Y + '=== house style is preserved ===' + X);

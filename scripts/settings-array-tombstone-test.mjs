@@ -100,30 +100,61 @@ check('and the removal survives a stale client re-pushing it',
                     { ftpHistory:FHbad, lastUpdate:newer })
     .ftpHistory.filter((h) => !h.deleted).map((h) => h.ftp), [190,183]);
 
-console.log('\n=== composite identity: a shared date must not take an unrelated row down ===');
-// This is the state the repair actually produced: two ftpHistory rows dated 2026-07-29, one the
-// real 183 and one a fabricated 230. Keyed on date alone, tombstoning the 230 would have deleted
-// the 183 with it. ftpRecord_ same-day-corrects so the app cannot create this, but raw writes that
-// bypass it did.
+console.log('\n=== a shared date is COLLAPSED, not preserved for surgical deletion ===');
+// SUPERSEDED 2026-08-19, deliberately, and the history matters.
+//
+// This section used to pin ftpHistory's COMPOSITE key ['date','ftp']. That was added for a real
+// incident: a repair left two rows dated 2026-07-29, the real 183 and a fabricated 230, and keyed
+// on date alone, tombstoning the 230 would have taken the 183 with it. Per-value identity made the
+// bad row individually deletable.
+//
+// It also made a CORRECTION unable to land, which is the more expensive half of that trade and the
+// one that bit daily. {date:D, ftp:183} and {date:D, ftp:190} are different keys, so a corrected
+// FTP did not REPLACE the old row - it forked, both survived every merge, and ftpOn_ returned
+// whichever sat later in the array. Reported as "FTP shows 190 instead of the locked 183, again":
+// it never recurred, it never left. The composite key does not prevent duplicate rows; it is
+// precisely what lets them PERSIST.
+//
+// The resolution is date-only keying plus healFtpHistoryKeys_, which collapses a duplicated date by
+// keeping the row that agrees with st.ftp. That reaches the SAME outcome the composite key was
+// bought for - the fabricated 230 dies, the real 183 lives - by value correctness rather than by
+// asking the athlete to surgically tombstone a row they cannot see. And because duplicates no
+// longer survive, the "delete one of two same-date rows" case this section guarded stops being
+// reachable at all.
 const fspec = M._LWW_ARRAYS.ftpHistory;
 const clash = [{date:'2026-07-25',ftp:190,source:'baseline'},
                {date:'2026-07-29',ftp:230,source:'manual'},
                {date:'2026-07-29',ftp:183,source:'manual'}];
-M.setSt({ ftpHistory: clash.slice() });
-check('the two same-date rows have DIFFERENT identities',
-  M._LWW_ARRAYS.ftpHistory.keys.join('+'), 'date+ftp');
-check('removing only the 230', M.settingsArrRemove_('ftpHistory', (h) => h.ftp === 230), 1);
-const after = M.getSt().ftpHistory;
-check('the 183 on the same date SURVIVES', after.filter((h) => !h.deleted).map((h) => h.ftp), [190,183]);
-check('the tombstone carries the composite key it deleted',
-  after.filter((h) => h.deleted)[0]._k, '2026-07-29|230');
-check('and still carries the date for readability', after.filter((h) => h.deleted)[0].date, '2026-07-29');
-check('the tombstone has no ftp, so value-filters skip it', 'ftp' in after.filter((h) => h.deleted)[0], false);
-check('through a merge against a client still holding the 230',
-  M._lwwMergeArray_(fspec, after, clash, true).filter((h) => !h.deleted).map((h) => h.ftp), [190,183]);
-check('...and the 230 stays dead',
-  M._lwwMergeArray_(fspec, after, clash, true).some((h) => h.ftp === 230 && !h.deleted), false);
-console.log('  ' + Y + '(keyed on date alone this returned [190] - the good 183 deleted as collateral)' + X);
+check('ftpHistory now keys on date alone, like weightLog',
+  M._LWW_ARRAYS.ftpHistory.keys.join('+'), 'date');
+// The heal's rule, run against the exact incident the composite key was introduced for.
+const healDupes = (rows, cur) => {
+  const seen = {}, drop = {};
+  rows.forEach((x, i) => { if (!x || x.deleted || !x.date) return; (seen[x.date] = seen[x.date] || []).push(i); });
+  Object.keys(seen).forEach((d) => {
+    const idxs = seen[d]; if (idxs.length < 2) return;
+    let keep = -1;
+    if (cur > 0) for (const i of idxs) if (parseInt(rows[i].ftp, 10) === cur) { keep = i; break; }
+    if (keep < 0) keep = idxs[idxs.length - 1];
+    for (const i of idxs) if (i !== keep) drop[i] = 1;
+  });
+  return rows.filter((_x, i) => !drop[i]);
+};
+check('the heal kills the fabricated 230 and keeps the real 183',
+  healDupes(clash, 183).map((h) => h.ftp), [190,183]);
+check('...leaving exactly one row on the shared date',
+  healDupes(clash, 183).filter((h) => h.date === '2026-07-29').length, 1);
+check('...and it never touches an unrelated date', healDupes(clash, 183)[0].date, '2026-07-25');
+// And the correction that the composite key made impossible now lands.
+check('a corrected 183 REPLACES a stale 190 instead of forking',
+  M._lwwMergeArray_(fspec, [{date:'2026-08-19',ftp:183}], [{date:'2026-08-19',ftp:190}], false)
+    .filter((h) => !h.deleted).map((h) => h.ftp), [183]);
+check('...and remote still wins when remote carries the newer clock',
+  M._lwwMergeArray_(fspec, [{date:'2026-08-19',ftp:183}], [{date:'2026-08-19',ftp:190}], true)
+    .filter((h) => !h.deleted).map((h) => h.ftp), [190]);
+check('a whole-date deletion still works',
+  M._lwwMergeArray_(fspec, [{date:'2026-08-19',ftp:183}], [{date:'2026-08-19',deleted:true,_k:'2026-08-19'}], false)[0].deleted, true);
+console.log('  ' + Y + '(the composite key bought delete-precision at the cost of every correction; the heal buys both)' + X);
 check('weightLog keeps a single-field identity', M._LWW_ARRAYS.weightLog.keys, ['date']);
 check('so an existing date-only tombstone still resolves',
   M._lwwMergeArray_(spec, [{date:'2026-01-01',deleted:true}], [{date:'2026-01-01',weight:165}], true)[0].deleted, true);

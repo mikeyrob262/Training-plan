@@ -6375,8 +6375,17 @@ function mergeStateRoot_(local, remote){
 // would throw away - most importantly it keeps the LONGER GPS track when two copies disagree, which
 // is load-bearing for a library assembled from several devices and importers. The same
 // raise-but-never-lower flaw still applies to numeric ride fields and is not fixed by this.
+// ftpHistory KEYS ON DATE ALONE. It used to key on ['date','ftp'] - the VALUE inside the IDENTITY -
+// which made a correction structurally unable to land: {date:D, ftp:183} and {date:D, ftp:190} are
+// two different keys, so the merge kept BOTH rather than replacing one. _ftpSort_ orders by date
+// only and Array#sort is stable, so ftpOn_ then returned whichever same-date row sat later in the
+// array - and the corrected value could lose to the row it was meant to replace, permanently.
+// Reported as "FTP shows 190 instead of the locked 183, again": it never recurred, it never left.
+// weightLog next door always keyed on ['date'] alone, which is why a corrected weigh-in sticks and
+// a corrected FTP did not. Same family as the plan-session duplication: identity defined wrong, so
+// an edit forks instead of overwriting.
 var _LWW_ARRAYS = { weightLog:{ keys:['date'], val:'weight' },
-                    ftpHistory:{ keys:['date','ftp'], val:'ftp' },
+                    ftpHistory:{ keys:['date'], val:'ftp' },
                     races:{ keys:['id'] },
                     myFoods:{ keys:['id'] },
                     myMeals:{ keys:['id'] } };
@@ -6438,9 +6447,36 @@ function _lwwMergeArray_(spec, a, b, remoteWins){
 // this, lastUpdate only moved on push, so a fresh local edit still carried an OLD clock and
 // lost to remote - the bug would have survived the fix.
 var _lwwShadow_ = null;
+// A digest of one LWW array: key + value (or a tombstone marker) per entry, sorted so that mere
+// ORDER never reads as a change. Cheap enough to run on every saveLocal_.
+function _lwwArrDigest_(spec, arr){
+  if(!Array.isArray(arr)) return '';
+  var out=[], i, x, k;
+  for(i=0;i<arr.length;i++){
+    x=arr[i]; if(!x) continue;
+    k=_arrKeyOf_(spec,x);
+    out.push((k==null?'?':k)+':'+(_arrIsDead_(x)?'X':(spec.val?String(x[spec.val]):'1')));
+  }
+  out.sort();
+  return out.join(',');
+}
 function _lwwSnapshot_(){
   var m = {}, paths = _lwwPaths_(), i;
   for(i=0;i<paths.length;i++) m[(paths[i][0]||'')+'.'+paths[i][1]] = _lwwGet_(st, paths[i]);
+  // THE LWW ARRAYS NEED A CLOCK TOO. Only the scalars were watched, so a save that touched ONLY an
+  // array - ftpSyncHistory_ appending, a weigh-in, a race edit - left lastUpdate stale, and
+  // mergeStateRoot_ then handed those arrays to remote and discarded the local write. It happened
+  // to work for an FTP typed in Settings purely because st.ftp is a watched SCALAR and dragged the
+  // clock along with it; nothing else in this family had that luck.
+  //
+  // This is the same shape as the earlier "a rule with no stamping WRITER is inert" bug: the array
+  // LWW resolution existed and was correct, and nothing ever advanced the clock it reads.
+  try{
+    for(var nm in _LWW_ARRAYS){
+      if(!Object.prototype.hasOwnProperty.call(_LWW_ARRAYS,nm)) continue;
+      m['[]'+nm] = _lwwArrDigest_(_LWW_ARRAYS[nm], st && st[nm]);
+    }
+  }catch(e){}
   return m;
 }
 // Returns true when an allowlisted value changed since the last snapshot.
@@ -36120,8 +36156,32 @@ function dsShowWeather(){
     var futureWindMax=0; hrs.forEach(function(k){ if(hourly.windspeed_10m[k]>futureWindMax) futureWindMax=hourly.windspeed_10m[k]; });
     if(futureWindMax>=15 && futureWindMax>=wind+5) alerts.push(['#60a5fa','wind','Wind increasing','Sustained winds up to '+Math.round(futureWindMax)+' mph later today.']);
     // thunderstorm LATER in the 7-day (today's storm is already a hazard above)
-    var stormDay=-1; (daily.weathercode||[]).forEach(function(code,i){ if(stormDay<0 && i>0 && code>=95){ stormDay=i; } });
-    if(stormDay>=0){ var sd=new Date(daily.time[stormDay]+'T12:00:00'); alerts.push(['#a855f7','warn','Thunderstorms '+dayNames2[sd.getDay()],'Plan ahead for possible storms.']); }
+    //
+    // COMPARE THE DATE, NOT THE INDEX. This read i greater than 0, which encodes an ASSUMPTION that the daily
+    // array begins at today. It does not when the response carries past_days, nor when a body
+    // fetched on an earlier day is reused - and then a storm that has already HAPPENED is presented
+    // as an upcoming one. Reported as "Thunderstorms Tue" still standing as an active alert the day
+    // AFTER it hit.
+    //
+    // The bare weekday is what made it invisible: inside a 7-day window, "Tue" a day late looks
+    // exactly like "Tue" a week early, so a stale alert is indistinguishable from a real one. The
+    // date is now printed alongside it, which makes any future recurrence self-evident on the card
+    // instead of needing to be noticed.
+    //
+    // The dedicated Alerts TAB already gets this right - findWindows drops every hour before now.
+    // This card was the one place that inferred time from position.
+    var _wxToday=(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })();
+    var stormDay=-1;
+    (daily.weathercode||[]).forEach(function(code,i){
+      if(stormDay>=0 || !(code>=95)) return;
+      var dstr=String((daily.time||[])[i]||'');
+      if(!dstr || dstr<=_wxToday) return;   // past is never an alert; today already ranks as a hazard above
+      stormDay=i;
+    });
+    if(stormDay>=0){
+      var sd=new Date(daily.time[stormDay]+'T12:00:00');
+      alerts.push(['#a855f7','warn','Thunderstorms '+dayNames2[sd.getDay()]+' '+(sd.getMonth()+1)+'/'+sd.getDate(),'Plan ahead for possible storms.']);
+    }
     var al=lbl('ALERTS');
     if(!alerts.length){ al+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--d-t4)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div style="font-size:12px">No active alerts — conditions look clear.</div></div>'; }
     alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid var(--d-edge)':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':x[1]==='aqi'?'<path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/>':'<path d="M12 2 1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+x[2]+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+x[3]+'</div></div></div>'; });
@@ -36614,6 +36674,70 @@ function ftpOn_(dateStr){
 }
 // True when a [from,to] date range crosses the planned retest — the discontinuity Dr. Smurkel flags.
 function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETEST_DATE && String(toDate)>=_FTP_RETEST_DATE; }
+var _FTP_KEY_V = 1;
+// ONE-TIME REPAIR FOR THE COMPOSITE-KEY ERA. ftpHistory used to key on ['date','ftp'], so a
+// same-date correction FORKED instead of replacing it and both rows survived every merge. Two
+// leftovers have to be cleaned or the key fix changes nothing the athlete can actually see:
+//
+//   1. DUPLICATE LIVE ROWS on one date. ftpOn_ walks the date-sorted log and takes the LAST entry
+//      on or before the target, and Array#sort is stable - so the row sitting later in the array
+//      wins, which is how a corrected 183 kept losing to the 190 it was meant to replace. Where a
+//      date carries more than one row, keep the one that agrees with st.ftp (the scalar set in
+//      Settings, which has always had proper last-write-wins); with no match keep the last, which
+//      is what the old reader returned anyway, so the heal never invents a value.
+//   2. TOMBSTONES CARRYING A COMPOSITE _k ('2026-08-19|190'). Under the new spec those match
+//      nothing, so an old deletion would quietly stop applying and the row it killed would return.
+//      Rewrite _k to its date part.
+//
+// THE DUPLICATE IS SPLICED, NOT TOMBSTONED, and that is deliberate against the standing rule. A
+// tombstone is keyed, and under the new spec both rows share ONE key - so tombstoning the loser
+// would kill the winner too, and the athlete would lose the date entirely. A splice is safe here
+// only because the new key makes the rows collide: remote's copy can no longer coexist, it can only
+// win or lose the merge. It loses, because this heal calls sv() and the array digest now advances
+// lastUpdate - which is why the key change and the _lwwTouch_ change had to ship together.
+//
+// Runs in applyFirebaseData AFTER the remote pull (so it sees both devices' rows) and BEFORE
+// ftpSyncHistory_ (so the self-heal reconciles against an already-clean log).
+function healFtpHistoryKeys_(){
+  try{
+    if(typeof st==='undefined' || !st) return 0;
+    if(st._ftpKeyV===_FTP_KEY_V) return 0;
+    if(!Array.isArray(st.ftpHistory)){ st._ftpKeyV=_FTP_KEY_V; return 0; }
+    var cur=parseInt(st.ftp,10)||0, n=0, i, x;
+    for(i=0;i<st.ftpHistory.length;i++){
+      x=st.ftpHistory[i];
+      if(x && x.deleted && typeof x._k==='string' && x._k.indexOf('|')>-1){ x._k=x._k.split('|')[0]; n++; }
+    }
+    var seen={}, drop={}, dupes=0;
+    for(i=0;i<st.ftpHistory.length;i++){
+      x=st.ftpHistory[i];
+      if(!x || x.deleted || !x.date) continue;
+      if(!seen[x.date]) seen[x.date]=[];
+      seen[x.date].push(i);
+    }
+    Object.keys(seen).forEach(function(d){
+      var idxs=seen[d]; if(idxs.length<2) return;
+      var keep=-1, j;
+      if(cur>0){ for(j=0;j<idxs.length;j++){ if(parseInt(st.ftpHistory[idxs[j]].ftp,10)===cur){ keep=idxs[j]; break; } } }
+      if(keep<0) keep=idxs[idxs.length-1];
+      try{
+        console.log('[ftp] heal '+d+': '+idxs.length+' rows ('
+          +idxs.map(function(k){ return st.ftpHistory[k].ftp; }).join('/')+') -> kept '+st.ftpHistory[keep].ftp
+          +(cur>0&&parseInt(st.ftpHistory[keep].ftp,10)===cur?' (matches st.ftp)':' (fallback: last)'));
+      }catch(e){}
+      for(j=0;j<idxs.length;j++){ if(idxs[j]!==keep){ drop[idxs[j]]=1; dupes++; } }
+    });
+    if(dupes){
+      st.ftpHistory=st.ftpHistory.filter(function(_x,k){ return !drop[k]; });
+      n+=dupes;
+    }
+    st._ftpKeyV=_FTP_KEY_V;
+    if(n){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    try{ console.log('[ftp] key heal: '+n+' row(s) repaired ('+dupes+' duplicate); effective FTP now '
+      +((typeof ftpOn_==='function')?ftpOn_():'?')+'W, st.ftp='+cur); }catch(e){}
+    return n;
+  }catch(e){ try{ console.error('[ftp] key heal: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 // Reconcile the log with the current st.ftp: seed on first run, append when st.ftp changed outside a
 // recorded write (self-healing, so no write site can silently escape the log). Idempotent.
 function ftpSyncHistory_(){
@@ -39258,17 +39382,34 @@ function dsShowDashboard(){
   // does outgrow its tile it SAYS so rather than quietly printing a wrong-looking number - a
   // truncated "2h" is indistinguishable from a real reading, which is what made this so easy to
   // mis-see as a data bug.
-  rc+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px">';
+  // A LABEL WRAPS. A VALUE ELLIPSISES. THEY ARE NOT THE SAME KIND OF TEXT.
+  //
+  // The first pass at this moved the value onto its own line and put the LABEL beside the fixed
+  // 30px icon instead - which just handed the collision to the label: "Total Time" became
+  // "Total ...", "Activities" became "Activ...". Same silent-truncation defect, one row down, and a
+  // 104px floor also cost the fourth tile at this column width.
+  //
+  // The mistake was reaching for ellipsis on a label at all. A VALUE must never wrap - "3h 46m"
+  // broken across two lines reads as two numbers - so it stays nowrap and ellipsises, and an
+  // ellipsis there is a deliberate visible signal that a figure was cut. A LABEL is a short fixed
+  // phrase with no such constraint: wrapping it to a second line is LOSSLESS, so it needs no signal
+  // and should never be cut. "Total Time" over two lines is fully readable; "Total ..." is not.
+  //
+  // Wrapping also removes the width dependency that caused both rounds of this bug: the tile no
+  // longer has a minimum width below which the label fails, so the floor can drop to 92px and let
+  // four across return, with the layout degrading by getting TALLER rather than by hiding text.
+  // A reserved 2-line label box keeps the four tiles' values on a common baseline.
+  rc+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
     var _v=String(val);
-    var _fs=_v.length>7?'13px':(_v.length>5?'14.5px':'16px');
+    var _fs=_v.length>6?'13px':(_v.length>5?'14.5px':'16px');
     return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:11px 12px;min-width:0">'
-      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
-        +'<div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
-        +'<div style="flex:1;min-width:0;font-size:12px;color:var(--d-t2);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</div>'
+      +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'
+        +'<div style="width:22px;height:22px;border-radius:6px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+        +'<div title="'+_v+'" style="flex:1;min-width:0;text-align:right;font-size:'+_fs+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_v+'</div>'
       +'</div>'
-      +'<div title="'+_v+'" style="font-size:'+_fs+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">'+_v+'</div>'
-      +'<div style="font-size:9px;color:var(--d-t4);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+sub+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t2);font-weight:700;line-height:1.15;overflow-wrap:break-word;margin-bottom:1px">'+label+'</div>'
+      +'<div style="font-size:9px;color:var(--d-t4);margin-bottom:5px;line-height:1.2;overflow-wrap:break-word">'+sub+'</div>'
       +'<div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
@@ -39311,6 +39452,50 @@ function dsShowDashboard(){
   // unlabelled percentage would read as if it were.
   // Shared body renderer for the four states. Lives inside dsShowDashboard so it can use ACC/spark.
   function _hdSeriesOf(res){ var s=[]; if(res&&res.applicable&&res.H){ var seg=res.H.slice(res.segFrom); var st2=Math.max(1,Math.floor(seg.length/24)); for(var i=0;i<seg.length;i+=st2) s.push(seg[i]); } return s; }
+  // A DEDICATED DRIFT CHART, NOT the generic spark(). Reported as "unlabelled/unreadable", and it
+  // was unreadable for a reason that outranks the missing axis: spark() scales every series against
+  // a ZERO baseline, so an HR trace of ~140 +/- 8 bpm collapses into a flat sliver across the top
+  // tenth of the box. The drift the card exists to show was geometrically invisible. This scales to
+  // the DATA range, so the same 16 bpm spread fills the plot.
+  //
+  // Then the labels: y ticks in bpm, x ticks in minutes, and a dashed divider at the midpoint -
+  // decoupling IS a first-half vs second-half comparison, so the split is the one gridline that
+  // makes the number legible rather than decorative.
+  //
+  // Labels are HTML AROUND the svg, never text inside it. The path keeps
+  // preserveAspectRatio="none" to stay crisp at any card width, and anything drawn under that
+  // stretches with the box - the same reason <circle> markers render as ellipses in this codebase.
+  // For the same class of reason the divider uses a literal colour, never var(): var() is invalid
+  // in an SVG presentation attribute and would silently drop the stroke.
+  function _hrdChart_(vals,color,durMin){
+    vals=(vals||[]).filter(function(v){ return typeof v==='number' && isFinite(v) && v>0; });
+    if(vals.length<4) return '';
+    var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals);
+    if(!(hi>lo)) hi=lo+1;
+    // Pad so the trace never rides the frame, and round outward so the printed ticks are honest
+    // bounds rather than the rounded-off data.
+    var pad=Math.max(2,(hi-lo)*0.15);
+    var yLo=Math.floor(lo-pad), yHi=Math.ceil(hi+pad);
+    var W=100, Hh=52, n=vals.length;
+    var pts=[], i;
+    for(i=0;i<n;i++){
+      var x=(i/(n-1))*W, y=Hh-((vals[i]-yLo)/(yHi-yLo))*Hh;
+      pts.push(x.toFixed(1)+' '+y.toFixed(1));
+    }
+    var line='M'+pts.join(' L'), area=line+' L'+W+' '+Hh+' L0 '+Hh+' Z';
+    var svg='<svg width="100%" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision">'
+      +'<path d="'+area+'" fill="'+color+'" opacity="0.10"/>'
+      +'<line x1="50" y1="0" x2="50" y2="'+Hh+'" stroke="'+color+'" stroke-width="1" opacity="0.35" vector-effect="non-scaling-stroke" stroke-dasharray="2 2"/>'
+      +'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var ax='font-size:8px;color:var(--d-dim);font-weight:600;line-height:1;white-space:nowrap';
+    var dm=Math.max(1,Math.round(durMin||0));
+    return '<div style="display:flex;gap:5px;align-items:stretch;width:100%">'
+      +'<div style="display:flex;flex-direction:column;justify-content:space-between;flex-shrink:0;text-align:right;'+ax+'">'
+        +'<span>'+yHi+' bpm</span><span>'+yLo+'</span></div>'
+      +'<div style="flex:1;min-width:0">'+svg
+        +'<div style="display:flex;justify-content:space-between;margin-top:3px;'+ax+'">'
+          +'<span>0 min</span><span>half</span><span>'+dm+' min</span></div></div></div>';
+  }
   function hdBody(res, mode, ride){
     if(mode==='loading'){
       var sp='<svg width="20" height="20" viewBox="0 0 40 40" style="flex-shrink:0"><circle cx="20" cy="20" r="16" fill="none" stroke="#1c2130" stroke-width="5"/><path d="M20 4a16 16 0 0 1 16 16" fill="none" stroke="#64748b" stroke-width="5" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 20 20" to="360 20 20" dur="0.8s" repeatCount="indefinite"/></path></svg>';
@@ -39331,9 +39516,14 @@ function dsShowDashboard(){
       var who=ride?_hrdRideLabel_(ride):'';
       return '<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>'
         +'<div style="font-size:12px;font-weight:600;color:'+col+';margin:4px 0 2px">'+msg+'</div>'
-        +(who?'<div style="font-size:10px;color:var(--d-t3);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+who+'</div>':'')
+        // "Read from" PREFIX. The bare ride name was reported as a stray fragment ("Holland 100
+        // Alternative") that looked like wrong content bleeding onto the card - which is exactly how
+        // an unintroduced proper noun reads. Naming it was always deliberate (the number is often
+        // NOT from today's ride), but a label nobody can identify as a label does not do the job it
+        // was added for. Naming the relationship costs two words.
+        +(who?'<div style="font-size:10px;color:var(--d-t3);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="color:var(--d-dim)">Read from</span> '+who+'</div>':'')
         +'<div style="font-size:10px;color:var(--d-dim);margin-bottom:8px">Steady segment, warm-up dropped · '+res.durMin+' min</div>'
-        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(series.length>1?spark(series,col,100,56):'')+'</div>';
+        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(series.length>3?_hrdChart_(series,col,res.durMin):'')+'</div>';
     }
     // Nothing in the window qualified. The reason shown is the NEWEST candidate's — the most
     // recognizable one to the user ("that was my group ride") — but the copy says the search was
@@ -56068,6 +56258,9 @@ window.onload = function(){
         // remote pull, so synced user/completed sessions are respected). Idempotent — regenerates
         // only gen sessions — so the version guard is an optimisation, not correctness.
         try{ if(typeof generateBlockPlan_==='function' && (typeof _TB_VERSION!=='undefined') && st._blockPlanGen!==_TB_VERSION){ generateBlockPlan_(); st._blockPlanGen=_TB_VERSION; } }catch(e){}
+        // Collapse the duplicate same-date FTP rows left by the old ['date','ftp'] composite key,
+        // and re-point composite tombstone keys, BEFORE the self-heal below reads the log.
+        try{ if(typeof healFtpHistoryKeys_==='function') healFtpHistoryKeys_(); }catch(e){}
         // Seed / self-heal the append-only FTP log so no write site can escape it (Dr. Smurkel dependency).
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
         // Fill nutrients onto already-logged items whose database row gained them after the fact.

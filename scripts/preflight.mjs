@@ -1157,6 +1157,36 @@ try {
     fail('dashboard stat values can be silently clipped (see above).');
   }
 
+  // STEP 73 - an FTP correction has to be able to LAND. ftpHistory keyed on ['date','ftp'], putting
+  //           the VALUE inside the IDENTITY, so a same-date correction FORKED instead of replacing
+  //           and both rows survived every merge; ftpOn_ then returned whichever sat later in the
+  //           array. Reported as "FTP shows 190 not the locked 183, again" - it never recurred, it
+  //           never left. Needs the key AND _lwwSnapshot_ watching the arrays: the resolution rule
+  //           is inert unless something advances the clock it reads.
+  console.log(`${D}. checking FTP history merge key...${X}`);
+  try {
+    const so = execSync('node scripts/ftp-merge-key-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('an FTP correction can fail to persist (see above).');
+  }
+
+  // STEP 74 - HR drift chart legibility, its ride label, and the past-dated weather alert. The
+  //           drift chart used the zero-baseline spark(), which flattens an HR trace into a sliver;
+  //           the bare ride name read as a stray fragment; and the storm scan used `i>0` as a proxy
+  //           for "future", so a storm that had already happened stood as an active alert.
+  console.log(`${D}. checking HR drift chart + weather alert dating...${X}`);
+  try {
+    const so = execSync('node scripts/hrd-wx-render-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('drift chart or weather alert dating regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
