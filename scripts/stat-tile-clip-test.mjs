@@ -38,16 +38,26 @@ const GRID = src.slice(Math.max(0, i0 - 1800), i0);
 const noCmt = (s) => s.replace(/^\s*\/\/.*$/gm, '');
 const TILE_C = noCmt(TILE), GRID_C = noCmt(GRID);
 
-console.log('\n' + Y + '=== the tile grid has a floor and is allowed to wrap ===' + X);
-ok('the grid uses auto-fit with a minimum tile width', /grid-template-columns:repeat\(auto-fit,minmax\(\d+px,1fr\)\)/.test(GRID_C));
-ok('NEG: it is no longer a hard four-across', !/grid-template-columns:repeat\(4,1fr\)/.test(GRID_C));
+console.log('\n' + Y + '=== the tile row is a COUNT, not a fit: 4 or 2, never a stranded 3+1 ===' + X);
+// auto-fit packs as many tiles as WILL fit, so at a middling width it returns 3 and strands the
+// fourth on its own row. It has no notion of balance, and no minmax value can forbid 3 - 3 is always
+// reachable between the widths that give 4 and 2. With exactly four items the only balanced answers
+// are 4x1 and 2x2, so the count is STATED at a breakpoint rather than inferred from space.
+const CSS = noCmt(src).slice(noCmt(src).indexOf('.ds-stat-grid{'), noCmt(src).indexOf('.sm-row{'));
+ok('the call site uses the class, not an inline grid', /rc\+='<div class="ds-stat-grid">'/.test(noCmt(src)));
+ok('NEG: no auto-fit is left on this grid', !/auto-fit/.test(CSS));
+ok('the default is a balanced 2x2', /\.ds-stat-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(CSS));
+ok('...widening to 4 across at a breakpoint', /@media \(min-width:(\d+)px\)\{\.ds-stat-grid\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\}\}/.test(CSS));
+ok('...using minmax(0,1fr), since an explicit count cannot wrap and a px min would OVERFLOW',
+   !/repeat\((2|4),minmax\(\d+px/.test(CSS));
 {
-  const m = GRID_C.match(/minmax\((\d+)px,1fr\)/);
-  const floor = m ? +m[1] : 0;
-  ok('...and the floor holds a real value (>=88px), got ' + floor + 'px', floor >= 88);
-  // The first fix set this to 104px, which was wider than the column could fit four of - so it
-  // silently cost the fourth tile. A floor is meant to stop a collapse, not to force a reflow.
-  ok('...without being so wide it costs the fourth tile (<=96px)', floor <= 96);
+  const m = CSS.match(/@media \(min-width:(\d+)px\)/);
+  const bp = m ? +m[1] : 0;
+  // The breakpoint must not promise four tiles before there is room for four readable ones.
+  const colAt = (vw) => (vw - 20) * (1.55 / (1.3 + 0.92 + 1.55));
+  const tileAt4 = (vw) => (colAt(vw) - 3 * 8) / 4;
+  ok('the breakpoint gives four tiles at least the 96px floor (' + tileAt4(bp).toFixed(0) + 'px at ' + bp + 'px)',
+     tileAt4(bp) >= 96);
 }
 
 console.log('\n' + Y + '=== the VALUE owns a full-width line; the LABEL shares and wraps ===' + X);
@@ -96,8 +106,9 @@ console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argue
     const tile = (colW(vw) - 3 * TGAP) / 4;              // always four across
     return tile - PAD - BORDER - ICON - GAP;             // value fights the icon for the rest
   };
-  const FLOOR = 96, NICON = 22, IGAP = 5;   // NICON: the NEW 22px icon; ICON above is the old 30px one
-  const perRow = (vw, floor = FLOOR) => Math.max(1, Math.min(4, Math.floor((colW(vw) + TGAP) / (floor + TGAP))));
+  const FLOOR = 96, NICON = 22, IGAP = 5, BP = 1040;   // NICON: the NEW 22px icon; ICON above is the old 30px one
+  // The count is now decided by the breakpoint, not by how many happen to fit.
+  const perRow = (vw) => (vw >= BP ? 4 : 2);
   const tileW = (vw, floor = FLOOR) => { const p = perRow(vw, floor); return (colW(vw) - (p - 1) * TGAP) / p; };
   const inner = (vw, floor = FLOOR) => tileW(vw, floor) - PAD - BORDER;
   // The LABEL owns a full-width line - nothing competes with it. The VALUE shares the icon's line,
@@ -161,12 +172,22 @@ console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argue
 
   // Tiles per row: four where there is room, fewer where there is not. Degrading by getting TALLER
   // is correct; degrading by hiding text is what this whole file exists to prevent.
+  // NO STRANDED TILE AT ANY WIDTH. Four items divide evenly only by 4 and 2; a row count of 3 or 1
+  // leaves one alone on the last row, which is the reported "layout looks broken".
   ok('four across at 1600px', perRow(1600) === 4);
   ok('four across at 1400px', perRow(1400) === 4);
-  ok('fewer across at 900px rather than four unreadable ones (' + perRow(900) + ')', perRow(900) < 4 && perRow(900) >= 2);
-  // The first fix's 104px floor cost a tile at widths where 92px keeps it - the 2-per-row report.
-  ok('the 92px floor keeps more tiles per row than the 104px first attempt did at 1100px',
-     perRow(1100, 92) >= perRow(1100, 104));
+  ok('a balanced 2x2 at 900px, not three-and-a-stray', perRow(900) === 2);
+  {
+    const widths = [];
+    for (let w = 600; w <= 2200; w += 5) widths.push(w);
+    const bad = widths.filter((w) => { const p = perRow(w); return p !== 4 && p !== 2; });
+    ok('no width from 600-2200 yields 3 or 1 per row (' + bad.length + ' bad)', bad.length === 0);
+    const stranded = widths.filter((w) => 4 % perRow(w) !== 0);
+    ok('...so the last row is never a single tile (' + stranded.length + ' stranded)', stranded.length === 0);
+  }
+  // And the count only rises where four tiles are actually readable.
+  ok('at the breakpoint the four tiles still clear the floor', tileW(BP) >= FLOOR);
+  ok('just below it, two tiles are comfortably wider', tileW(BP - 1) > tileW(BP));
 }
 
 console.log('\n' + Y + '=== house style is preserved ===' + X);
