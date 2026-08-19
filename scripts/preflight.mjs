@@ -1220,6 +1220,23 @@ try {
     fail('a past session can be graded against today\'s band (see above).');
   }
 
+  // STEP 77 - the Ride Planner humidity gauge. The point is not the icon: it is that the gauge does
+  //           NOT invent its own opinion of humidity. wxScore_ already scores it and that score
+  //           already feeds the ride score, so a gauge calling 70% fine while the score docks the
+  //           ride would be two sources of truth for one fact - the FTP split, the two max-HR
+  //           defaults, the prescription-vs-grader contradiction, all the same shape. The cut
+  //           points are compared against wxScore_ and this fails if either side moves alone. Also
+  //           pins that it reads the RIDE WINDOW rather than the padded chart series.
+  console.log(`${D}. checking humidity gauge bands match the ride score...${X}`);
+  try {
+    const so = execSync('node scripts/humidity-gauge-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the humidity gauge and the ride score can disagree (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

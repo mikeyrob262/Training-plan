@@ -75,7 +75,10 @@ ok('the container rules come AFTER the viewport fallback, so they win where supp
    CSS.indexOf('@container') > CSS.indexOf('@media (min-width:1040px)'));
 {
   // 408 must be the real requirement, not a round number: four tiles at the 96px floor + three gaps.
-  const m = CSS.match(/@container \(min-width:(\d+)px\)/);
+  // Scoped to the rule that targets .ds-stat-grid. The loose form matched whichever @container came
+  // first in the slice, which broke the moment the weather gauges added their own (372px) - an
+  // assertion that reads "some threshold somewhere" is not asserting this one.
+  const m = CSS.match(/@container \(min-width:(\d+)px\)\{\.ds-stat-grid\{/);
   const need = 4 * 96 + 3 * 8;
   ok('the container threshold equals 4 tiles + 3 gaps (' + (m ? m[1] : '?') + ' vs ' + need + ')', m && +m[1] === need);
 }

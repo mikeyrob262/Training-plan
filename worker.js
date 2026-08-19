@@ -214,6 +214,20 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
    measured is the wrong one.
    408px is not a guess: four 96px tiles plus three 8px gaps. The container is asked whether it can
    hold four readable tiles, which is the actual question. */
+/* WEATHER CONDITION GAUGES. Same discipline as the stat tiles, and in the GLOBAL sheet for the same
+   reason - a class declared in a panel-scoped sheet is invisible to every other surface.
+   Four gauges divide evenly by 4 and 2 only, so those are the only counts offered; a 90px ring four
+   across needs 372px, below which 2x2 beats four overflowing ones. The container is asked, not the
+   viewport, because this card sits inside a planner column whose width the viewport does not
+   predict. wx-gauge-3 keeps the original three-across when humidity has no reading, rather than
+   leaving a hole where the fourth ring would be. */
+.wx-gauge-col{container-type:inline-size}
+.wx-gauge-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.wx-gauge-grid.wx-gauge-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (min-width:420px){.wx-gauge-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (min-width:372px){.wx-gauge-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (max-width:371.98px){.wx-gauge-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:371.98px){.wx-gauge-grid.wx-gauge-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .ds-stat-col{container-type:inline-size}
 @container (min-width:408px){.ds-stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @container (max-width:407.98px){.ds-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -52933,7 +52947,17 @@ function showWeatherHistory(){
   // inner SVG node pivots about the user-space origin unless transform-box/transform-origin are
   // also set, which swings the arrow clean out of its box. Rotating the outer <svg> element (as the
   // map pins do) is fine because that element has a layout box; a nested <g> does not.
-  function windArrowSVG(fromDeg,color,sw){
+  // Humidity droplet, authored on the same 24x24 box as windArrowSVG and every other gauge icon, so
+// it drops into either the face or the badge slot without a variant. Stroke-only, no fill, matching
+// the existing icon set; the inner arc is the highlight that reads as water rather than a teardrop.
+function humidityDropSVG(color,sw){
+  var c=color||'currentColor';
+  return '<g fill="none" stroke="'+c+'" stroke-width="'+(sw||2.2)+'" stroke-linecap="round" stroke-linejoin="round">'
+    +'<path d="M12 2.7c3.4 4.1 5.6 7 5.6 9.7a5.6 5.6 0 0 1-11.2 0c0-2.7 2.2-5.6 5.6-9.7z"/>'
+    +'<path d="M9.4 13.6a2.7 2.7 0 0 0 2.6 3"/>'
+    +'</g>';
+}
+function windArrowSVG(fromDeg,color,sw){
     var toward=(((+fromDeg||0)+180)%360);
     var c=color||'currentColor';
     return '<g transform="rotate('+toward.toFixed(1)+' 12 12)" fill="none" stroke="'+c+'" stroke-width="'+(sw||2.4)+'" stroke-linecap="round" stroke-linejoin="round">'
@@ -52959,6 +52983,17 @@ function showWeatherHistory(){
       if(val>=25)return{emoji:'💨',color:'#E24B4A',pct:val/40};
       if(val>=15)return{emoji:'😬',color:'#BA7517',pct:val/40};
       return{emoji:'😊',color:'#1D9E75',pct:val/40};
+    }
+    // HUMIDITY, ON THE CUT POINTS THE APP ALREADY HOLDS. wxScore_ scores it
+    // h<50 -> 100, h<65 -> 80, h<80 -> 55, else 30. Those breakpoints are reused verbatim rather
+    // than chosen fresh: a gauge that called 70% "fine" while the ride score docked it would be two
+    // sources of truth for one fact, which is the failure mode this app keeps paying for. The colour
+    // ramp follows the same severity ordering the other three use, so the four gauges read alike.
+    if(type==='humidity'){
+      if(val>=80)return{emoji:'🥵',color:'#E24B4A',pct:val/100};
+      if(val>=65)return{emoji:'😓',color:'#FC4C02',pct:val/100};
+      if(val>=50)return{emoji:'😊',color:'#BA7517',pct:val/100};
+      return{emoji:'😀',color:'#1D9E75',pct:val/100};
     }
     return{emoji:'😊',color:'#1D9E75',pct:0.5};
   }
@@ -53637,6 +53672,10 @@ function showWeatherHistory(){
       var rTemps=r1(slR(h.temperature_2m)), rPrecip=r1(slR(h.precipitation_probability));
       var rWind=r1(slR(h.windspeed_10m)), rGusts=r1(slR(h.windgusts_10m));
       var rDir=slR(h.winddirection_10m)||[];
+      // slR, not fmt2. The humid variable below is the PADDED CHART series; the gauge must read the
+      // ride window only, which is the same distinction that once let a 45-minute run be judged on
+      // three hours of weather.
+      var rHum=slR(h.relativehumidity_2m)||[];
       var temps=fmt2(h.temperature_2m);
       var feels=fmt2(h.apparent_temperature);
       var precip=fmt2(h.precipitation_probability);
@@ -53696,11 +53735,26 @@ function showWeatherHistory(){
         // an arrow alone is ambiguous about whether it means from or toward.
         var windBadge=(midDir!=null)?windArrowSVG(midDir,wc.color,3):'';
         var windSub=(midDir!=null)?('blowing toward '+getDirStr((midDir+180)%360)):'';
-        gEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">'
+        // HUMIDITY, the fourth condition. Peak across the RIDE WINDOW, matching Precipitation and
+        // Wind (both read their worst moment, because that is the one that costs you); Temperature
+        // is the deliberate exception, titled on its start value. When the start differs enough to
+        // be a separate fact, the sub-label says so rather than leaving the athlete to wonder which
+        // number the ring is showing - the ambiguity that produced the "78 peak temp" report.
+        // Emoji face like the other three, plus the droplet as an SVG badge, exactly the pattern
+        // Wind established: the face carries the condition read, the badge names the quantity.
+        var humMax=rHum.length?Math.max.apply(null,rHum):null;
+        var humStart=rHum.length?rHum[0]:null;
+        var hc=(humMax!=null)?getCondition('humidity',humMax):null;
+        var humSub=(humMax!=null && humStart!=null && (humMax-humStart)>=5)?('starts '+Math.round(humStart)+'%'):'';
+        var humGauge=(hc!=null)
+          ? buildGauge(hc.emoji,'Humidity '+Math.round(humMax)+'%',hc.pct,hc.color,humSub,humidityDropSVG(hc.color,2.6))
+          : '';
+        gEl.innerHTML='<div class="wx-gauge-col"><div class="wx-gauge-grid'+(humGauge?'':' wx-gauge-3')+'">'
           +buildGauge(tc.emoji,'Temperature',tc.pct,tc.color)
           +buildGauge(pc.emoji,'Precipitation',pc.pct,pc.color)
           +buildGauge(wc.emoji,'Wind',wc.pct,wc.color,windSub,windBadge)
-          +'</div>'
+          +humGauge
+          +'</div></div>'
           +'<div style="display:flex;justify-content:space-around;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--b1)">'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--c-red)">'+(startTemp!=null?Math.round(startTemp):Math.round(maxTemp))+'°F</div>'
             +'<div style="font-size:10px;color:var(--t3)">'+(startTemp!=null?('at '+startLbl):'peak, whole window')+'</div>'
