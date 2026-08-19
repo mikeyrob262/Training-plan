@@ -45099,6 +45099,28 @@ function _pbRefWhy_(r){
     // neither null nor a dupe. Printing reason + day here is what makes that visible without a
     // console, and aiReviveOrphans_ takes a day argument precisely for this case.
     if(deadNear){
+      // THE DEADLOCK, NAMED. aiReviveNulls_ skips any tombstone it believes has a live twin, and its
+      // twin test is LOOSER than the test used to link: it buckets distance with round(mi*10) - so
+      // two activities up to ~0.099 mi apart are "the same" - and it ignores sport entirely, so a
+      // live RIDE can mask a dead run. The link resolver then rejects that same live record, being
+      // stricter on both counts. Result: the tombstone is never revived because something live looks
+      // like it, and never linked because that something is not actually the run. Neither rule is
+      // wrong alone; together they strand the record permanently, which is why a second revive
+      // flipped the same 1,000 and moved nothing here.
+      var twin=null;
+      for(var w=0;w<st.rides.length;w++){
+        var v=st.rides[w]; if(!v||v.deleted) continue;
+        if(((typeof normDate==='function')?normDate(v.date||''):'')!==wantD) continue;
+        if(Math.round((parseFloat(v.distance)||0)*10)!==Math.round(wantMi*10)) continue;
+        twin=v; break;
+      }
+      if(twin){
+        var tSp=String((typeof rideSport_==='function')?rideSport_(twin):'')||'(no sport)';
+        var tMi=(parseFloat(twin.distance)||0).toFixed(2);
+        return 'a live activity that day ('+tMi+' mi, '+tSp+') is close enough that the recovery treats '
+          +'this as a duplicate and skips it, but not close enough to link - so it stays deleted. '
+          +'Recovery skips it; the link rejects it.';
+      }
       var why='', when='';
       for(var q=0;q<st.rides.length;q++){
         var z=st.rides[q]; if(!z||!z.deleted) continue;
