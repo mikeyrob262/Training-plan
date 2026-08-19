@@ -36753,26 +36753,46 @@ function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETES
 // desktop) is only explicable if those two quantities disagree, so print both and stop guessing.
 function tileDump_(){
   try{
-    var col=document.querySelector('.ds-stat-col');
-    var grid=document.querySelector('.ds-stat-grid');
+    // EVERY instance, not the first. querySelector returns whichever node comes first in the DOM,
+    // and this app re-renders into parallel desktop/mobile shells and re-parents cards by measured
+    // height (_balCols_) - so a stale or hidden copy can easily precede the one on screen. That is
+    // how this tool reported "4 across" against a screenshot showing 2x2: it was describing a
+    // different element. A diagnostic that measures "the first one it finds" is worse than none,
+    // because it is confidently wrong.
+    var grids=[].slice.call(document.querySelectorAll('.ds-stat-grid'));
     var cq=(window.CSS && CSS.supports && CSS.supports('container-type:inline-size'));
     console.log('[tile-dump] viewport='+window.innerWidth+'x'+window.innerHeight
       +' dpr='+(window.devicePixelRatio||1)
       +' | media(min-width:1040px)='+(window.matchMedia?window.matchMedia('(min-width:1040px)').matches:'?')
-      +' | container-queries='+(cq?'supported':'NOT SUPPORTED (viewport fallback in use)'));
-    if(!col){ console.log('   .ds-stat-col NOT FOUND - the dashboard is not rendered, or this is the mobile renderer'); return 'see console'; }
-    var cw=Math.round(col.getBoundingClientRect().width);
-    console.log('   column width='+cw+'px  (needs >=408 for four 96px tiles + three 8px gaps)');
-    if(!grid){ console.log('   .ds-stat-grid NOT FOUND inside the column'); return 'see console'; }
-    var gc=getComputedStyle(grid).gridTemplateColumns;
-    // split(' ') and filter, NOT a regex: the served template eats a backslash level, so a source
-    // /\s+/ arrives at the browser as /s+/ - valid, silent, and splitting on the letter s.
-    var cols=String(gc).trim().split(' ').filter(function(x){ return x!==''; }).length;
-    console.log('   grid-template-columns='+gc);
-    console.log('   RESOLVED COLUMNS='+cols+'  -> '+(cols===4?'4 across':(cols===2?'2x2':(cols===1?'STACKED - the class has no rule on this screen':cols+' across - unbalanced'))));
-    console.log('   tile width='+Math.round((cw-(cols-1)*8)/cols)+'px');
-    console.log('   VERDICT: '+(cols===4||cols===2?'balanced':'NOT balanced')
-      +(cols!==1 && cw<408 && cols===4?' (four tiles in a column too narrow for them)':''));
+      +' | container-queries='+(cq?'supported':'NOT SUPPORTED (viewport fallback in use)')
+      +' | .ds-stat-grid instances='+grids.length+(grids.length>1?'  <-- MORE THAN ONE, that is the bug':''));
+    if(!grids.length){ console.log('   none found - the dashboard is not rendered on this screen'); return 'see console'; }
+    var visible=0;
+    grids.forEach(function(g,i){
+      var r=g.getBoundingClientRect();
+      var vis=!!(g.offsetParent!==null && r.width>0 && r.height>0);
+      if(vis) visible++;
+      var col=g.closest?g.closest('.ds-stat-col'):g.parentNode;
+      var cw=col?Math.round(col.getBoundingClientRect().width):-1;
+      var gc=getComputedStyle(g).gridTemplateColumns;
+      // split(' ') and filter, NOT a regex: the served template eats a backslash level, so a source
+      // /\s+/ arrives at the browser as /s+/ - valid, silent, and splitting on the letter s.
+      var cols=String(gc).trim().split(' ').filter(function(x){ return x!==''; }).length;
+      console.log('   ['+i+'] '+(vis?'VISIBLE':'hidden ')
+        +'  cols='+cols+' ('+(cols===4?'4 across':cols===2?'2x2':cols===1?'STACKED - no rule on this screen':cols+' across, UNBALANCED')+')'
+        +'  gridWidth='+Math.round(r.width)+'px'
+        +'  containerWidth='+(cw<0?'no .ds-stat-col ancestor':cw+'px')
+        +'  tile='+(cols>0?Math.round((r.width-(cols-1)*8)/cols):0)+'px');
+      if(vis){
+        console.log('        tracks: '+gc);
+        if(cw>=0) console.log('        container '+(cw>=408?'>= 408 -> should be 4 across':'< 408 -> 2x2 is CORRECT for this width; the space is lost UPSTREAM, in row 1 grid 1.3/0.92/1.55'));
+        var p=g.parentNode, chain=[];
+        for(var k=0;k<4 && p && p.getBoundingClientRect;k++){ chain.push(Math.round(p.getBoundingClientRect().width)); p=p.parentNode; }
+        console.log('        ancestor widths (nearest first): '+chain.join(' <- '));
+      }
+    });
+    console.log('   VISIBLE INSTANCES='+visible+(visible>1?'  <-- two are on screen at once':'')
+      +(grids.length>1?'   (read the VISIBLE row; the others are stale nodes)':''));
   }catch(e){ console.error('[tile-dump] '+((e&&e.message)||e)); }
   return 'see console';
 }

@@ -80,11 +80,22 @@ ok('the container rules come AFTER the viewport fallback, so they win where supp
   ok('the container threshold equals 4 tiles + 3 gaps (' + (m ? m[1] : '?') + ' vs ' + need + ')', m && +m[1] === need);
 }
 ok('a diagnostic exists to settle it with measurements', /function tileDump_\(\)/.test(src));
-ok('...printing viewport AND column width, the two that were conflated',
-   /viewport='\+window\.innerWidth/.test(src) && /column width='\+cw/.test(src));
-ok('...and the RESOLVED column count, which is what the screen actually shows', /RESOLVED COLUMNS='\+cols/.test(src));
+ok('...printing the viewport, one of the two quantities that were conflated', /viewport='\+window\.innerWidth/.test(src));
+// It reported "4 across" against a screenshot showing 2x2, because querySelector returns the FIRST
+// node and this app re-renders into parallel shells and re-parents cards by measured height. A
+// diagnostic that measures whichever element it happens to find first is confidently wrong, which is
+// worse than having none. It must enumerate and say which one is actually on screen.
+ok('it enumerates EVERY instance, not just the first', /querySelectorAll\('\.ds-stat-grid'\)/.test(src));
+ok('NEG: no querySelector-first on the grid', !/querySelector\('\.ds-stat-grid'\)/.test(src));
+ok('...and flags when more than one exists', /MORE THAN ONE, that is the bug/.test(src));
+ok('...marking which instance is VISIBLE', /vis\?'VISIBLE':'hidden/.test(src));
+ok('...testing visibility properly, not just presence', /g\.offsetParent!==null && r\.width>0 && r\.height>0/.test(src));
+ok('...and counting visible ones, since two on screen is its own bug', /VISIBLE INSTANCES='\+visible/.test(src));
+ok('it reports the CONTAINER width per instance, not one global figure', /containerWidth='\+\(cw<0\?/.test(src));
+ok('...and says plainly when 2x2 is CORRECT for that width', /2x2 is CORRECT for this width; the space is lost UPSTREAM/.test(src));
+ok('...printing the ancestor chain, so a narrow column can be traced upward', /ancestor widths \(nearest first\)/.test(src));
 ok('...naming a stacked result as a missing rule, the failure mode seen once already',
-   /STACKED - the class has no rule on this screen/.test(src));
+   /STACKED - no rule on this screen/.test(src));
 ok('...using minmax(0,1fr), since an explicit count cannot wrap and a px min would OVERFLOW',
    !/repeat\((2|4),minmax\(\d+px/.test(CSS));
 {
