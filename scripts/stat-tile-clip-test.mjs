@@ -50,17 +50,22 @@ ok('NEG: it is no longer a hard four-across', !/grid-template-columns:repeat\(4,
   ok('...without being so wide it costs the fourth tile (<=96px)', floor <= 96);
 }
 
-console.log('\n' + Y + '=== the LABEL owns a full-width line; the value keeps a guaranteed floor ===' + X);
-// Final shape after two rounds. Round one moved the value off the icon's line and put the LABEL
-// there instead, which simply handed the collision to the label ("Total ...", "Activ..."). Only one
-// of the two can share that line, so it goes to the VALUE - which is short, must never wrap, and
-// can signal an overflow with an ellipsis - while the LABEL, which is a long phrase that must never
-// be cut, takes the full inner width where nothing competes with it.
-ok('the value shares the icon line and is right-aligned', /<div title="'\+_v\+'" style="flex:1;min-width:0;text-align:right/.test(TILE_C));
-ok('the label is emitted AFTER that header row closes, on its own line',
-   TILE_C.indexOf("+_v+'</div>") > -1 && TILE_C.indexOf("+_v+'</div>") < TILE_C.indexOf("+label+"));
-ok('NEG: the label no longer sits inside the icon flex row', !/flex:1;min-width:0[^"]*">'\+label/.test(TILE_C));
-ok('the label line carries no width-limiting flex sibling', /margin-bottom:1px">'\+label/.test(TILE_C));
+console.log('\n' + Y + '=== the VALUE owns a full-width line; the LABEL shares and wraps ===' + X);
+// ROUND THREE, and the synthesis. Round 1 gave the value its own line and the label the icon's -
+// labels clipped ("Total ...", "Activ..."). Round 2 swapped them - the value clipped ("3h 4..."),
+// because beside a 22px icon it had ~44px and "3h 46m" needs ~44px. Swapping which one pays for the
+// icon only MOVES the failure; something has to give up that line entirely.
+//
+// The LABEL is the one that can share, because a label WRAPS. Round 1's geometry was right and its
+// ellipsis was the whole bug. The value takes the full inner width - ~70px at the floor instead of
+// ~44px - so it stops needing the ellipsis at all.
+ok('the label row is a float container, so line 2+ gets the full width', /overflow:hidden;margin-bottom:6px/.test(TILE_C));
+ok('...with the icon FLOATED, not a flex sibling permanently narrowing the label', /float:left;width:22px/.test(TILE_C));
+ok('NEG: the label is no longer boxed into a flex track', !/flex:1;min-width:0[^"]*">'\+label/.test(TILE_C));
+ok('the value is emitted AFTER that row closes, on its own line',
+   TILE_C.indexOf("+label+") > -1 && TILE_C.indexOf("+label+") < TILE_C.indexOf("+_v+'</div>"));
+ok('NEG: the value no longer sits inside the icon flex row', !/flex:1;min-width:0[^"]*">'\+_v/.test(TILE_C));
+ok('NEG: and is not right-aligned against the icon any more', !/text-align:right[^"]*">'\+_v/.test(TILE_C));
 
 console.log('\n' + Y + '=== a VALUE ellipsises; a LABEL wraps. They are different kinds of text ===' + X);
 // Round two of this bug: the first fix gave the label nowrap+ellipsis as well, so "Total Time"
@@ -68,7 +73,7 @@ console.log('\n' + Y + '=== a VALUE ellipsises; a LABEL wraps. They are differen
 // across lines reads as two numbers), so it ellipsises and the ellipsis is a deliberate signal that
 // a figure was cut. A label is a short fixed phrase - wrapping it is LOSSLESS, so it must never be
 // cut at all. Ellipsis on a label is pure loss with no upside.
-ok('the value truncates with an ellipsis, not a silent chop', /white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'\+_v/.test(TILE_C));
+ok('the value truncates with an ellipsis, not a silent chop', /white-space:nowrap;overflow:hidden;text-overflow:ellipsis[^"]*">'\+_v/.test(TILE_C));
 ok('...and carries the full value in a title attribute', /title="'\+_v\+'"/.test(TILE_C));
 ok('exactly ONE element ellipsises, and it is the value', (TILE_C.match(/text-overflow:ellipsis/g) || []).length === 1);
 ok('NEG: the label does not ellipsise', !/text-overflow:ellipsis[^"]*">'\+label/.test(TILE_C));
@@ -98,8 +103,12 @@ console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argue
   // The LABEL owns a full-width line - nothing competes with it. The VALUE shares the icon's line,
   // so it is the one paying for the icon now. Modelling BOTH boxes is the thing the first fix never
   // did: it rescued the value's geometry and never checked what it had just done to the label's.
+  const newValueBox = (vw, floor = FLOOR) => inner(vw, floor);              // value owns the full width
+  // The label's FIRST line sits beside the floated icon; every line after it has the full inner
+  // width. So the binding constraint for an unbreakable word is the FULL width, not the first line -
+  // which is exactly what the flex version got wrong, permanently narrowing the label at every line.
+  const labelLine1 = (vw, floor = FLOOR) => inner(vw, floor) - NICON - IGAP;
   const labelBox = (vw, floor = FLOOR) => inner(vw, floor);
-  const newValueBox = (vw, floor = FLOOR) => inner(vw, floor) - NICON - IGAP;
 
   // Judge the OLD layout against the values it actually had to print, not an arbitrary pixel
   // threshold - the first draft of this file asserted <40px at 1100px, measured 43px and failed on

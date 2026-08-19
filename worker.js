@@ -36691,6 +36691,40 @@ function ftpOn_(dateStr){
 }
 // True when a [from,to] date range crosses the planned retest — the discontinuity Dr. Smurkel flags.
 function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETEST_DATE && String(toDate)>=_FTP_RETEST_DATE; }
+// READ-ONLY. Prints every layer that can hold an FTP, because "FTP shows 190" has at least four
+// possible homes and they are not interchangeable:
+//   st.ftp        - the MEASURED current value. What the Dashboard tile and 22 other sites print.
+//   ftpHistory    - the dated log. What ftpOn_(date) reads, and therefore what prices every band.
+//   goalTargets.ftpW - the GOAL. Never the same fact; see the note on calcTrainingAwareTargets_.
+//   _FTP_DEFAULT  - 186, the fallback when there is no log and no st.ftp.
+// The 2026-08-19 merge-key fix repaired ftpHistory. It does NOT touch st.ftp, so a Dashboard still
+// reading 190 after that fix means st.ftp itself holds 190 - most likely a fossil of the era when
+// mergeState_ resolved numbers with Math.max and 190 beat a corrected 183 on every sync. LWW stops
+// that recurring; it cannot retroactively undo what max-merge already cemented. Re-enter the value
+// once in Settings and it will now persist.
+function ftpDump_(){
+  try{
+    var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
+    var raw=(typeof st!=='undefined'&&st&&Array.isArray(st.ftpHistory))?st.ftpHistory:[];
+    console.log('[ftp-dump] st.ftp='+JSON.stringify(st&&st.ftp)+' ('+(typeof (st&&st.ftp))+')'
+      +' | ftpOn_(today)='+((typeof ftpOn_==='function')?ftpOn_():'?')
+      +' | goalTargets.ftpW='+JSON.stringify((st&&st.goalTargets||{}).ftpW)
+      +' | _FTP_DEFAULT='+_FTP_DEFAULT
+      +' | keyV='+JSON.stringify(st&&st._ftpKeyV)+' (want '+_FTP_KEY_V+')'
+      +' | rows live='+h.length+' raw='+raw.length);
+    var byDate={};
+    h.forEach(function(e){ (byDate[e.date]=byDate[e.date]||[]).push(e.ftp); });
+    Object.keys(byDate).sort().forEach(function(d){
+      console.log('   '+d+': '+byDate[d].join(', ')+(byDate[d].length>1?'   <-- DUPLICATE, heal has not run':''));
+    });
+    var tombs=raw.filter(function(x){ return x && x.deleted; });
+    if(tombs.length) console.log('   tombstones: '+tombs.map(function(t){ return t._k; }).join(', '));
+    console.log('   VERDICT: '+(String(st&&st.ftp)!==String((typeof ftpOn_==='function')?ftpOn_():'')
+      ? 'st.ftp and the log DISAGREE - the tile shows st.ftp, bands use the log'
+      : 'st.ftp and the log agree'));
+  }catch(e){ console.error('[ftp-dump] '+((e&&e.message)||e)); }
+  return 'see console';
+}
 var _FTP_KEY_V = 1;
 // ONE-TIME REPAIR FOR THE COMPOSITE-KEY ERA. ftpHistory used to key on ['date','ftp'], so a
 // same-date correction FORKED instead of replacing it and both rows survived every merge. Two
@@ -39421,6 +39455,20 @@ function dsShowDashboard(){
   // does outgrow its tile it SAYS so rather than quietly printing a wrong-looking number - a
   // truncated "2h" is indistinguishable from a real reading, which is what made this so easy to
   // mis-see as a data bug.
+  // ROUND THREE, AND THE SYNTHESIS OF THE FIRST TWO.
+  //
+  // Round 1 put the VALUE on its own full-width line and the label beside the icon - labels clipped
+  // ("Total ...", "Activ..."). Round 2 swapped them - the value clipped instead ("3h 4..."), because
+  // beside a 22px icon it only had ~44px and "3h 46m" needs ~44px. Swapping which one pays for the
+  // icon just moves the failure; SOMETHING has to give up that line entirely.
+  //
+  // It is the LABEL that can share, because a label WRAPS. Round 1 was the right geometry and its
+  // ellipsis was the whole bug: with the label allowed to wrap, "Total Time" becomes two readable
+  // lines in a narrow box instead of a cut one, and the VALUE - which must never wrap, since
+  // "3h 46m" split across lines reads as two numbers - takes the full inner width where nothing
+  // competes with it. Value box goes from ~44px to ~70px at the floor, so it stops needing the
+  // ellipsis at all; the ellipsis stays only as the visible signal of last resort.
+  //
   // A LABEL WRAPS. A VALUE ELLIPSISES. THEY ARE NOT THE SAME KIND OF TEXT.
   //
   // The first pass at this moved the value onto its own line and put the LABEL beside the fixed
@@ -39443,11 +39491,17 @@ function dsShowDashboard(){
     var _v=String(val);
     var _fs=_v.length>6?'13px':(_v.length>5?'14.5px':'16px');
     return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:11px 12px;min-width:0">'
-      +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'
-        +'<div style="width:22px;height:22px;border-radius:6px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
-        +'<div title="'+_v+'" style="flex:1;min-width:0;text-align:right;font-size:'+_fs+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_v+'</div>'
+      // The icon FLOATS rather than being a flex sibling, so the label's first line wraps beside it
+      // and every line after it gets the FULL tile width. As a flex row the label was permanently
+      // narrowed by the icon, and "Activities" - one unbreakable 10-character word - could not fit
+      // beside it at a 1100px viewport however it wrapped. Floated, that word simply moves to line
+      // two and has the whole tile. overflow:hidden makes the row a block formatting context so it
+      // contains the float; without it the value below would ride up alongside the icon.
+      +'<div style="overflow:hidden;margin-bottom:6px">'
+        +'<div style="float:left;width:22px;height:22px;border-radius:6px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;margin:0 5px 0 0">'+icon+'</div>'
+        +'<div style="font-size:11.5px;color:var(--d-t2);font-weight:700;line-height:1.15;overflow-wrap:break-word;min-height:22px">'+label+'</div>'
       +'</div>'
-      +'<div style="font-size:11.5px;color:var(--d-t2);font-weight:700;line-height:1.15;overflow-wrap:break-word;margin-bottom:1px">'+label+'</div>'
+      +'<div title="'+_v+'" style="font-size:'+_fs+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">'+_v+'</div>'
       +'<div style="font-size:9px;color:var(--d-t4);margin-bottom:5px;line-height:1.2;overflow-wrap:break-word">'+sub+'</div>'
       +'<div style="height:22px">'+sparkHtml+'</div></div>';
   }
