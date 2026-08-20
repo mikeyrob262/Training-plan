@@ -19154,7 +19154,7 @@ function _racingChart_(title, acts){
   var curTotal=cur.total, curCount=cur.count, prevSameTotal=prevSame.total, prevFinal=prevFull.total;
   var even=Math.abs(curTotal-prevSameTotal)<0.05;
   var ahead=curTotal>=prevSameTotal;
-  var AC = even ? '#e8edf5' : (ahead ? '#22c55e' : '#ff5c5c');   // even white / ahead green / behind red
+  var AC = even ? 'var(--d-t1)' : (ahead ? '#22c55e' : '#ff5c5c');   // even white / ahead green / behind red
   var GHOST='#6b7280', CEIL='#4b5563', CEILT='#9ca3af';
   var delta=curTotal-prevSameTotal;
   var inner='';
@@ -29631,11 +29631,11 @@ function _saDetail_(e, ctx){
     +(e.prFromHistory?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:3px;line-height:1.4">derived from your synced efforts, not a Strava PR</div>':'')
     +'</div>';
   H+='<div><div style="'+LBL+'">Power that set it</div>'
-    +'<div style="font-size:22px;font-weight:800;color:'+(e.prWatts?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.prWatts?(e.prWatts+'W'):'not recorded')+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:'+(e.prWatts?'var(--d-t1)':'var(--d-dim)')+';line-height:1.1;margin-top:3px">'+(e.prWatts?(e.prWatts+'W'):'not recorded')+'</div>'
     +(e.prEffortRatio!=null?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">'+Math.round(e.prEffortRatio*100)+'% of what you hold now</div>'):'')
     +'</div>';
   H+='<div><div style="'+LBL+'">Today&rsquo;s capability</div>'
-    +'<div style="font-size:22px;font-weight:800;color:'+(e.capW?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.capW?(e.capW+'W'):'unknown')+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:'+(e.capW?'var(--d-t1)':'var(--d-dim)')+';line-height:1.1;margin-top:3px">'+(e.capW?(e.capW+'W'):'unknown')+'</div>'
     +(e.capStale?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:3px">from older rides</div>':'')
     +'</div>';
   H+='</div>';
@@ -39077,7 +39077,7 @@ function dsShowCalendar(){
 
   function sumBlock(big,label,color,spark){
     return '<div style="flex:1;min-width:0">'
-      +'<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:15px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</span><span style="font-size:9px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span></div>'
+      +'<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:15px;font-weight:800;color:'+(color||'var(--d-t1)')+';line-height:1">'+big+'</span><span style="font-size:9px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span></div>'
       +'<div style="height:12px;margin-top:3px">'+spark+'</div></div>';
   }
 
@@ -39151,7 +39151,7 @@ function dsShowCalendar(){
       // day, so every card in it opened dl[0]. Handles live on the cards now.
       H+='<div data-cal="cell" data-date="'+nd+'" style="min-height:240px;padding:10px;border-radius:12px;background:var(--d-well);border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
       H+='<div style="font-size:11px;color:var(--d-t3);font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
-      H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
+      H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'var(--d-t1)')+';margin-bottom:6px">'+dt.getDate()+'</div>';
       dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
         var nm=actName_(r);
         var _wi=rideRefOf_(r);
@@ -40437,8 +40437,16 @@ function dsShowDashboard(){
   rd+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">'+recSub+'</div>';
   rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recFill)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:var(--d-t1);line-height:1">'+recBig+'</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
+  // THEME-AWARE, like the ring number beside them. These carried a hardcoded #e8edf5 against a
+  // var(--d-inset) box: fine in dark mode where the inset is #171c2b, invisible in light mode where
+  // it is #F1F3F7 - near-white text on a near-white box. The ring next to them never had the problem
+  // because it already used var(--d-t1); the chips just never got the same treatment.
+  //
+  // var() is safe HERE because these are HTML style attributes. It is INVALID in an SVG presentation
+  // attribute and would silently drop the colour, so a colour sweep has to classify the context
+  // before substituting - see the light-mode notes.
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'var(--d-t1)':'var(--d-dim)')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'var(--d-t1)':'var(--d-dim)')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
   rd+='</div>';
   H+=card(rd);
   // Consistency
