@@ -24362,6 +24362,68 @@ function _hrvToday_(){
   }catch(e){}
   return out;
 }
+// THE BASELINE TODAY IS JUDGED AGAINST.
+//
+// It read st.recoveryLog only - the manual log - while weeks of real Garmin readings sat in
+// st.hrvDaily. But the source was only one of four faults, and two of the others explain the symptom
+// better than the source does:
+//
+//   1. WRONG SOURCE. Manual entries are sparse by design; the point of the sync is not logging.
+//   2. IT INCLUDED TODAY. With a single manual entry - today's - the mean WAS today's value, so the
+//      deviation was exactly zero and the score pinned to precisely the neutral 65 every time. That
+//      is the reported "neutral-anchored regardless", and it would have survived fixing the source.
+//   3. NO WINDOW. Every entry ever, so a reading from months ago weighed the same as last week's.
+//   4. MEAN, NOT MEDIAN. HRV is outlier-prone and one bad night skews a mean; the Overview layer
+//      already medians this same data for the same reason.
+//
+// PER-DAY PRECEDENCE IS GARMIN-FIRST, which is deliberately the OPPOSITE of _hrvToday_. They answer
+// different questions. _hrvToday_ asks "what is today's reading", and a number the athlete typed
+// today is his considered answer. A baseline asks "what is NORMAL for this measurement", and today's
+// reading is overwhelmingly a Garmin rMSSD - so a history part-built from hand-typed numbers,
+// possibly from a different app measuring differently, would compare a value against a distribution
+// it does not belong to. Same-source comparison beats source precedence here. Manual days still
+// count where they are the only entry for that date: a logged day is still a real day.
+var _HRV_BASE_DAYS = 28;
+function _hrvMedian_(a){
+  if(!a || !a.length) return null;
+  var s=a.slice().sort(function(x,y){ return x-y; });
+  var m=Math.floor(s.length/2);
+  return (s.length%2) ? s[m] : (s[m-1]+s[m])/2;
+}
+function _hrvBaseline_(days){
+  var out={ hrv:null, rhr:null, n:0, garmin:0, manual:0 };
+  try{
+    days=days||_HRV_BASE_DAYS;
+    var tk=(typeof getTodayKey==='function')?getTodayKey():((typeof dayKey_==='function')?dayKey_():'');
+    var from=(function(){ var d=new Date(); d.setDate(d.getDate()-days);
+      return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })();
+    var byDay={};
+    // Garmin first, so a manual entry cannot displace it for the same date.
+    var h=(st && st.hrvDaily)?st.hrvDaily:{};
+    Object.keys(h||{}).forEach(function(k){
+      if(!(k>=from && k<tk)) return;                       // trailing window, EXCLUDING today
+      var r=h[k];
+      var hv=(r && typeof r==='object')?r.hrv:r;
+      var rv=(r && typeof r==='object')?r.rhr:null;
+      if(hv==null || !isFinite(hv) || rv==null || !isFinite(rv)) return;
+      byDay[k]={ hrv:+hv, rhr:+rv, src:'garmin' };
+    });
+    // Manual fills only the days Garmin never covered.
+    (Array.isArray(st.recoveryLog)?st.recoveryLog:[]).forEach(function(e){
+      if(!e || !e.date) return;
+      if(!(e.date>=from && e.date<tk)) return;
+      if(byDay[e.date]) return;
+      if(e.hrv==null || e.rhr==null) return;
+      byDay[e.date]={ hrv:+e.hrv, rhr:+e.rhr, src:'manual' };
+    });
+    var keys=Object.keys(byDay);
+    if(!keys.length) return out;
+    var hs=[], rs=[];
+    keys.forEach(function(k){ var d=byDay[k]; hs.push(d.hrv); rs.push(d.rhr); if(d.src==='garmin') out.garmin++; else out.manual++; });
+    out.hrv=_hrvMedian_(hs); out.rhr=_hrvMedian_(rs); out.n=keys.length;
+  }catch(e){}
+  return out;
+}
 // One short phrase naming where a reading came from, so an automatic value and a typed one are never
 // shown as the same kind of fact.
 function _hrvSrcLabel_(w){
@@ -40331,9 +40393,12 @@ function dsShowDashboard(){
     // Real recovery from manual HRV + Resting HR, blended against the user's own
     // rolling baseline so the number means something. Higher HRV and lower RHR =
     // better recovered. Falls back gracefully until a few days of baseline exist.
-    var hist=(st.recoveryLog||[]).filter(function(x){return x&&x.hrv!=null&&x.rhr!=null;});
-    var bHRV=null,bRHR=null;
-    if(hist.length){ bHRV=hist.reduce(function(s,x){return s+(+x.hrv);},0)/hist.length; bRHR=hist.reduce(function(s,x){return s+(+x.rhr);},0)/hist.length; }
+    // Baseline from BOTH stores, medianed, over a trailing window that EXCLUDES today - see
+    // _hrvBaseline_. Reading recoveryLog alone left the baseline empty in the normal case, and
+    // including today made the deviation exactly zero whenever it was the only entry, which is why
+    // the score sat on a flat 65 no matter what the reading was.
+    var _bl=(typeof _hrvBaseline_==='function')?_hrvBaseline_():{hrv:null,rhr:null,n:0,garmin:0,manual:0};
+    var bHRV=_bl.hrv, bRHR=_bl.rhr;
     // % deviation from baseline; if no baseline yet, score around neutral 65.
     var hrvDev=(bHRV&&bHRV>0)?((hrv-bHRV)/bHRV):0;        // + is good
     var rhrDev=(bRHR&&bRHR>0)?((rhr-bRHR)/bRHR):0;        // + is bad
@@ -40345,7 +40410,10 @@ function dsShowDashboard(){
     // Source named on the card. An automatic reading and a typed one are different kinds of fact,
     // and the distinction between a real recovery composite and a manual entry is one the athlete
     // already cares about - so it is stated rather than left to be inferred from the number.
-    recSub=(bHRV?'From HRV + Resting HR vs your baseline':'From HRV + Resting HR (building baseline)')+(hrvSrc?(' &middot; '+hrvSrc):'');
+    // The sub-line states the baseline's SIZE, not merely that one exists. 'vs your baseline' with
+    // two days behind it and with twenty-eight are different claims, and the score alone cannot tell
+    // them apart.
+    recSub=(bHRV?('vs your '+_bl.n+'-day baseline'):'building baseline')+(hrvSrc?(' &middot; '+hrvSrc):'');
     recFill=recScore/100; recBig=recScore+'%';   // a real composite of two measurements
   } else {
     // No wearable/manual recovery inputs → honest form-readiness, from the ONE readiness read.

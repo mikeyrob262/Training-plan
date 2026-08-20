@@ -1333,6 +1333,25 @@ try {
     fail('the readiness card can miss synced HRV or show a stale reading as today (see above).');
   }
 
+  // STEP 83 - the baseline today is judged against. It read st.recoveryLog only while weeks of Garmin
+  //           readings sat in st.hrvDaily - but the source was one of FOUR faults, and two of the
+  //           others explain the symptom better: it INCLUDED TODAY, so with a single entry the mean
+  //           WAS today's value, the deviation was exactly zero and the score pinned to precisely 65
+  //           whatever the reading; it had NO WINDOW, so a reading from months ago weighed the same
+  //           as last week's; and it used a MEAN on outlier-prone data the Overview layer already
+  //           medians. Per-day precedence is GARMIN-FIRST, deliberately the opposite of _hrvToday_:
+  //           a baseline asks what is NORMAL for a measurement, so it must not mix a Garmin rMSSD
+  //           history with hand-typed numbers from a possibly different app.
+  console.log(`${D}. checking the HRV baseline...${X}`);
+  try {
+    const so = execSync('node scripts/hrv-baseline-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the recovery baseline can be empty, self-referential, or source-mixed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
