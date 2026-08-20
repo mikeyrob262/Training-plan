@@ -1314,6 +1314,25 @@ try {
     fail('the Activities filter can hide records or fight its own input (see above).');
   }
 
+  // STEP 82 - the readiness card sees the auto-synced HRV. fetchLiveIntervalsWellness has written
+  //           real Garmin readings into st.hrvDaily every ~10 minutes since the integration went
+  //           live; the card read st.hrv / st.restingHR only - its own manual fields - so the store
+  //           accumulated and nothing consumed it. The ORDER is the part pinned here, and it is NOT
+  //           "manual wins": st.hrv is an UNDATED scalar, so blind manual precedence would let a
+  //           value typed weeks ago mask every later Garmin reading while the card presented it as
+  //           today's readiness. Manual-today, then Garmin-today, then an older manual value
+  //           disclosed with its date. Also that every remaining st.hrv read is the resolver or the
+  //           save path - asserted by WHICH lines, not how many.
+  console.log(`${D}. checking today's HRV resolution...${X}`);
+  try {
+    const so = execSync('node scripts/hrv-today-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the readiness card can miss synced HRV or show a stale reading as today (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

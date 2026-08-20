@@ -24305,6 +24305,71 @@ function _ovwWindow_(acts, fromDaysAgo, toDaysAgo){
   var a=_ovwDaysAgo_(fromDaysAgo), b=_ovwDaysAgo_(toDaysAgo);
   return acts.filter(function(x){ return x.date>=a && x.date<b; });
 }
+// TODAY'S BEST HRV/RHR READING, from whichever source actually has one.
+//
+// The readiness card read st.hrv / st.restingHR only - the MANUAL fields set by its own Edit button
+// - while fetchLiveIntervalsWellness has been writing real Garmin readings into st.hrvDaily every
+// ~10 minutes since the integration went live. The store accumulated correctly and the one card that
+// uses readiness never looked at it, so it showed "-" on days the data arrived fine.
+//
+// RESOLUTION ORDER, and it is not simply "manual wins":
+//   1. a manual entry made TODAY  - a deliberate reading beats an automatic one
+//   2. today's Garmin reading     - what the sync exists for
+//   3. an OLDER manual value, disclosed with the date it was logged
+//
+// st.hrv is an UNDATED scalar; only recoveryLog carries a date. So "manual always wins" would let a
+// value typed weeks ago mask every subsequent Garmin reading, permanently, while the card presented
+// it as today's readiness - the stale-value-shown-as-current failure this codebase keeps paying for.
+// Tier 3 exists so nothing the athlete can currently see disappears, but it is LABELLED with its
+// date rather than passed off as today.
+//
+// Rows may be {hrv,rhr,at} objects OR bare legacy numbers, the same shape _ovwWellnessSeries_
+// already handles; both are read here so a legacy row is not silently skipped.
+function _hrvToday_(){
+  var out={ hrv:null, rhr:null, src:null, on:null };
+  try{
+    var tk=(typeof getTodayKey==='function')?getTodayKey():((typeof dayKey_==='function')?dayKey_():'');
+    // 1. manual, today
+    if(Array.isArray(st.recoveryLog)){
+      for(var i=st.recoveryLog.length-1;i>=0;i--){
+        var e=st.recoveryLog[i];
+        if(e && e.date===tk && e.hrv!=null && e.rhr!=null){
+          return { hrv:+e.hrv, rhr:+e.rhr, src:'manual', on:tk };
+        }
+      }
+    }
+    // 2. Garmin, today
+    var h=(st && st.hrvDaily)?st.hrvDaily:null;
+    if(h && h[tk]){
+      var r=h[tk];
+      var hv=(r && typeof r==='object')?r.hrv:r;
+      var rv=(r && typeof r==='object')?r.rhr:null;
+      if(hv!=null && isFinite(hv) && rv!=null && isFinite(rv)){
+        return { hrv:+hv, rhr:+rv, src:'garmin', on:tk };
+      }
+    }
+    // 3. an older manual value, carried forward but DATED so it cannot read as today's
+    if(st.hrv!=null && st.restingHR!=null){
+      var on=null;
+      if(Array.isArray(st.recoveryLog)){
+        for(var j=st.recoveryLog.length-1;j>=0;j--){
+          var e2=st.recoveryLog[j];
+          if(e2 && e2.hrv!=null && +e2.hrv===+st.hrv){ on=e2.date; break; }
+        }
+      }
+      return { hrv:+st.hrv, rhr:+st.restingHR, src:'manual-stale', on:on };
+    }
+  }catch(e){}
+  return out;
+}
+// One short phrase naming where a reading came from, so an automatic value and a typed one are never
+// shown as the same kind of fact.
+function _hrvSrcLabel_(w){
+  if(!w || !w.src) return '';
+  if(w.src==='garmin') return 'from Garmin';
+  if(w.src==='manual') return 'logged manually';
+  return w.on ? ('logged manually '+w.on) : 'logged manually, date unknown';
+}
 // hrvDaily rows are {hrv, rhr, at}. Returns the trailing series EXCLUDING today, so today is
 // judged against its own history rather than against itself.
 function _ovwWellnessSeries_(field, days){
@@ -40250,7 +40315,12 @@ function dsShowDashboard(){
   //      taper-aware function as the IQ + Load cards. On a taper (TSB +11, CTL
   //      falling) that reads "Race-ready", never a bare "Fair".
   var rC=2*Math.PI*30;
-  var hrv=(st.hrv!=null)?st.hrv:null, rhr=(st.restingHR!=null)?st.restingHR:null;
+  // Resolved through _hrvToday_, not read from st.hrv directly: the Garmin sync writes st.hrvDaily
+  // and this card was the one place readiness is actually used, so reading only the manual field
+  // meant the auto-sync had no consumer at all.
+  var _w=(typeof _hrvToday_==='function')?_hrvToday_():{hrv:null,rhr:null,src:null,on:null};
+  var hrv=(_w.hrv!=null)?_w.hrv:null, rhr=(_w.rhr!=null)?_w.rhr:null;
+  var hrvSrc=(typeof _hrvSrcLabel_==='function')?_hrvSrcLabel_(_w):'';
   var haveRecovery=(hrv!=null && rhr!=null);
   // recFill drives the ARC (0-1); recBig is what the ring PRINTS. They are separate because the two
   // branches below are genuinely different KINDS of number: HRV+RHR really is a 0-100 composite of
@@ -40272,7 +40342,10 @@ function dsShowDashboard(){
     recLabel=recScore>=75?'Good':recScore>=55?'Fair':recScore>=35?'Low':'Poor';
     recColor=recScore>=75?'#4ade80':recScore>=55?'#FFB938':'#e24b4a';
     recTitle='RECOVERY';
-    recSub=(bHRV?'From HRV + Resting HR vs your baseline':'From HRV + Resting HR (building baseline)');
+    // Source named on the card. An automatic reading and a typed one are different kinds of fact,
+    // and the distinction between a real recovery composite and a manual entry is one the athlete
+    // already cares about - so it is stated rather than left to be inferred from the number.
+    recSub=(bHRV?'From HRV + Resting HR vs your baseline':'From HRV + Resting HR (building baseline)')+(hrvSrc?(' &middot; '+hrvSrc):'');
     recFill=recScore/100; recBig=recScore+'%';   // a real composite of two measurements
   } else {
     // No wearable/manual recovery inputs → honest form-readiness, from the ONE readiness read.
