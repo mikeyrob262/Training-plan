@@ -30688,7 +30688,7 @@ var _BLOCK_START='2026-07-24';                 // the day the block started (spe
 // live only down with the FTP helpers, and the milestone carried its own hard-coded Aug 25 — so the
 // calendar flag and the countdown said Aug 25 while ftpCrossesRetest_ and every repricing rule said
 // Aug 27. On the real retest day the milestone had already rolled over to Chalet. One constant now.
-var _FTP_RETEST_DATE='2026-08-27';
+var _FTP_RETEST_DATE='2026-10-31';
 var _BLOCK_MILESTONES=[
   // slidable: internal block gates that move WITH the streak on a missed week. The real-world events
   // below (chalet/alpe/tenk/ventop) have no slidable flag — the mountain does not move.
@@ -30708,9 +30708,9 @@ var _BLOCK_MILESTONES=[
   // agree permanently.
   {slug:'ftp-retest', date:_FTP_RETEST_DATE, label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true,
    icon:'M3 17l6-6 4 4 8-8 M15 7h6v6', sTitle:'FTP retest', sSub:'Establish a new baseline', benefit:'Targets updated'},
-  {slug:'chalet', date:'2026-10-31', label:'Chalet Reynard', note:'', road:true,
+  {slug:'chalet', date:'2026-11-14', label:'Chalet Reynard', note:'', road:true,
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
-  {slug:'alpe', date:'2026-11-07', label:'Alpe sub-70', note:'', road:true,
+  {slug:'alpe', date:'2026-11-28', label:'Alpe sub-70', note:'', road:true,
    icon:'M2 20l7-14 5 9 3-5 5 10z', sTitle:'Alpe sub-70', sSub:'Sub-70-minute goal', benefit:'Confidence boost'},
   // Oct 18 is the 10k, 6.2 mi. It was briefly relabelled as the half marathon and is reverted: a
   // recurring shin issue put a 10-week half-marathon long-run build directly in harm's way, so the
@@ -30718,10 +30718,10 @@ var _BLOCK_MILESTONES=[
   // timeline. The slug is 'tenk' and now matches what it says again.
   {slug:'tenk', date:'2026-10-18', label:'10k run', note:'6.2 mi - the goal race', road:true,
    icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'10k run', sSub:'6.2 mi, the goal race', benefit:'Race day'},
-  {slug:'ventop', date:'2026-11-14', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
+  {slug:'ventop', date:'2026-12-12', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
    icon:'M6 21V4 M6 4h11l-2 3.5 2 3.5H6', sTitle:'Ven-Top summit', sSub:'The main event', benefit:'Mission complete'}
 ];
-var _BLOCK_RETEST_YM='2026-08';                // the FTP-retest month — the TSS/zone discontinuity
+var _BLOCK_RETEST_YM='2026-10';                // the FTP-retest month — the TSS/zone discontinuity
 var _BLOCK_Z2_HR=135, _BLOCK_THR_W=181, _BLOCK_VO2_FLAT_FT=650;
 // FLATNESS IS A DENSITY, NOT A TOTAL — the VO2 session is prescribed "flat" and the only way to
 // check it is the route profile, because no ride carries a location or a route name (confirmed
@@ -30800,7 +30800,7 @@ function _blockNextMilestone_(now){
 // contradict itself on the card. Cycling load is untouched — _blockWeekAssess_ grades cycling only
 // (threshold/vo2/z2 via _blockCyc_), so neither edit moves the three-sessions/three-days gate or
 // the Four-weeks-consistent milestone.
-var _TB_VERSION='ventop-2026-4';   // bumped: attempts clustered to Oct 31 / Nov 7 / Nov 14, third run to Sunday
+var _TB_VERSION='ventop-2026-5';   // bumped: attempts clustered to Oct 31 / Nov 7 / Nov 14, third run to Sunday
 var _TB_CACHE=null;   // module scope, NOT st: a derived cache must never enter synced state
 function _trainingBlock_(){
   if(typeof st==='undefined') return null;
@@ -30840,7 +30840,7 @@ function _trainingBlock_(){
   // not a description. Optional everywhere else, so every existing S() call is unchanged.
   var S=function(i,s,t){ var o={i:i}; if(s) o.s=s; if(t) o.t=t; return o; };
   var _tb={
-    v:_TB_VERSION, start:'2026-07-24', end:'2026-11-15',
+    v:_TB_VERSION, start:'2026-07-24', end:'2026-12-13',   // extended with the attempt cluster: the last attempt is Dec 12
     phases:[
       // RUNNING IS Mon / Wed / SUN. The third run sits on Sunday rather than Friday: Friday already
       // carries Threshold plus Strength A, and stacking a hard bike day, strength and a run on one
@@ -30861,7 +30861,7 @@ function _trainingBlock_(){
       // first). Keyed off _FTP_RETEST_DATE so the prescribed session, the milestone flag and the
       // repricing rules can never point at three different days.
       { id:'P2', label:'Base build 2', start:'2026-08-22', end:'2026-09-14',
-        dates:(function(){ var o={}; o[_FTP_RETEST_DATE]=[S('ftpTest','10 warmup / 5 max / 10 easy / 20 test / 5 cooldown')]; return o; })(),
+        dates:{},   // the ftpTest amendment moved to P7 with the retest - see _FTP_RETEST_DATE
         week:[
         [S('easyRun','25-27 min'),S('mobility')], [S('strengthB',null,'AM'),S('vo2','4x4 progressing to 5x4','PM')], [S('easyRun','25-27 min')],
         [S('z2','60-90 min')], [S('threshold','2x20 to 3x15'),S('strengthA')], [S('group')], [S('easyRun','25-27 min')] ] },
@@ -30893,25 +30893,67 @@ function _trainingBlock_(){
       // spin, then rest. Between attempts the week keeps its shape - Mon/Wed/Sun running, strength
       // Tuesday morning - but the Tuesday bike session drops from VO2 to an easy spin, because a
       // hard interval session between two attempts buys nothing they will not already measure.
-      { id:'P7', label:'Attempt cluster', start:'2026-10-29', end:'2026-11-15', dates:{
+      // ATTEMPT CLUSTER, RESPACED TO TWO WEEKS. The attempts were one week apart; they are now
+      // Oct 31 (retest) / Nov 14 / Nov 28 / Dec 12, so each gap carries a BETWEEN week followed by the
+      // taper week this phase already used. The taper shape is unchanged - easy run, strength with an
+      // easy spin, easy run, recovery, rest - because it was not the thing that changed.
+      //
+      // The BETWEEN week is new, and it carries the rest day the block never had: strength Monday, one
+      // quality session Tuesday alternating VO2/threshold by which attempt is next, Z2 Wednesday, the
+      // second strength group Thursday, easy run Friday, the group ride Saturday, and Sunday REST.
+      // The rest day sits in the weeks that can afford it rather than in a taper, which is already
+      // easy by construction.
+      //
+      // Tuesday runs at FULL intensity through the Oct 31 - Nov 1 deficit-transition window, per the
+      // standing instruction. FLAGGED, not resolved: the first between-week Tuesday is Nov 3, which
+      // falls inside that window - if the call goes the other way, that is the one session to change.
+      { id:'P7', label:'Attempt cluster', start:'2026-10-29', end:'2026-12-13', dates:{
         '2026-10-29':[S('recovery','Easy spin + mobility only'),S('mobility')],
         '2026-10-30':[S('rest'),S('mobility')],
-        '2026-10-31':[S('chalet','primary - or Nov 1')],
-        '2026-11-01':[S('optional','alternate Chalet day if the Saturday was a no-go - otherwise easy run, 29-31 min')],
-        '2026-11-02':[S('easyRun','29-31 min easy'),S('mobility')],
-        '2026-11-03':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
-        '2026-11-04':[S('easyRun','29-31 min easy')],
-        '2026-11-05':[S('recovery','Easy spin + mobility only'),S('mobility')],
-        '2026-11-06':[S('rest'),S('mobility')],
-        '2026-11-07':[S('alpe','primary - or Nov 8')],
-        '2026-11-08':[S('optional','alternate Alpe day if the Saturday was a no-go - otherwise easy run, 29-31 min')],
+        '2026-10-31':[S('ftpTest','10 warmup / 5 max / 10 easy / 20 test / 5 cooldown')],
+        '2026-11-01':[S('optional','alternate FTP-retest day if the Saturday was a no-go - otherwise easy run, 29-31 min')],
+        '2026-11-02':[S('strengthA',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-11-03':[S('vo2')],
+        '2026-11-04':[S('z2','Easy Z2 - conversational the whole way')],
+        '2026-11-05':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-11-06':[S('easyRun','29-31 min easy'),S('mobility')],
+        '2026-11-07':[S('group')],
+        '2026-11-08':[S('rest'),S('mobility')],
         '2026-11-09':[S('easyRun','29-31 min easy'),S('mobility')],
         '2026-11-10':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
         '2026-11-11':[S('easyRun','29-31 min easy')],
         '2026-11-12':[S('recovery','Easy spin + mobility only'),S('mobility')],
         '2026-11-13':[S('rest'),S('mobility')],
-        '2026-11-14':[S('ventop','primary - or Nov 15')],
-        '2026-11-15':[S('optional','alternate Ven-Top day if Nov 14 is a no-go - otherwise easy run, 29-31 min')] } }
+        '2026-11-14':[S('chalet','primary - or Nov 15')],
+        '2026-11-15':[S('optional','alternate Chalet day if the Saturday was a no-go - otherwise easy run, 29-31 min')],
+        '2026-11-16':[S('strengthA',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-11-17':[S('threshold')],
+        '2026-11-18':[S('z2','Easy Z2 - conversational the whole way')],
+        '2026-11-19':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-11-20':[S('easyRun','29-31 min easy'),S('mobility')],
+        '2026-11-21':[S('group')],
+        '2026-11-22':[S('rest'),S('mobility')],
+        '2026-11-23':[S('easyRun','29-31 min easy'),S('mobility')],
+        '2026-11-24':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-11-25':[S('easyRun','29-31 min easy')],
+        '2026-11-26':[S('recovery','Easy spin + mobility only'),S('mobility')],
+        '2026-11-27':[S('rest'),S('mobility')],
+        '2026-11-28':[S('alpe','primary - or Nov 29')],
+        '2026-11-29':[S('optional','alternate Alpe day if the Saturday was a no-go - otherwise easy run, 29-31 min')],
+        '2026-11-30':[S('strengthA',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-12-01':[S('vo2')],
+        '2026-12-02':[S('z2','Easy Z2 - conversational the whole way')],
+        '2026-12-03':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-12-04':[S('easyRun','29-31 min easy'),S('mobility')],
+        '2026-12-05':[S('group')],
+        '2026-12-06':[S('rest'),S('mobility')],
+        '2026-12-07':[S('easyRun','29-31 min easy'),S('mobility')],
+        '2026-12-08':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
+        '2026-12-09':[S('easyRun','29-31 min easy')],
+        '2026-12-10':[S('recovery','Easy spin + mobility only'),S('mobility')],
+        '2026-12-11':[S('rest'),S('mobility')],
+        '2026-12-12':[S('ventop','primary - or Dec 13')],
+        '2026-12-13':[S('optional','alternate Ven-Top day if the Saturday was a no-go - otherwise easy run, 29-31 min')] } }
     ]
   };
   _TB_CACHE=_tb;

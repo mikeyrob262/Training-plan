@@ -78,10 +78,23 @@ for (const slug of ATTEMPTS) {
 {
   // Recovery/rest days are only justified by something to be fresh FOR. Any easy block of 2+ days
   // that is not inside 3 days of an attempt or the 10k is a taper that lost its event.
+  //
+  // AMENDED 2026-08-19, twice, and both times to say what it always meant:
+  //   1. The FTP RETEST is an event. It is a maximal effort and the block tapers into it exactly as
+  //      it does an attempt; leaving it out flagged its own lead-in days as orphaned.
+  //   2. A LONE easy day is not a taper. The rule says "block of 2+ days" and then tested days
+  //      individually, so it could not tell a two-day taper from the single weekly REST DAY the
+  //      between-week now carries by design. Only runs of 2+ consecutive easy days are tapers, which
+  //      is the original intent made literal - a standalone Sunday rest is a training decision, not
+  //      an abandoned taper.
   const eventDates = M.MS.filter((m) => ATTEMPTS.indexOf(m.slug) >= 0).map((m) => m.date)
-    .concat(Object.keys(dated).filter((d) => dated[d].indexOf('tenk') >= 0));
+    .concat(Object.keys(dated).filter((d) => dated[d].indexOf('tenk') >= 0))
+    .concat(Object.keys(dated).filter((d) => dated[d].indexOf('ftpTest') >= 0));
+  const isEasy = (d) => (dated[d] || []).length > 0 &&
+    dated[d].every((i) => i === 'recovery' || i === 'rest' || i === 'mobility');
   const orphan = Object.keys(dated).filter((d) =>
-    dated[d].every((i) => i === 'recovery' || i === 'rest' || i === 'mobility') &&
+    isEasy(d) &&
+    (isEasy(addDays(d, -1)) || isEasy(addDays(d, 1))) &&          // part of a RUN, not a lone rest day
     !eventDates.some((e) => Math.abs((D(e) - D(d)) / 86400000) <= 3));
   eq('no recovery block stranded away from an event', orphan, []);
 }
@@ -304,12 +317,18 @@ console.log('\n' + Y + '=== the block is derived, never read back from synced st
   ok('no code path reads st.trainingBlock any more', live.length === 0);
   // The dates the cache was corrupting, asserted against source.
   const ms = (s) => M.MS.find((m) => m.slug === s).date;
-  ok('Chalet is Oct 31', ms('chalet') === '2026-10-31');
-  ok('Alpe is Nov 7', ms('alpe') === '2026-11-07');
-  ok('Ven-Top is Nov 14', ms('ventop') === '2026-11-14');
-  ok('...one week apart, which is what "Attempt cluster" means',
-     Math.round((D(ms('alpe')) - D(ms('chalet'))) / 86400000) === 7 &&
-     Math.round((D(ms('ventop')) - D(ms('alpe'))) / 86400000) === 7);   // rounded: Nov 1 is a DST boundary
+  // RESPACED 2026-08-19 by decision: two weeks between attempts, anchored on the retest, replacing
+  // the one-week cluster. Asserted against the authoritative dates because this project's history is
+  // the same date living in two places and drifting - the retest is included so the anchor itself
+  // cannot move without this failing.
+  ok('the FTP retest is Oct 31', ms('ftp-retest') === '2026-10-31');
+  ok('Chalet is Nov 14', ms('chalet') === '2026-11-14');
+  ok('Alpe is Nov 28', ms('alpe') === '2026-11-28');
+  ok('Ven-Top is Dec 12', ms('ventop') === '2026-12-12');
+  ok('...two weeks apart, each gap carrying a between week and a taper week',
+     Math.round((D(ms('chalet')) - D(ms('ftp-retest'))) / 86400000) === 14 &&
+     Math.round((D(ms('alpe')) - D(ms('chalet'))) / 86400000) === 14 &&
+     Math.round((D(ms('ventop')) - D(ms('alpe'))) / 86400000) === 14);   // rounded: DST falls inside the range
   // A freshly built block prescribes each attempt EXACTLY once, on its own date.
   ['chalet', 'alpe', 'ventop'].forEach((slug) => {
     const days = Object.keys(dated).filter((d) => dated[d].filter((i) => i === slug).length);
