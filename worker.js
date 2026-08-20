@@ -30907,16 +30907,31 @@ function _trainingBlock_(){
       // The rest day sits in the weeks that can afford it rather than in a taper, which is already
       // easy by construction.
       //
-      // Tuesday runs at FULL intensity through the Oct 31 - Nov 1 deficit-transition window, per the
-      // standing instruction. FLAGGED, not resolved: the first between-week Tuesday is Nov 3, which
-      // falls inside that window - if the call goes the other way, that is the one session to change.
+      // BOTH DEFICIT QUESTIONS RESOLVED 2026-08-19, and the answer to both was "no exception":
+      // Tuesday keeps FULL intensity throughout, and the weekly consistency gate keeps full rigor
+      // from Nov 1 - the diet's hardest stretch resolves at the Oct 31 retest itself, so there is
+      // nothing left for a special case to protect.
+      //
+      // NOV 3 is the single exception and it is NOT a nutritional one. It is Z2 for POST-TEST
+      // RECOVERY, three days after a maximal effort. The distinction matters because the deficit
+      // rationale expires and this one does not: restoring VO2 there once the diet ends would undo it
+      // for a reason that was never why. See the note on the date itself.
       { id:'P7', label:'Attempt cluster', start:'2026-10-29', end:'2026-12-13', dates:{
         '2026-10-29':[S('recovery','Easy spin + mobility only'),S('mobility')],
         '2026-10-30':[S('rest'),S('mobility')],
         '2026-10-31':[S('ftpTest','10 warmup / 5 max / 10 easy / 20 test / 5 cooldown')],
         '2026-11-01':[S('optional','alternate FTP-retest day if the Saturday was a no-go - otherwise easy run, 29-31 min')],
         '2026-11-02':[S('strengthA',null,'AM'),S('recovery','Easy spin only','PM')],
-        '2026-11-03':[S('vo2')],
+        // NOV 3 IS Z2, NOT THE TEMPLATE'S QUALITY SESSION. Decision 2026-08-19, and the reason is
+        // POST-TEST RECOVERY rather than the caloric deficit: this is three days after the Oct 31
+        // maximal FTP test, and stacking a hard quality session that close to a max effort compounds
+        // fatigue whatever the nutrition looks like. Recorded because the deficit rationale expires
+        // and this one does not - a later reader restoring VO2 here because 'the diet is over' would
+        // be undoing it for a reason that was never why.
+        //
+        // The one deliberate exception to the between-week template. Every other between-week Tuesday
+        // (Nov 17, Dec 1) keeps its alternating VO2/threshold, because none of them follows a test.
+        '2026-11-03':[S('z2','Easy Z2 - conversational the whole way; 3 days post-test, deliberately not a quality day')],
         '2026-11-04':[S('z2','Easy Z2 - conversational the whole way')],
         '2026-11-05':[S('strengthB',null,'AM'),S('recovery','Easy spin only','PM')],
         '2026-11-06':[S('easyRun','29-31 min easy'),S('mobility')],
