@@ -41018,41 +41018,75 @@ function openDesktopRideDetail(idx, _noFetch){
   var _deduped=dedupeRides_(st.rides||[]);
   var allR2=_deduped.kept.filter(function(r2){return r2&&!r2.deleted;}).sort(function(a,b){return normDate(b.date||'')>normDate(a.date||'')?1:-1;});
 
-  // Group by month - only rides with valid dates
-  var months2={};
-  allR2.filter(function(lr){return lr.date&&lr.date.length>=6;}).forEach(function(lr){
-    var dp=lr.date.split('-');
-    var mo2=dp[0]+'-'+(dp[1]&&dp[1].length<2?'0'+dp[1]:dp[1]||'01');
-    if(!months2[mo2]) months2[mo2]=[];
-    months2[mo2].push(lr);
-  });
-
-  var MO_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var listHtml2='';
-  Object.keys(months2).sort().reverse().forEach(function(mo2){
-    var parts=mo2.split('-');
-    var moLabel=MO_NAMES[parseInt(parts[1],10)-1]+' '+parts[0];
-    listHtml2+='<div style="padding:6px 14px 2px;font-size:10px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
-    months2[mo2].forEach(function(lr){
-      var lridx=rideRefOf_(lr);
-      if(rideRefOk_(lridx)===false && lr.stravaId) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
-      var isActive=lridx===idx;
-      var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
-      var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
-      var ldParts=lr.date?lr.date.split('-'):null;
-      var ldStr=ldParts&&ldParts.length>=3?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(ldParts[1],10)-1]+' '+parseInt(ldParts[2],10)):'';
-      var lname=actName_(lr);   // was a local partial copy of this rule; the accessor owns it now
-      var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
-      listHtml2+='<div onclick="openDesktopRideDetail('+rideRefAttr_(lridx)+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
-        +'<div style="width:28px;height:28px;border-radius:8px;background:var(--d-chip);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:var(--c-green)">'+sportIcon+'</div>'
-        +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:11px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
-          +'<div style="font-size:10px;color:var(--d-t4);margin-top:1px">'+ldStr+(lr.distance?' &middot; '+parseFloat(lr.distance).toFixed(1)+' mi':'')+'</div>'
-        +'</div>'
-        +(lwkg?'<div style="font-size:10px;font-weight:700;color:'+lcolor+'">'+lwkg+'</div>':'')
-        +'</div>';
-    });
-  });
+  // FILTERABLE LIST. The panel had no way to narrow itself, so finding a past session meant
+  // scrolling by eye through everything in date order - the searchActivities_ gap.
+  //
+  // ONE predicate, ONE builder, whatever the query. An empty query is not a special case, it is a
+  // filter that matches everything, so the full list and a filtered list cannot render differently.
+  // Matching is on actName_(r), never r.name raw - a standing rule here, and the descriptive names
+  // live on records where the raw field is a Strava auto-name.
+  function _actMatches_(r, q){
+    if(!q) return true;
+    try{
+      var hay=[
+        (typeof actName_==='function')?actName_(r):(r.name||''),
+        (typeof rideSport_==='function')?rideSport_(r):((r.sportType||r.type)||''),
+        (r.date||''),
+        (parseFloat(r.distance)>0)?(parseFloat(r.distance).toFixed(1)+' mi'):''
+      ].join(' ').toLowerCase();
+      return hay.indexOf(String(q).toLowerCase().trim())>=0;
+    }catch(e){ return true; }   // a broken record stays VISIBLE; a filter must not hide things silently
+  }
+  function _actListHtml_(query){
+    var q=String(query||'').trim();
+    var pool=allR2.filter(function(r2){ return _actMatches_(r2, q); });
+    if(!pool.length){
+      return '<div style="padding:18px 14px;font-size:11px;color:var(--d-t4);line-height:1.5">'
+        +'No activity matches <b style="color:var(--d-t3)">'+String(q).replace(/</g,'&lt;')+'</b>.'
+        +'<div style="margin-top:4px">Try a name, a sport, a date like 2026-08, or a distance.</div></div>';
+    }
+    var months2={};  
+    pool.filter(function(lr){return lr.date&&lr.date.length>=6;}).forEach(function(lr){  
+      var dp=lr.date.split('-');  
+      var mo2=dp[0]+'-'+(dp[1]&&dp[1].length<2?'0'+dp[1]:dp[1]||'01');  
+      if(!months2[mo2]) months2[mo2]=[];  
+      months2[mo2].push(lr);  
+    });  
+    
+    var MO_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];  
+    var listHtml2='';  
+    Object.keys(months2).sort().reverse().forEach(function(mo2){  
+      var parts=mo2.split('-');  
+      var moLabel=MO_NAMES[parseInt(parts[1],10)-1]+' '+parts[0];  
+      listHtml2+='<div style="padding:6px 14px 2px;font-size:10px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';  
+      months2[mo2].forEach(function(lr){  
+        var lridx=rideRefOf_(lr);  
+        if(rideRefOk_(lridx)===false && lr.stravaId) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});  
+        var isActive=lridx===idx;  
+        var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;  
+        var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';  
+        var ldParts=lr.date?lr.date.split('-'):null;  
+        var ldStr=ldParts&&ldParts.length>=3?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(ldParts[1],10)-1]+' '+parseInt(ldParts[2],10)):'';  
+        var lname=actName_(lr);   // was a local partial copy of this rule; the accessor owns it now  
+        var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';  
+        listHtml2+='<div onclick="openDesktopRideDetail('+rideRefAttr_(lridx)+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'  
+          +'<div style="width:28px;height:28px;border-radius:8px;background:var(--d-chip);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:var(--c-green)">'+sportIcon+'</div>'  
+          +'<div style="flex:1;min-width:0">'  
+            +'<div style="font-size:11px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'  
+            +'<div style="font-size:10px;color:var(--d-t4);margin-top:1px">'+ldStr+(lr.distance?' &middot; '+parseFloat(lr.distance).toFixed(1)+' mi':'')+'</div>'  
+          +'</div>'  
+          +(lwkg?'<div style="font-size:10px;font-weight:700;color:'+lcolor+'">'+lwkg+'</div>':'')  
+          +'</div>';  
+      });  
+    });  
+    
+  
+    return listHtml2;
+  }
+  var listHtml2=_actListHtml_('');
+  // Re-render the LIST ONLY. A full openDesktopRideDetail() would rebuild the detail panel too and
+  // steal focus from the input on every keystroke, which makes the box unusable.
+  try{ window._actListFilter_=function(q){ var el=document.getElementById('act-list-scroll'); if(el) el.innerHTML=_actListHtml_(q); }; }catch(e){}
 
   // Inject two-column layout
   main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
@@ -41067,8 +41101,17 @@ function openDesktopRideDetail(idx, _noFetch){
         +'padding:3px 9px;border-radius:9px;border:1px solid var(--d-edge,rgba(255,255,255,.12));'
         +'color:var(--d-t3);cursor:pointer">Compare</span>'
       +'</div>'
+      // The filter sits between the header and the column labels: below the thing it belongs to,
+      // above the thing it acts on. oninput rather than a submit - the list is local and the match is
+      // a substring scan, so there is nothing to wait for.
+      +'<div style="padding:8px 12px;border-bottom:1px solid var(--d-line);flex-shrink:0">'
+        +'<input id="act-list-filter" type="text" placeholder="Filter by name, sport, date or distance" '
+        +'oninput="window._actListFilter_ &amp;&amp; window._actListFilter_(this.value)" '
+        +'style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:9px;border:1px solid var(--d-edge);'
+        +'background:var(--d-inset);color:var(--d-t1);font-size:11px;font-family:inherit;outline:none">'
+      +'</div>'
       +'<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--d-line);font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0"><span>Activity</span><span>W/kg</span></div>'
-      +'<div style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
+      +'<div id="act-list-scroll" style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
     +'</div>'
     +'<div id="act-detail-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>'
     +'</div>';

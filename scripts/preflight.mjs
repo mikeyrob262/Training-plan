@@ -1294,6 +1294,26 @@ try {
     fail('the FTP estimate can drift, ratchet, or be built on an estimate (see above).');
   }
 
+  // STEP 81 - the Activities panel can narrow itself. The long-flagged searchActivities_ gap:
+  //           Compare grouped by type but the plain list had no filter, so finding a past session
+  //           meant scrolling by eye through everything in date order. Pins the three properties
+  //           that matter, none of which is the input box: ONE predicate and ONE builder (an empty
+  //           query is a filter matching everything, never a second code path); matching on
+  //           actName_ and NEVER r.name raw, since live records carry Strava auto-names while the
+  //           descriptive ones sit elsewhere; and a throwing record staying VISIBLE, because a
+  //           filter that hides on error makes absence look like an answer. Also that the re-render
+  //           targets the list container only - re-running openDesktopRideDetail would rebuild the
+  //           detail panel and steal focus on every keystroke.
+  console.log(`${D}. checking the Activities filter...${X}`);
+  try {
+    const so = execSync('node scripts/act-filter-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Activities filter can hide records or fight its own input (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
