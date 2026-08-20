@@ -10304,7 +10304,10 @@ function showProg(){
   // Fitness
   var pmcLast=st.pmcHistory&&st.pmcHistory.length?st.pmcHistory[st.pmcHistory.length-1]:null;
   var ctl=pmcLast?Math.round(pmcLast.ctl):0;
-  var ftp=parseInt(st.ftp||186);
+  // ftpOn_(), not st.ftp: the working FTP is whatever the dated log says applies today, which is
+  // what every band is priced off. Reading st.ftp raw would show the last MEASURED value while the
+  // zones moved underneath it - the split this app has repaired twice already.
+  var ftp=(typeof ftpOn_==='function')?(parseInt(ftpOn_(),10)||parseInt(st.ftp||_FTP_DEFAULT)):parseInt(st.ftp||_FTP_DEFAULT);
   var bwt=stWeightLb_();
   var wkg=wkgStr_(wkgFromW_(ftp));
   var vo2=st.vo2max||'—';
@@ -10423,7 +10426,7 @@ function showProg(){
 
   h+='<div style="padding:0 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Fitness</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 10px">';
-  [{l:'CTL',v:ctl||'—',s:'fitness',c:ctl>=60?'#0F6E56':ctl>=40?'#4D9FFF':'var(--t1)'},{l:'FTP',v:ftp+'W',s:'threshold'},{l:'W/kg',v:wkg,s:'cycling'},{l:'VO2 Max',v:vo2,s:'ml/kg/min',c:parseFloat(vo2)>=50?'#0F6E56':parseFloat(vo2)>=45?'#BA7517':'var(--t1)'}].forEach(function(st2){
+  [{l:'CTL',v:ctl||'—',s:'fitness',c:ctl>=60?'#0F6E56':ctl>=40?'#4D9FFF':'var(--t1)'},{l:'FTP',v:ftp+'W',s:((typeof ftpSrcOn_==='function'&&ftpSrcOn_()==='estimate')?'estimated':'threshold')},{l:'W/kg',v:wkg,s:'cycling'},{l:'VO2 Max',v:vo2,s:'ml/kg/min',c:parseFloat(vo2)>=50?'#0F6E56':parseFloat(vo2)>=45?'#BA7517':'var(--t1)'}].forEach(function(st2){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
@@ -16104,13 +16107,13 @@ function computePowerCurve(rides){
     }
     // Use max20 if no powerCurve
     if(r.max20&&r.max20>best[1200]) best[1200]=r.max20;
-    // From Intervals.icu: estimate peak from NP + zone data
-    if(r.np&&r.source==='intervals'){
-      var est20=Math.round(r.np*1.05);
-      if(est20>best[1200]) best[1200]=est20;
-      var est60=Math.round(r.np*0.95);
-      if(est60>best[3600]) best[3600]=est60;
-    }
+    // NP-DERIVED PEAKS REMOVED. This synthesised a 20-minute peak as np*1.05 and a 60-minute as
+    // np*0.95 for Intervals-sourced rides - estimates wearing the same shape as a measurement, which
+    // the Records engine already refuses by name ("MEASURED peaks only", _recPower_). Keeping them
+    // here meant one board excluded them while this curve blended them in silently, and the interim
+    // FTP estimator now reads this data: an FTP derived from np*1.05 would be an estimate of an
+    // estimate driving every prescribed zone. Measured only, on both paths, for the same reason.
+    // Costs 7 rides in the library, per the Records note.
   });
   return durations.map(function(d){return{dur:d,watts:best[d]};}).filter(function(x){return x.watts>0;});
 }
@@ -37069,6 +37072,143 @@ function ftpDump_(){
   }catch(e){ console.error('[ftp-dump] '+((e&&e.message)||e)); }
   return 'see console';
 }
+// ===== INTERIM FTP ESTIMATE =====================================================================
+// Between formal tests the working FTP sits flat - here ~10 weeks, Aug 27 (cancelled) to Oct 31 -
+// and every prescribed zone sits flat with it. The alternative offered was manual adjustment, which
+// was declined for a stated reason: a documented tendency to train harder than prescribed makes a
+// self-set FTP creep ahead of actual fitness, and doing that during a caloric deficit prescribes
+// zones that are too hard exactly when recovery is worst. So the app estimates it from real efforts.
+//
+// FORMULA: the Coggan standard, FTP = 0.95 x best measured 20-minute power. Chosen because it is
+// what a formal test would use, so the estimate and the Oct 31 retest are on the SAME scale rather
+// than two - a estimate that needed its own conversion would drift against the thing meant to
+// replace it.
+//
+// THE FEEDBACK LOOP IS REAL AND IS BOUNDED, NOT SOLVED. An estimator reading best efforts tracks how
+// hard he TRAINS, not how fit he is: overshoot -> higher 20-min best -> higher FTP -> higher zones ->
+// overshoot. The caps below bound how fast that can run (worst case ~+6% by the retest, which the
+// test then corrects); they do not break the loop. Recorded so a later reader does not mistake the
+// caps for a fix.
+var _FTPEST_WINDOW_D = 42;      // rolling window: long enough to catch a real effort, short enough to be current
+var _FTPEST_MIN_GAP_D = 14;     // at most one update a fortnight - no reacting to single rides
+var _FTPEST_RISE_CAP = 2;       // watts per update: one hero effort cannot spike every zone
+var _FTPEST_DRIFT_PCT = 6;      // total drift ceiling off the last MEASURED ftp, for the whole interim
+var _FTPEST_DEADBAND = 3;       // below this a change is noise, not fitness
+var _FTPEST_FALL_N = 2;         // a fall needs corroboration; one bad day is not a decline
+// The most recent entry that was actually MEASURED - a baseline, a manual entry or a retest. The
+// drift ceiling is anchored here rather than on the previous estimate, or successive estimates would
+// ratchet: each one becoming the base for the next is how a 6% cap turns into 60%.
+function _ftpLastMeasured_(){
+  try{
+    var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
+    var sorted=(typeof _ftpSort_==='function')?_ftpSort_(h):h.slice();
+    for(var i=sorted.length-1;i>=0;i--){
+      var e=sorted[i]; if(!e) continue;
+      if(String(e.source||'')!=='estimate' && parseInt(e.ftp,10)>0) return e;
+    }
+  }catch(e){}
+  return null;
+}
+// Every MEASURED 20-minute best inside the window, newest first. powerCurve[1200] only: max20 can
+// carry a value copied from an NP estimate, and the np*1.05 synthesis was removed from
+// computePowerCurve for this reason. An FTP built on an estimate would drive every zone off one.
+function _ftpEstEfforts_(now){
+  var out=[];
+  try{
+    if(typeof st==='undefined' || !st || !Array.isArray(st.rides)) return out;
+    var cutMs=now.getTime() - _FTPEST_WINDOW_D*86400000;
+    st.rides.forEach(function(r){
+      if(!r || r.deleted) return;
+      var w=(r.powerCurve && +r.powerCurve[1200]>0) ? Math.round(+r.powerCurve[1200]) : 0;
+      if(!(w>0)) return;                                  // no MEASURED 20-minute effort on this ride
+      var d=(typeof normDate==='function')?normDate(r.date||''):String(r.date||'');
+      if(!d) return;
+      var p=d.split('-'); if(p.length<3) return;
+      var t=new Date(+p[0], (+p[1])-1, +p[2]).getTime();
+      if(!(t>=cutMs)) return;
+      out.push({ w:w, date:d, t:t, name:(typeof actName_==='function')?actName_(r):(r.name||'') });
+    });
+    out.sort(function(a,b){ return b.t-a.t; });
+  }catch(e){}
+  return out;
+}
+// What the estimate WOULD be, and why - pure, no writes. Returns null when there is nothing to say,
+// which is the common case and not a failure.
+function ftpEstimate_(now){
+  try{
+    now=now||new Date();
+    var meas=_ftpLastMeasured_();
+    if(!meas) return null;                                // no measured anchor: nothing to drift from
+    var base=parseInt(meas.ftp,10)||0; if(!(base>0)) return null;
+    var cur=(typeof ftpOn_==='function')?(parseInt(ftpOn_(),10)||base):base;
+    var efforts=_ftpEstEfforts_(now);
+    if(!efforts.length) return { skip:'no measured 20-minute effort in the last '+_FTPEST_WINDOW_D+' days' };
+    // CADENCE. Off the last estimate, so a manual entry does not reset the clock and let two
+    // estimates land back to back.
+    var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
+    var lastEst=null;
+    (h||[]).forEach(function(e){ if(e && String(e.source||'')==='estimate'){ if(!lastEst || String(e.date)>String(lastEst.date)) lastEst=e; } });
+    if(lastEst){
+      var lp=String(lastEst.date).split('-');
+      var gap=Math.round((now-new Date(+lp[0],(+lp[1])-1,+lp[2]))/86400000);
+      if(gap<_FTPEST_MIN_GAP_D) return { skip:'last estimate was '+gap+' days ago; waits for '+_FTPEST_MIN_GAP_D };
+    }
+    var best=efforts[0];
+    efforts.forEach(function(e){ if(e.w>best.w) best=e; });
+    var implied=Math.round(best.w*0.95);
+    var delta=implied-cur;
+    if(Math.abs(delta)<_FTPEST_DEADBAND) return { skip:'implied '+implied+'W is within '+_FTPEST_DEADBAND+'W of '+cur+'W' };
+    var next, why;
+    if(delta>0){
+      // RISE: capped per update AND ceilinged against the last measured value, so the whole interim
+      // period cannot drift more than _FTPEST_DRIFT_PCT however many updates it takes.
+      var ceil=Math.floor(base*(1+_FTPEST_DRIFT_PCT/100));
+      next=Math.min(cur+_FTPEST_RISE_CAP, implied, ceil);
+      if(next<=cur) return { skip:'already at the +'+_FTPEST_DRIFT_PCT+'% ceiling ('+ceil+'W) off the last measured '+base+'W' };
+      why='20-min best '+best.w+'W on '+best.date;
+    } else {
+      // FALL: needs corroboration. A single low effort is a bad day, a head wind or a group ride
+      // that never went hard - and absence of a hard effort is not evidence of decline at all, which
+      // is why nothing here lowers the value without efforts that actually came in low.
+      var below=efforts.filter(function(e){ return Math.round(e.w*0.95) < cur-_FTPEST_DEADBAND; });
+      if(below.length<_FTPEST_FALL_N) return { skip:'only '+below.length+' effort(s) below current; a fall needs '+_FTPEST_FALL_N };
+      next=Math.max(cur-_FTPEST_RISE_CAP, implied);
+      why=''+below.length+' efforts below current, best '+best.w+'W on '+best.date;
+    }
+    if(next===cur) return { skip:'no movement after caps' };
+    return { ftp:next, from:cur, base:base, best:best.w, on:best.date, ride:best.name, why:why,
+             label:next+'W - estimated from a '+best.w+'W 20-min best, '+best.date };
+  }catch(e){ return null; }
+}
+// Apply it. Writes through ftpRecord_ with source 'estimate' so ftpOn_ prices every band off it -
+// and because bands are date-aware, past sessions keep the band they were actually ridden under.
+// st.ftp is deliberately NOT touched: that field is the last MEASURED value and stays the anchor.
+function ftpEstimateApply_(){
+  try{
+    var r=ftpEstimate_();
+    if(!r || !r.ftp) { if(r&&r.skip){ try{ console.log('[ftp-est] no change - '+r.skip); }catch(e){} } return 0; }
+    if(typeof ftpRecord_!=='function') return 0;
+    ftpRecord_(r.ftp, 'estimate');
+    try{ console.log('[ftp-est] '+r.from+'W -> '+r.ftp+'W ('+r.why+'; ceiling '+Math.floor(r.base*(1+_FTPEST_DRIFT_PCT/100))+'W off measured '+r.base+'W)'); }catch(e){}
+    try{ if(typeof sv==='function') sv(); }catch(e){}
+    return 1;
+  }catch(e){ try{ console.error('[ftp-est] '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
+// PROVENANCE FOR DISPLAY. A measured value and an estimate must never look alike - the standing rule
+// this app keeps paying for when it is broken. Returns the source of whichever entry ftpOn_ is
+// currently reading, so a surface can say so without re-deriving anything.
+function ftpSrcOn_(dateStr){
+  try{
+    var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
+    if(!h.length) return 'manual';
+    var sorted=(typeof _ftpSort_==='function')?_ftpSort_(h):h.slice();
+    dateStr=dateStr||((typeof _ftpToday_==='function')?_ftpToday_():'');
+    var eff=null;
+    for(var i=0;i<sorted.length;i++){ if(String(sorted[i].date)<=String(dateStr)) eff=sorted[i]; else break; }
+    if(!eff) eff=sorted[0];
+    return String((eff&&eff.source)||'manual');
+  }catch(e){ return 'manual'; }
+}
 var _FTP_KEY_V = 1;
 // ONE-TIME REPAIR FOR THE COMPOSITE-KEY ERA. ftpHistory used to key on ['date','ftp'], so a
 // same-date correction FORKED instead of replacing it and both rows survived every merge. Two
@@ -57255,6 +57395,9 @@ window.onload = function(){
         try{ if(typeof healFtpHistoryKeys_==='function') healFtpHistoryKeys_(); }catch(e){}
         // Seed / self-heal the append-only FTP log so no write site can escape it (Dr. Smurkel dependency).
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
+        // Interim FTP estimate, after the log is healed and reconciled because it reads that log.
+        // Self-limiting: its own cadence guard means most calls are a no-op that logs why.
+        try{ if(typeof ftpEstimateApply_==='function') ftpEstimateApply_(); }catch(e){}
         // Fill nutrients onto already-logged items whose database row gained them after the fact.
         try{ if(typeof backfillNutrientsFromDB_==='function') backfillNutrientsFromDB_(); }catch(e){}
         // Refresh the Strava lifetime/YTD snapshot when the stored copy is stale in SHAPE (written

@@ -1274,6 +1274,26 @@ try {
     fail('weather can be fetched for the wrong place or the wrong hour (see above).');
   }
 
+  // STEP 80 - the interim FTP estimate. Between formal tests the working FTP sat flat for ~10 weeks
+  //           and every prescribed zone with it; manual adjustment was declined because a documented
+  //           tendency to overshoot makes a self-set FTP creep ahead of actual fitness, worst during
+  //           a deficit. FTP = 0.95 x best MEASURED 20-min power, and the guards ARE the feature, so
+  //           the test exercises them rather than asserting they exist: 42d window, 14d cadence,
+  //           +2W per update, a +6% ceiling anchored on the last MEASURED value - not the last
+  //           estimate, or it ratchets, and there is a negative control proving that - a 3W
+  //           deadband, falls needing two corroborating efforts, and absence of data never lowering
+  //           it. Also pins np*1.05 out of the curve it reads: an FTP built on an estimate would
+  //           drive every prescribed zone off one.
+  console.log(`${D}. checking the interim FTP estimate...${X}`);
+  try {
+    const so = execSync('node scripts/ftp-estimate-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the FTP estimate can drift, ratchet, or be built on an estimate (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
