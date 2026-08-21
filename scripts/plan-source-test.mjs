@@ -42,12 +42,30 @@ const eq = (l, got, want) => { const c = JSON.stringify(got) === JSON.stringify(
 
 console.log('\n' + Y + '=== one resolver, and it never reads the week-index store ===' + X);
 ok('_promptPlannedFor_ exists', /function _promptPlannedFor_\(dateKey\)/.test(src));
-ok('...it reads st.plan first', /getPlannedWorkoutForDate\(dateKey\)/.test(exFn('_promptPlannedFor_')));
-// Delegates to blockPlannedForDate_ rather than re-reading blockPlanFor_ itself: two copies of
-// "resolve the block for a date" is exactly how the prompts and the Calendar drifted apart.
-ok('...then falls back to the block, through the shared resolver', /blockPlannedForDate_\(dateKey\)/.test(exFn('_promptPlannedFor_')));
-ok('...and there is only ONE block resolver', /function blockPlannedForDate_\(dateStr\)/.test(src));
+ok('...it reads the shared resolver', /getPlannedWorkoutForDate\(dateKey\)/.test(exFn('_promptPlannedFor_')));
+// THE FALLBACK MOVED DOWN A LEVEL, and that is the fix rather than a refactor. _promptPlannedFor_
+// used to call blockPlannedForDate_ itself, with NO swap/tombstone guards - so on a day the athlete
+// had swapped or deleted, the guarded resolver correctly declined and this fell through to an
+// unguarded block read and named the session anyway. One call now, guards included.
+// Comments stripped before the check: the function now EXPLAINS the removed branch by name, and a
+// naive scan would read the explanation as the branch itself.
+ok('...and no longer keeps its own UNGUARDED block branch',
+   !/blockPlannedForDate_/.test(exFn('_promptPlannedFor_').replace(/\/\/[^\n]*/g, '')));
+ok('...and there is only ONE block adapter', /function blockPlannedForDate_\(dateStr\)/.test(src));
 ok('...and never touches ws()', !/\bws\(/.test(exFn('_promptPlannedFor_').replace(/\/\/[^\n]*/g, '')));
+
+// The consolidation itself: exactly one place asks the block on behalf of a surface.
+ok('the block fallback lives in _plannedFromBlock_', /function _plannedFromBlock_\(dateStr\)/.test(src));
+ok('...and getPlannedWorkoutForDate is the one caller of it', /return _plannedFromBlock_\(dateStr\)/.test(exFn('getPlannedWorkoutForDate')));
+{
+  // Two inline copies used to live in the desktop month grid and the mobile week strip. Neither may
+  // come back: a second implementation of "ask the block" is how these surfaces drifted, and the
+  // mobile copy's guards were dead on arrival (unpadded key -> st.plan miss -> no guard ever fired).
+  const calls = src.split('\n').filter((l) => /blockPlannedForDate_\(/.test(l) && !/function blockPlannedForDate_/.test(l));
+  ok('no surface open-codes the block fallback (' + calls.length + ' call site' + (calls.length === 1 ? '' : 's') + ')', calls.length === 1);
+  ok('...and the one that remains is inside the shared helper', calls.length === 1 && /var b=blockPlannedForDate_\(dk\)/.test(calls[0]));
+}
+ok('the shared helper NORMALISES the date, which the inline copies did not', /var dk=\(typeof normDate==='function'\)\?normDate\(dateStr\)/.test(exFn('_plannedFromBlock_')));
 // The regression itself: no prompt builder may read the week store for a prescription again.
 ok('NO builder reads weekData.wo', !/weekData\.wo/.test(src));
 ok('NO builder reads weekData.swaps', !/weekData\.swaps/.test(src));
@@ -55,26 +73,59 @@ ok('...and the dead ws(cw) reads are gone with them', !/weekData\s*=\s*ws\(cw\)/
 
 console.log('\n' + Y + '=== the resolver, exercised ===' + X);
 {
-  const mk = (planName, blockIntents) => {
+  // THE WHOLE CHAIN, not a stub standing in for half of it. Four real functions are pulled from the
+  // source and composed the way the app composes them — _promptPlannedFor_ -> getPlannedWorkoutForDate
+  // -> _plannedFromBlock_ -> blockPlannedForDate_ — so the delegation itself is under test. Only the
+  // leaves are stubbed: the stored day (st.plan / planSessionsForDate_) and the block template.
+  //
+  // `rows` are the RAW stored rows including tombstones, because that is what the guards read;
+  // planSessionsForDate_ is derived from them by filtering deleted, exactly as the real one does.
+  const mk = (rows, blockIntents) => {
+    rows = rows || [];
+    const pad = (s) => String(s).replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/, (_, y, m, d) => y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2));
     const stub = {
-      getPlannedWorkoutForDate: () => (planName ? { name: planName } : null),
+      st: { plan: { '2026-08-16': { sessions: rows } } },
+      planSessionsForDate_: (d) => (pad(d) === '2026-08-16' ? rows.filter((x) => !x.deleted) : []),
       blockPlanFor_: () => (blockIntents ? { sessions: blockIntents.map((i) => ({ intent: i, rx: null })) } : null),
+      normDate: pad,
+      _planSource_: (x) => (x && x.source) || 'gen',
       _tbDK_: (d) => d.toISOString().slice(0, 10)
     };
-    const DEFS = { easyRun: { name: 'Easy Run' }, z2: { name: 'Z2 Endurance' }, strengthA: { name: 'Strength A' } };
+    const DEFS = { easyRun: { name: 'Easy Run', type: 'run' }, z2: { name: 'Z2 Endurance', type: 'ride' },
+                   strengthA: { name: 'Strength A', type: 'strength' } };
     const names = Object.keys(stub);
-    // Both real functions are pulled in - the resolver AND the block adapter it now delegates to -
-    // so this exercises the actual delegation rather than a stub standing in for half of it.
     return new Function('SESSION_DEFS', ...names,
-      asServed(exFn('blockPlannedForDate_') + exFn('_promptPlannedFor_') + 'return _promptPlannedFor_;'))
+      asServed(exFn('blockPlannedForDate_') + exFn('_plannedFromBlock_')
+             + exFn('getPlannedWorkoutForDate') + exFn('_promptPlannedFor_') + 'return _promptPlannedFor_;'))
       (DEFS, ...names.map((n) => stub[n]));
   };
-  eq('st.plan wins when it has a record', mk('Threshold', ['easyRun'])('2026-08-16'), 'Threshold');
-  eq('the block answers when st.plan is empty', mk(null, ['easyRun'])('2026-08-16'), 'Easy Run');
-  eq('...resolving intents to real names, not variables', mk(null, ['z2', 'strengthA'])('2026-08-16'), 'Z2 Endurance, Strength A');
-  eq('null when NEITHER source has anything', mk(null, [])('2026-08-16'), null);
-  eq('...and null when the date is outside the block entirely', mk(null, null)('2027-01-01'), null);
-  eq('no date, no answer', mk('Threshold', ['easyRun'])(''), null);
+  const PLAN = [{ intent: 'threshold', type: 'ride', name: 'Threshold' }];
+
+  eq('st.plan wins when it has a record', mk(PLAN, ['easyRun'])('2026-08-16'), 'Threshold');
+  eq('the block answers when st.plan is empty', mk([], ['easyRun'])('2026-08-16'), 'Easy Run');
+  eq('...resolving intents to real names, not variables', mk([], ['z2', 'strengthA'])('2026-08-16'), 'Z2 Endurance, Strength A');
+  eq('null when NEITHER source has anything', mk([], [])('2026-08-16'), null);
+  eq('...and null when the date is outside the block entirely', mk([], null)('2027-01-01'), null);
+  eq('no date, no answer', mk(PLAN, ['easyRun'])(''), null);
+
+  // THE GUARDS, which the prompt path did not have at all before this consolidation. Each is an
+  // athlete DECISION that must outrank the block; the previous unguarded branch is why the coach
+  // could name a session the athlete had moved or removed.
+  eq('an explicit swap beats the block', mk([{ intent: 'z2', swap: true, deleted: true }], ['easyRun'])('2026-08-16'), null);
+  eq('an athlete-deleted session is not resurrected from the block',
+     mk([{ intent: 'easyRun', deleted: true, source: 'user' }], ['easyRun'])('2026-08-16'), null);
+  // ...but only the ATHLETE's deletion counts. generateBlockPlan_ tombstones its own replaceable rows
+  // every run, so treating generator residue as a decision blanked every day it had touched.
+  eq('NEG: a GENERATOR tombstone is bookkeeping, not a deletion',
+     mk([{ intent: 'easyRun', deleted: true, source: 'gen' }], ['easyRun'])('2026-08-16'), 'Easy Run');
+  eq('NEG: a user tombstone for a DIFFERENT intent does not suppress this one',
+     mk([{ intent: 'z2', deleted: true, source: 'user' }], ['easyRun'])('2026-08-16'), 'Easy Run');
+
+  // The mobile week strip built its key unpadded and so read st.plan[...] as undefined: both guards
+  // were dead there. The shared helper normalises, so an unpadded key must reach the same answer.
+  eq('an UNPADDED date still finds the stored day, so the guards fire',
+     mk([{ intent: 'easyRun', deleted: true, source: 'user' }], ['easyRun'])('2026-8-16'), null);
+  eq('...and still resolves the block when nothing is stored', mk([], ['easyRun'])('2026-8-16'), 'Easy Run');
 }
 
 console.log('\n' + Y + '=== the TOMORROW line is always stated, never dropped ===' + X);

@@ -11563,6 +11563,12 @@ function getMissedWorkouts(){
     var d=new Date(monday); d.setDate(monday.getDate()+di);
     var key=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
     var plan=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(key):null;
+    // STORED DAYS ONLY — the one surface that deliberately opts OUT of the block fallback. This walks
+    // PAST days, and a block-derived answer is a prescription that was never stored against the day,
+    // so counting it would invent a backlog: every day the block prescribes and st.plan never wrote
+    // would surface as a missed session. The shared resolver flags its own block answers, which is
+    // what makes the opt-out expressible in one line instead of a second resolver.
+    if(plan && plan.fromBlock) plan=null;
     if(!plan || !plan.name) continue;            // rest / no plan -> not a miss
     if(/rest|off\\b|recovery day/i.test(plan.name)) continue; // explicit rest (double backslash: see the walk/hike note)
     var done=(typeof isDayComplete==='function') && isDayComplete(key);
@@ -38862,37 +38868,11 @@ function dsShowCalendar(){
           // Planned workout for this date (persisted override) — shown on ALL days,
           // alongside any completed activity, gated by the Planned/Rest filters.
           var planRaw=(c.date && calFilter.planned && typeof getPlannedWorkoutForDate==='function')?(getPlannedWorkoutForDate(c.date)||null):null;
-          // st.plan holds no trainable session for this day - ASK THE BLOCK, which is what Dr Smurkel
-          // and the prompt resolver already answer from. Without this the Calendar was blind to
-          // everything the block derives rather than stores (the Sunday run distance, the climb
-          // rehearsal, the strength rotation), and a Sunday carrying a stale rest row read as "Rest
-          // Day" while every other surface said Easy Run.
-          //
-          // TWO GUARDS, both of which must beat the block:
-          //   swap===true  - the one thing the codebase treats as an athlete DECISION. If they swapped
-          //                  this day, the block does not get to argue.
-          //   a USER TOMBSTONE - a session the ATHLETE deleted is a decision, and re-showing it from
-          //                  the block would undo that deletion. Checked against the RAW day, since
-          //                  planSessionsForDate_ filters deleted rows out and cannot see them.
-          //
-          // ONLY A USER-OWNED TOMBSTONE COUNTS, and getting this wrong is what broke every Sunday.
-          // generateBlockPlan_ TOMBSTONES ITS OWN REPLACEABLE ROWS ON EVERY RUN - that is its normal
-          // clear-and-regenerate cycle, not a removal - so every day it has ever touched carries
-          // generator tombstones for exactly the intents the block still prescribes. Treating those
-          // as deletions suppressed the fallback on every one of them, which read as "Rest Day"
-          // across Aug 23, Aug 30 and Sep 6 alike. A tombstone is only a DECISION when the athlete
-          // made it; generator residue is bookkeeping.
-          if(!planRaw && c.date && calFilter.planned && typeof blockPlannedForDate_==='function'){
-            var _raw=(function(){ try{ var dd=st.plan&&st.plan[c.date]; return (dd&&dd.sessions)||[]; }catch(e){ return []; } })();
-            var _decided=_raw.some(function(x){ return x && x.swap===true; });
-            var _tombed={}; _raw.forEach(function(x){
-              if(x && x.deleted && x.intent && typeof _planSource_==='function' && _planSource_(x)==='user') _tombed[x.intent]=1;
-            });
-            if(!_decided){
-              var _bpl=blockPlannedForDate_(c.date);
-              if(_bpl && !_tombed[_bpl.intent]) planRaw=_bpl;
-            }
-          }
+          // The block fallback that used to be open-coded here now lives inside
+          // getPlannedWorkoutForDate (_plannedFromBlock_), so planRaw above ALREADY carries the
+          // block's answer, with the swap and user-tombstone guards applied. Deleted rather than
+          // left as a second copy: two implementations of "ask the block" is precisely how this
+          // surface and the mobile week strip drifted, and the mobile copy's guards were dead.
           // getPlannedWorkoutForDate excludes rest (rest != workout), so surface a
           // rest DAY here or the cell draws blank. A rest-only day -> synthetic Rest.
           // Runs AFTER the block fallback: a stored rest row that contradicts a prescribed session is
@@ -40041,7 +40021,15 @@ function dsShowDashboard(){
   var planIcon=activityIcon_((twk&&twk.name)||'Ride',38);
   var focus=twk?(twk.isRest?'Recovery':twk.isHard?'Intensity / threshold':twk.isRide?'Aerobic endurance':'General'):'—';
   var pInner=lbl("TODAY'S PLAN");
-  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:var(--d-t3);margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
+  // THE TITLE WRAPS, IT DOES NOT GET CHOPPED. It carried white-space:nowrap + overflow:hidden +
+  // text-overflow:ellipsis beside a fixed 50px icon, so "Z2 Endurance" rendered as "Z2 Endu..." in
+  // this column at ordinary widths — the SAME failure the stat tiles had twenty lines below, where a
+  // value competed with a fixed-width icon and was silently chopped. An ellipsis is the right answer
+  // for a value that must stay on one line; a session NAME is not that, and a title truncated
+  // mid-word reads as broken data rather than as a narrow box. Two short lines cost nothing here:
+  // the card is a flex column with room, and overflow-wrap:anywhere keeps a long custom name from
+  // spilling the card instead of hiding it.
+  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:var(--d-head);line-height:1.25;overflow-wrap:anywhere">'+planName+'</div><div style="font-size:12px;color:var(--d-t3);margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
   if(twk && !twk.isRest){
     [['Duration',durStr,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3'],['Focus',focus,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2']].forEach(function(rw){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-edge)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';
@@ -48761,15 +48749,18 @@ function setPlannedOverride_(dateKey, name, dur){
 function _promptPlannedFor_(dateKey){
   try{
     if(!dateKey) return null;
+    // ONE CALL. getPlannedWorkoutForDate now resolves st.plan then the block, so the separate
+    // blockPlannedForDate_ branch that used to sit here is gone - and removing it is a FIX, not a
+    // tidy-up. That branch had no guards: when the athlete had swapped the day or deleted the
+    // session, the shared resolver correctly declined to answer from the block and this fell
+    // straight through to an unguarded block read, so the coach could name a session the athlete
+    // had explicitly moved or removed. Prompts now honour the same two decisions every other
+    // surface does.
     var p=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
-    if(p && p.name) return p.name;
-    // Through blockPlannedForDate_ rather than re-reading blockPlanFor_ here. Two copies of "resolve
-    // the block for a date" is how the prompts and the Calendar would drift apart again - which is
-    // the entire failure this chain of fixes has been chasing.
-    var b=(typeof blockPlannedForDate_==='function')?blockPlannedForDate_(dateKey):null;
-    if(b && b.sessions && b.sessions.length){
-      return b.sessions.map(function(s){ return (s&&s.name)||''; }).filter(Boolean).join(', ')||null;
+    if(p && p.sessions && p.sessions.length){
+      return p.sessions.map(function(s){ return (s&&s.name)||''; }).filter(Boolean).join(', ')||p.name||null;
     }
+    if(p && p.name) return p.name;
   }catch(e){}
   return null;
 }
@@ -48813,16 +48804,62 @@ function blockPlannedForDate_(dateStr){
     return { name:p.name, dur:dur, type:p.type, intent:p.intent, sessions:out, fromBlock:true };
   }catch(e){ return null; }
 }
+// THE BLOCK FALLBACK LIVES HERE, ONCE, AND THAT IS THE WHOLE POINT.
+//
+// It used to be open-coded in the desktop month grid and again in the mobile week strip, with a
+// THIRD, GUARD-LESS variant inside _promptPlannedFor_. So whether a day answered from the block
+// depended on which surface asked, and only two of the three honoured the athlete's own decisions —
+// the prompt path would happily name a session they had swapped away or deleted. Meanwhile Today's
+// Plan, the fuelling resolver, the missed-day scan and the day editor had NO fallback at all. That
+// is how one Sunday read "Easy Run" on the Calendar and "No workout scheduled" on the Dashboard on
+// the same morning, and why fixing it per-surface never converged: each new surface had to remember
+// to re-implement both guards, and one of the two copies had already got them wrong (below).
+//
+// TWO GUARDS, carried over verbatim from the desktop copy this replaces:
+//   swap===true      - the one thing the codebase treats as an athlete DECISION. If they swapped this
+//                      day, the block does not get to argue.
+//   a USER tombstone - a session the ATHLETE deleted is a decision, and re-showing it from the block
+//                      would undo that deletion. Checked against the RAW day, because
+//                      planSessionsForDate_ filters deleted rows out and cannot see them.
+//
+// ONLY A USER-OWNED TOMBSTONE COUNTS. generateBlockPlan_ tombstones its own replaceable rows on
+// every run — its normal clear-and-regenerate cycle, not a removal — so every day it has touched
+// carries generator tombstones for exactly the intents the block still prescribes. Counting those as
+// deletions suppressed the fallback everywhere and read as "Rest Day" across Aug 23, Aug 30 and Sep 6.
+//
+// THE DATE IS NORMALISED HERE, which the inline copies did not do, and that was a live bug rather
+// than tidiness: the mobile week strip built its key as y+'-'+(m+1)+'-'+d — UNPADDED — so
+// st.plan['2026-8-21'] was always undefined, raw came back empty, and BOTH guards silently never
+// fired on mobile. A swapped or athlete-deleted day was overridden by the block there while desktop
+// honoured it. planSessionsForDate_ normalises internally, which is why the surrounding code worked
+// and only the hand-rolled guard reads were broken.
+function _plannedFromBlock_(dateStr){
+  try{
+    if(!dateStr || typeof blockPlannedForDate_!=='function') return null;
+    var dk=(typeof normDate==='function')?normDate(dateStr):String(dateStr).slice(0,10);
+    var raw=[]; try{ var dd=st.plan&&st.plan[dk]; raw=(dd&&dd.sessions)||[]; }catch(e){ raw=[]; }
+    if(raw.some(function(x){ return x && x.swap===true; })) return null;
+    var tomb={}; raw.forEach(function(x){
+      if(x && x.deleted && x.intent && typeof _planSource_==='function' && _planSource_(x)==='user') tomb[x.intent]=1;
+    });
+    var b=blockPlannedForDate_(dk);
+    return (b && !tomb[b.intent]) ? b : null;
+  }catch(e){ return null; }
+}
 function getPlannedWorkoutForDate(dateStr){
-  // Phase 0: reads the persistent plan (st.plan) EXCLUSIVELY — the ephemeral ws{}
-  // DOM-scrape path is retired (the static markup is left inert). Returns the day's
-  // primary session in the legacy {name,dur} shape existing callers expect, plus the
-  // full session list + type for new callers. Rest days -> null (no session).
+  // Reads the persistent plan (st.plan) first — the ephemeral ws{} DOM-scrape path is retired (the
+  // static markup is left inert) — then falls back to the BLOCK via _plannedFromBlock_ above, so
+  // every caller gets the same answer the Calendar and Dr. Smurkel already gave. Returns the day's
+  // primary session in the legacy {name,dur} shape existing callers expect, plus the full session
+  // list + type for new callers. A block answer carries fromBlock:true. Rest days -> null.
   var sessions=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateStr):[];
   // A Rest day is a first-class 'rest' session but NOT a workout — exclude rest so
   // training/fueling readers see a Rest day as "no session" (returns null).
   var trained=sessions.filter(function(x){ return x && x.type!=='rest'; });
-  if(!trained.length) return null;
+  // NO STORED SESSION IS NOT THE SAME AS NO SESSION. This is the line that used to return null and
+  // strand four surfaces; the guards inside _plannedFromBlock_ are what keep an athlete decision
+  // winning over the block.
+  if(!trained.length) return _plannedFromBlock_(dateStr);
   var s=trained[0];
   var dur=(s.targets && s.targets.durationMin!=null)?(s.targets.durationMin+' min'):'';
   return { name:s.name, dur:dur, type:s.type, intent:s.intent, sessions:trained, custom:true, week:null, dayIdx:null };
@@ -55010,21 +55047,11 @@ function showCalendarTab(){
     var isToday=(i===dow);
     // Real planned workout for THIS day (works for future days too).
     var pw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dKey):null;
-    // SAME BLOCK FALLBACK AS THE DESKTOP MONTH GRID, and it has to be here too: these are parallel
-    // renderers, so fixing one leaves the other reading a Sunday as Rest while the desktop shows the
-    // run. Guards are identical - an explicit swap and a tombstone both beat the block.
-    if(!pw && typeof blockPlannedForDate_==='function'){
-      var _rawM=(function(){ try{ var dd=st.plan&&st.plan[dKey]; return (dd&&dd.sessions)||[]; }catch(e){ return []; } })();
-      if(!_rawM.some(function(x){ return x && x.swap===true; })){
-        // USER-owned tombstones only - see the desktop note. A generator tombstone is bookkeeping
-        // from the clear-and-regenerate cycle, and counting it as a deletion blanked every Sunday.
-        var _tM={}; _rawM.forEach(function(x){
-          if(x && x.deleted && x.intent && typeof _planSource_==='function' && _planSource_(x)==='user') _tM[x.intent]=1;
-        });
-        var _bM=blockPlannedForDate_(dKey);
-        if(_bM && !_tM[_bM.intent]) pw=_bM;
-      }
-    }
+    // The block fallback lives in getPlannedWorkoutForDate now, so pw already carries it. The copy
+    // that stood here was not merely redundant, it was BROKEN: dKey is built unpadded above
+    // (y+'-'+(m+1)+'-'+d), so its st.plan[dKey] read always missed and neither guard ever fired -
+    // this surface would show a block session on a day the athlete had explicitly swapped or
+    // deleted, while desktop correctly hid it. Normalising inside the shared helper fixes it.
     // getPlannedWorkoutForDate excludes rest; a stored Rest day surfaces here so it reads
     // "Rest" (explicit) rather than the generic "Recovery" shown for an unplanned day.
     var restSess=(!pw && typeof planSessionsForDate_==='function')?(planSessionsForDate_(dKey).filter(function(x){ return x && x.type==='rest'; })[0]||null):null;
