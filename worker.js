@@ -42692,7 +42692,32 @@ function _sessionRxFor_(dateKey, ride){
   }catch(e){}
   var t={}; Object.keys(derived).forEach(function(k){ t[k]=derived[k]; });
   if(pick.targets) Object.keys(pick.targets).forEach(function(k){ if(pick.targets[k]!=null) t[k]=pick.targets[k]; });
+  // THE FILE HE WAS GIVEN OUTRANKS THE PLAN HE WAS NOT. The grading path has adjudicated this since
+  // the Aug 18 fix; this resolver never did, and it is what prices the PROSE — Dr. Smurkel's
+  // "prescribed NNN-NNN W" sentence, Today's Plan and the editor prefill all read the band from here.
+  // So the two disagreed whenever FTP moved after a file was issued: on 2026-08-18 the .zwo was built
+  // at FTP 183 (~202W target), FTP was 190 from 08-02 to 08-19, and the debrief graded the ride
+  // against a 209-228W band it was never asked to hold. Same stamp, both paths, one answer.
+  //
+  // NOT an FTP-source consolidation, and deliberately not one: ftpOn_(date) stays the band's price
+  // everywhere. st.ftp is the current measured value and ftpHistory is the dated log; collapsing them
+  // re-breaks the date-blind grading that 611f540 fixed. The stamp is a NARROWER fact than FTP — what
+  // THIS day's file actually commands in ERG — so it overrides the band without touching its price.
+  //
+  // Narrow by construction: _stampedRxFor_ returns null unless a .zwo was genuinely ISSUED for this
+  // day and intent (zwoRx is written in _zwoEmit_, the one funnel every download and send-to-Zwift
+  // passes through), so a day with no exported file is untouched. Runs are excluded because watts are
+  // dropped for them entirely below. t is built fresh above, so mutating it shares nothing.
+  //
+  // MUST stay below the targets merge: applied above it, pick.targets would overwrite the stamp and
+  // the bug would survive its own fix. rx-stamp-prose-test.mjs pins that order.
+  var _stamp=null;
+  try{ if(!isRun && typeof _stampedRxFor_==='function') _stamp=_stampedRxFor_(dk, pick.intent); }catch(e){}
+  if(_stamp){ t.powerLo=_stamp.lo; t.powerHi=_stamp.hi; }
   return {
+    // The stamp, carried so a surface can SAY the band came from the issued file rather than
+    // silently printing a number that disagrees with the plan on screen next to it.
+    stampedRx:(_stamp?{ lo:_stamp.lo, hi:_stamp.hi, ftp:_stamp.ftp }:null),
     intent:pick.intent, name:def.name||pick.intent,
     // WATTS ARE DROPPED ENTIRELY ON A RUN. Running power is not comparable to cycling FTP, so a
     // band derived from pctFtp is meaningless here — and suppressing it at the resolver rather than
