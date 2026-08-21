@@ -39944,7 +39944,11 @@ function dsShowDashboard(){
     var line='M'+pts.join(' L'), area=line+' L'+w+' '+h+' L0 '+h+' Z';
     return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision"><path d="'+area+'" fill="'+color+'" opacity="0.10"/><path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
   function dlum(v){ if(v==null) return ''; return '<span style="font-size:11px;font-weight:700;color:'+(v>0?ACC.green:v<0?ACC.red:ACC.grey)+'">'+(v>0?'+':'')+v+'</span>'; }
-  function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+  // VERTICAL PADDING ONLY, 13 -> 11. Horizontal stays at 15px: the columns on this page are already
+  // tight enough that a stat can be clipped by its box, and narrowing them further is how that
+  // starts. Four stacked rows means this is worth 4px each, ~16px down the page, for a change that
+  // is not visible on its own.
+  function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
   function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
   function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:var(--c-green);cursor:pointer">'+t+'</span>'; }
   var mins=twk&&!twk.isRest?Math.round(twk.minutes||0):0;
@@ -39952,7 +39956,9 @@ function dsShowDashboard(){
 
   var H='';
   // ===== HEADER =====
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;flex-shrink:0">';
+  // Greeting strip trimmed 14/12 -> 10/8. It is one line of text and a control; the padding was
+  // carrying more weight than the content.
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px 8px;flex-shrink:0">';
   H+='<div style="display:flex;align-items:center;gap:13px">';
   H+='<div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:'+(hour<18&&hour>=6?ACC.amber:ACC.blue)+'">'+(hour<18&&hour>=6?'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>':'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>')+'</div>';
   H+='<div><div style="font-size:20px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">'+greeting+', Mikey</div><div style="font-size:12px;color:var(--d-t4);margin-top:1px">Here is your athlete overview.</div></div>';
@@ -39962,7 +39968,10 @@ function dsShowDashboard(){
   H+='<div data-act="sync" style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:9px;padding:7px 13px;font-size:12px;color:var(--d-soft);font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>';
   H+='</div></div>';
 
-  H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
+  // Bottom padding 20 -> 12 and the inter-row gap 10 -> 8. The gap is the VERTICAL one between the
+  // four stacked rows (three grids plus the timezone line), so it pays three times; the grids keep
+  // their own 10px COLUMN gap, which is horizontal and costs no height.
+  H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 12px;display:flex;flex-direction:column;gap:8px;min-width:0">';
 
   // ===== ROW 1 =====
   H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:0.82 0 auto">';
