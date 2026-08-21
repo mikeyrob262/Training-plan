@@ -1,5 +1,11 @@
 # Plan storage convergence — scope after the narrow fix
 
+> **Status (2026-08-21): Stage 2 is DONE (`96c7132`). Stages 1, 3 and 4 remain.** If you arrived here
+> because Today's Plan disagreed with another surface, that class of bug is fixed — read the Stage 2
+> section below before assuming otherwise. **There is no outstanding row-duplication cleanup**: that
+> work shipped 2026-08-17 as `87c14e4` and is guarded by `scripts/plan-dupe-test.mjs`. This document
+> being a *scope* rather than a *task* has caused it to be mistaken for a deferred backlog item.
+
 Written 2026-08-16, after the audit that preceded commit `878a1b3`. This replaces the
 premise in the original "Kill the 17-week plan" spec, which was written before the audit
 and got the mechanism wrong in three places. Nothing here contradicts the *goal* of that
@@ -34,9 +40,57 @@ Three corrections to the original spec:
 - Debrief rule: never name a session type the facts did not name; frame proposals as suggestions.
 - Guard: `scripts/plan-source-test.mjs`, preflight step 60.
 
+## Stage 2 — DONE (2026-08-21, `96c7132`)
+
+Shipped, and the mechanism differs from what this doc anticipated below. The plan was to promote
+`_promptPlannedFor_` to return session objects and have the renderers read that. What the audit
+actually found was that the resolver already existed under a different name and the *fallback* was the
+thing that had been copied:
+
+- the block fallback was **open-coded in the desktop month grid**, **again in the mobile week strip**,
+  and a **third, guard-less variant** lived inside `_promptPlannedFor_`;
+- `getPlannedWorkoutForDate` — which Today's Plan, the fuelling resolver, the missed-day scan and the
+  day editor all call — read `st.plan` **exclusively**, so those four had no fallback at all.
+
+So "what is scheduled today" depended on which surface asked. That is the Sunday in the acceptance
+criteria: Easy Run on the Calendar, "No workout scheduled" on the Dashboard, same morning.
+
+**`_plannedFromBlock_` is now the only place a surface asks the block**, called only by
+`getPlannedWorkoutForDate`. Both inline copies are deleted and the prompt branch with them; the two
+`blockPlannedForDate_` references left in `worker.js` are its definition and that single call. The
+eight `getPlannedWorkoutForDate` call sites are now the complete list of surfaces that answer this
+question, and they cannot disagree by construction rather than by vigilance.
+
+**Two bugs fell out that nothing had reported:**
+
+1. **The mobile week strip's guards never fired.** It built its key unpadded
+   (`y+'-'+(m+1)+'-'+d`), so `st.plan['2026-8-16']` was `undefined`, raw came back empty, and *both*
+   the swap and tombstone checks silently no-opped — mobile showed block sessions on days the athlete
+   had explicitly swapped or deleted, while desktop correctly hid them. A guard that cannot see its
+   input is not a guard. The shared helper normalises the date.
+2. **The prompt path had no guards at all**, so the coach could name a session the athlete had moved
+   or removed.
+
+**The missed-session detector deliberately opts out** via `if(plan && plan.fromBlock) plan=null;` —
+the constraint recorded under "what must NOT have changed" in `cal-block-fallback-test.mjs`. Worth
+noting how nearly that was lost: it had been protected by grepping the detector for
+`blockPlannedForDate_`, and once the fallback moved inside the resolver that grep **stayed green while
+the guarantee broke**. A grep for an absent symbol is not a behavioural guard.
+
+Guards: `scripts/plan-source-test.mjs` (its harness now composes the whole real chain
+`_promptPlannedFor_` → `getPlannedWorkoutForDate` → `_plannedFromBlock_` → `blockPlannedForDate_`
+instead of stubbing half of it) and `scripts/cal-block-fallback-test.mjs` (rewritten to assert **one
+implementation**, not "two copies currently agree" — which is what it checked before, and why it
+passed while mobile was broken). Both mutation-tested.
+
 ## What remains
 
-### Stage 1 — find the Mon–Sat surface (blocked on one on-device answer)
+### Stage 1 — find the Mon–Sat surface (still blocked on the same on-device answer)
+
+**Not resolved by Stage 2, and worth being exact about why.** Stage 2 makes the surfaces agree; it does
+not put Sunday rows in `st.plan`. If the week table's six rows came from `st.plan` holding no Sunday,
+that table now answers from the block wherever it reads `getPlannedWorkoutForDate` — but whether it
+does was never established, and the decisive check below has still not been run.
 
 The reported week table shows 6 rows / 482 TSS / 8 activities. No renderer hardcodes six days —
 verified, there is no 6-length day array or `i<6` loop in the file. `_tbWeekStrip_` (`~32437`)
@@ -56,15 +110,6 @@ blockPlanFor_('2026-08-16').sessions        // what the block derives
 If `planDump_` is empty and `blockPlanFor_` returns `easyRun`, the generator never wrote Sunday
 rows and the week table is honestly reporting an incomplete `st.plan`. The fix is then either to
 backfill Sunday rows, or to have the week table read the same resolver every other surface uses.
-
-### Stage 2 — extend the resolver to rendering surfaces
-
-`_promptPlannedFor_` returns a display string, which is right for prompts and wrong for renderers.
-Promote it to return the **session objects** and have the week table, Calendar and Today's Plan
-read that. This is spec item 3, and it is the item with the most value per unit of risk: it makes
-the surfaces incapable of disagreeing without touching any stored data.
-
-Keep the string form as a thin wrapper so the prompt builders do not churn.
 
 ### Stage 3 — backfill missing `st.plan` rows
 
@@ -91,23 +136,37 @@ to be relearned:
 migrating that into a date-keyed home, not deleting it. Until then the store is harmless — nothing
 it holds reaches a coaching surface as a prescription, which was the actual defect.
 
-Recommendation: do Stages 1–3, then reassess whether Stage 4 is worth it. The original spec's
-acceptance criterion "grep returns zero hits" is achievable but buys little once the prescription
-path is severed, and it risks real logged data.
+Recommendation, unchanged by Stage 2 landing: do Stages 1 and 3, then reassess whether Stage 4 is
+worth it. The original spec's acceptance criterion "grep returns zero hits" is achievable but buys
+little once the prescription path is severed, and it risks real logged data.
 
 ## Acceptance criteria worth keeping from the original spec
 
-- Today's Plan, Calendar and Dr. Smurkel give identical answers for "what is scheduled today",
-  because they call one function. *(Stage 2)*
-- A day with no record shows an explicit empty state on every surface, never a fabricated session.
-  *(done for prompts; Stage 2 for renderers)*
-- Clicking through from a shown session lands on a real, editable calendar entry. *(Stage 2–3 —
-  requires the shown session to be an `st.plan` record, which is why Stage 3 follows Stage 2)*
-- Re-verify Aug 16: every surface either shows the Sunday easy run or says nothing is scheduled —
-  never three surfaces disagreeing. *(Stage 1)*
+- ✅ Today's Plan, Calendar and Dr. Smurkel give identical answers for "what is scheduled today",
+  because they call one function. *(Stage 2, `96c7132` — `getPlannedWorkoutForDate`, eight call sites)*
+- ✅ A day with no record shows an explicit empty state on every surface, never a fabricated session.
+  *(prompts previously; renderers at Stage 2. A block answer is not a fabrication — the block is a
+  deterministic, reviewable source — and it is flagged `fromBlock:true` so a surface that must not use
+  it, like the missed-session detector, can say so explicitly.)*
+- ⬜ Clicking through from a shown session lands on a real, editable calendar entry. *(Stage 3 —
+  requires the shown session to be an `st.plan` record. Stage 2 makes the surfaces agree on what to
+  SHOW; it does not create the row behind a block-derived one, so this is genuinely still open.)*
+- ⬜ Re-verify Aug 16: every surface either shows the Sunday easy run or says nothing is scheduled —
+  never three surfaces disagreeing. *(Stage 1. The disagreement is now structurally impossible for the
+  eight surfaces on the shared resolver, but this was never re-checked on device and should be.)*
 
 ## Do not regress
 
+`scripts/plan-source-test.mjs`, `scripts/cal-block-fallback-test.mjs`,
 `scripts/plan-merge-lww-test.mjs`, `scripts/lww-merge-test.mjs`, `scripts/numeric-lww-test.mjs`,
 `scripts/plan-block-realign-test.mjs`, and preflight step 60. This touches the same territory as
 the `mergeSession_` / `_isSession_` / `PLAN_LWW_FIELDS_` work.
+
+**Two rules earned the hard way here, both of which cost a green test suite over a broken feature:**
+
+1. **Do not re-introduce a second block fallback.** If a new surface needs one, call
+   `getPlannedWorkoutForDate`. `cal-block-fallback-test.mjs` asserts there is exactly ONE
+   `blockPlannedForDate_` call site and fails on a second.
+2. **Do not guard a behaviour by grepping for an absent symbol.** That is what protected the
+   missed-session detector, and it stayed green while the fallback moved underneath it. Assert the
+   opt-out, not the absence.

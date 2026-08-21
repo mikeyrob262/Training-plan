@@ -29,3 +29,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 0996d179ba188c6786583dd4528dc899
+      # DID THE EDGE ACTUALLY TAKE IT? A green wrangler deploy does not answer that, and twice it has
+      # been wrong: 369e4af deployed clean while the live URL served the previous commit for 65+ polls,
+      # and for an unknown stretch before 2026-08-21 a second Cloudflare-native Git integration raced
+      # this workflow on every push and served correct code carrying the unstamped placeholder. Both
+      # failures are invisible from this job's own conclusion, so the check has to read the EDGE. It
+      # runs AFTER the deploy and cannot block it — it reports, on the one signal that identifies a
+      # build: the stamp substituted above, which ends in this commit's short sha.
+      - name: Verify the edge serves this commit
+        run: node scripts/deploy-stamp-verify.mjs "$GITHUB_SHA"
+        env:
+          GITHUB_SHA: ${{ github.sha }}
