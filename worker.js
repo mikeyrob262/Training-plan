@@ -40027,9 +40027,18 @@ function dsShowDashboard(){
   // value competed with a fixed-width icon and was silently chopped. An ellipsis is the right answer
   // for a value that must stay on one line; a session NAME is not that, and a title truncated
   // mid-word reads as broken data rather than as a narrow box. Two short lines cost nothing here:
-  // the card is a flex column with room, and overflow-wrap:anywhere keeps a long custom name from
-  // spilling the card instead of hiding it.
-  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:var(--d-head);line-height:1.25;overflow-wrap:anywhere">'+planName+'</div><div style="font-size:12px;color:var(--d-t3);margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
+  // the card is a flex column with room.
+  //
+  // break-word, NOT anywhere — round two of this fix, and the distinction is the whole reason.
+  // The two are identical in WHERE they permit a break; they differ in INTRINSIC SIZING. anywhere
+  // lets soft-wrap opportunities inside a word count toward min-content, so min-content collapses to
+  // roughly one character — and this div is a flex item with min-width:0 beside a flex-shrink:0 50px
+  // icon, so it was then free to shrink below the width of "Endurance" and had to break inside it.
+  // "Z2 Endurance" came out as "Z2 Enduranc" / "e". With break-word, min-content stays the longest
+  // WORD, the box cannot shrink past it, and the break lands at the space where it belongs; breaking
+  // inside a word stays available as the last resort it should be, for a single word too long to fit.
+  // The stat tiles below already use break-word for exactly this reason (stat-tile-clip-test.mjs).
+  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:var(--d-head);line-height:1.25;overflow-wrap:break-word">'+planName+'</div><div style="font-size:12px;color:var(--d-t3);margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
   if(twk && !twk.isRest){
     [['Duration',durStr,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3'],['Focus',focus,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2']].forEach(function(rw){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-edge)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';

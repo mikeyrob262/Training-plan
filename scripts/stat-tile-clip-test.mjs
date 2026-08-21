@@ -167,6 +167,24 @@ ok('the sub-caption wraps too rather than clipping', /overflow-wrap:break-word">
 // one character earlier so a 12h+ week prints in full.
 ok('the font steps down at 7 chars, so a 12h+ weekly total fits', /_v\.length>6\?'13px'/.test(TILE_C));
 
+console.log('\n' + Y + "=== the Today's Plan title is a NAME, so it wraps at words ===" + X);
+{
+  // Same family, one card over, and it took two passes. The title first carried the tile's old
+  // nowrap+ellipsis treatment beside a fixed 50px icon, so "Z2 Endurance" printed "Z2 Endu...".
+  // The first fix reached for overflow-wrap:anywhere and overcorrected into "Z2 Enduranc" / "e".
+  //
+  // anywhere and break-word permit breaks in the SAME places; they differ in INTRINSIC SIZING.
+  // `anywhere` lets in-word break opportunities count toward min-content, collapsing it to about one
+  // character - and this div is a flex item with min-width:0 next to a flex-shrink:0 icon, so it was
+  // then free to shrink below the width of the longest word and forced to break inside it.
+  // `break-word` floors min-content at the longest word, so the break lands at the space.
+  const T = src.slice(src.indexOf("var pInner=lbl(\"TODAY'S PLAN\")"), src.indexOf('H+=card(pInner);'));
+  ok('the title wraps at word boundaries', /color:var\(--d-head\);line-height:1\.25;overflow-wrap:break-word/.test(T));
+  ok('NEG: not overflow-wrap:anywhere, which breaks mid-word via min-content', !/overflow-wrap:anywhere/.test(T));
+  ok('NEG: and the original nowrap chop has not returned', !/font-size:18px;font-weight:800;color:var\(--d-head\);white-space:nowrap/.test(T));
+  ok('...matching the treatment the tiles beside it already use', /overflow-wrap:break-word/.test(TILE_C));
+}
+
 console.log('\n' + Y + '=== the arithmetic that caused it, run rather than argued ===' + X);
 {
   // Row 1 is grid-template-columns:1.3fr 0.92fr 1.55fr with a 10px gap; the tiles are the third
