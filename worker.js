@@ -54757,6 +54757,17 @@ function windArrowSVG(fromDeg,color,sw){
       // Does the temperature actually move enough during the activity to be worth saying? Below this
       // the peak is the same number as the start and printing both is noise.
       var tempClimbs=(startTemp!=null && (maxTemp-startTemp)>=3);
+      // WIND GETS ONE REPRESENTATIVE NUMBER, the same shape Temperature settled on. This row used to
+      // spend two of its four slots on wind MAXIMA - max gust and max sustained - and carried no
+      // figure for the wind actually ridden in, while Temperature gave one clear number for the same
+      // window. Max sustained is the one that goes: it is neither the worst case (that is the gust)
+      // nor the typical case, so it answers no question on its own.
+      var avgWind=rWind.length?Math.round(rWind.reduce(function(a,b){ return a+b; },0)/rWind.length):0;
+      // The gust line earns its place when it is a DIFFERENT fact from the average, or when it is
+      // dangerous however close it sits. 25mph is this planner's own gust-alert threshold (the
+      // "Dangerous gusts" alert above), so a gust big enough to raise an alert is never rounded away
+      // into silence by a delta rule - which is the failure mode a bare difference gate would have.
+      var gustWorthSaying=((maxGust-avgWind)>=4 || maxGust>=25);
       // Clock labels off the SAMPLE INDEX, so the peak is named by when it actually happens rather
       // than by a guess. Sample n is s0*60 + n*15 minutes into the day.
       function clockAt(sampleIdx){
@@ -54818,8 +54829,14 @@ function windArrowSVG(fromDeg,color,sw){
             +(tempClimbs?('<div style="font-size:9.5px;color:var(--t3);margin-top:1px">&rarr; '+Math.round(maxTemp)+'&deg; by '+peakLbl+'</div>'):'')
           +'</div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#378ADD">'+Math.round(maxPrecip)+'%</div><div style="font-size:10px;color:var(--t3)">max rain, during run</div></div>'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#1D9E75">'+Math.round(maxGust)+'mph</div><div style="font-size:10px;color:var(--t3)">max gust'+(dirLbl?(' '+dirLbl):'')+'</div></div>'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+Math.round(rWind.length?Math.max.apply(null,rWind):0)+'mph</div><div style="font-size:10px;color:var(--t3)">max sustained</div></div>'
+          // ONE wind tile, not two. Headline is the wind actually ridden in; the gust is the OTHER
+          // fact and is shown as one, in the same arrow sub-line Temperature uses for its peak.
+          // Dropping to three tiles also widens each column, which this card cluster has needed
+          // before - a stat that outgrows its box here gets clipped rather than wrapped.
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+avgWind+'mph'+(dirLbl?(' '+dirLbl):'')+'</div>'
+            +'<div style="font-size:10px;color:var(--t3)">avg wind, during run</div>'
+            +(gustWorthSaying?('<div style="font-size:9.5px;color:var(--t3);margin-top:1px">&rarr; gusts to '+Math.round(maxGust)+'mph</div>'):'')
+          +'</div>'
           +'</div>';
       }
 

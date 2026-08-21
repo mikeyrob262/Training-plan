@@ -144,7 +144,11 @@ check('getDirStr returns empty for null', getDirStr(null), '');
 check('...and for a non-finite value', getDirStr(NaN), '');
 check('...but still labels a real bearing', [0,45,90,135,180,225,270,315].map(getDirStr), ['N','NE','E','SE','S','SW','W','NW']);
 // The three places that print the cardinal must all tolerate the empty string.
-check('gust tile guards the label', /max gust'\+\(dirLbl\?\(' '\+dirLbl\):''\)/.test(src), true);
+// The bearing moved from the gust tile to the AVERAGE WIND headline when wind stopped spending two
+// tiles on extremes and started leading with the wind actually ridden in. The guarantee is the one
+// being tested and it is unchanged: no bearing, no label, never a fabricated direction.
+check('wind tile guards the label', /'mph'\+\(dirLbl\?\(' '\+dirLbl\):''\)/.test(src), true);
+check('NEG: the old gust-tile label is gone with the tile', /max gust'\+\(dirLbl/.test(src), false);
 check('wind chart note guards the label', /'mph'\+\(dirLbl\?\(' '\+dirLbl\):''\)/.test(src), true);
 check('the gauge shows no arrow at all without a bearing', /var windBadge=\(midDir!=null\)\?windArrowSVG\(midDir,wc\.color,3\):''/.test(src), true);
 

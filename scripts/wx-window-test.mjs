@@ -61,7 +61,7 @@ console.log('\n' + Y + '=== every headline number comes from the ACTIVITY window
 ok('temperature', /var maxTemp=rTemps\.length\?Math\.max\.apply\(null,rTemps\):75;/.test(src));
 ok('precipitation', /var maxPrecip=rPrecip\.length\?Math\.max\.apply\(null,rPrecip\):0;/.test(src));
 ok('gusts', /var maxGust=rGusts\.length\?Math\.max\.apply\(null,rGusts\)/.test(src));
-ok('sustained wind', /Math\.round\(rWind\.length\?Math\.max\.apply\(null,rWind\):0\)/.test(src));
+ok('sustained wind', /var avgWind=rWind\.length\?Math\.round\(rWind\.reduce\(/.test(src));
 ok('wind direction', /var midDir=rDir\.length\?rDir\[Math\.floor\(rDir\.length\/2\)\]:null;/.test(src));
 // NEG: none of them may read the padded chart series any more. Scoped to the GAUGE BLOCK - the
 // chart's own axis bounds (suggestedMax) legitimately read the chart series, and a file-wide regex
@@ -86,6 +86,40 @@ ok('NEG: the bare "peak temp" label is gone', !/>peak temp</.test(src));
 ok('the climb is shown as a secondary line', /&deg; by '\+peakLbl/.test(src));
 ok('...suppressed under 3 degrees', /var tempClimbs=\(startTemp!=null && \(maxTemp-startTemp\)>=3\);/.test(src));
 ok('rain is labelled as during the run', /max rain, during run/.test(src));
+
+console.log('\n' + Y + '=== wind gets a representative number, not two extremes ===' + X);
+{
+  // The row spent two of its four tiles on wind MAXIMA - max gust and max sustained - and printed no
+  // figure for the wind actually ridden in, while Temperature gave one clear number for the same
+  // window. Max sustained was the one worth losing: neither the worst case (the gust) nor the
+  // typical one. Same shape as the temperature tile now: representative headline, extreme demoted to
+  // an arrow sub-line, and the sub-line gated so it only appears when it says something new.
+  ok('the average is a MEAN over the ride window, not a max',
+     /var avgWind=rWind\.length\?Math\.round\(rWind\.reduce\(function\(a,b\)\{ return a\+b; \},0\)\/rWind\.length\):0;/.test(src));
+  ok('NEG: the max-sustained tile is gone', !/>max sustained</.test(src));
+  ok('NEG: and gust is no longer a headline tile of its own', !/>max gust'\+\(dirLbl/.test(src));
+  ok('the headline is the average, carrying the bearing', /'\+avgWind\+'mph'\+\(dirLbl\?\(' '\+dirLbl\):''\)/.test(src));
+  ok('...labelled during the run, like rain', /avg wind, during run/.test(src));
+  ok('the gust survives as an arrow sub-line, like the temperature peak', /&rarr; gusts to '\+Math\.round\(maxGust\)/.test(src));
+  ok('...gated so it is not the same number twice', /var gustWorthSaying=\(\(maxGust-avgWind\)>=4 \|\| maxGust>=25\);/.test(src));
+  ok('...and the tile honours that gate', /\(gustWorthSaying\?\(/.test(src));
+
+  // Exercise the gate, because "when does this line appear" is the whole design decision and a
+  // regex only proves the expression is present, not that it behaves.
+  const worth = (avg, gust) => ((gust - avg) >= 4 || gust >= 25);
+  ok('a gust close to the average is not printed twice', !worth(12, 14));
+  ok('a gust meaningfully above it is printed', worth(12, 18));
+  // THE SAFETY CASE, and the reason this is not a bare delta gate: 25mph is the planner's own
+  // "Dangerous gusts" alert threshold, so a gust that would raise an alert must never be rounded
+  // away just because the average happens to sit close underneath it.
+  ok('a DANGEROUS gust is printed even when it sits close to the average', worth(23, 25));
+  ok('...and the alert threshold the gate borrows still exists',
+     /findWindows\(function\(i\)\{ return \(hourly\.windgusts_10m\[i\]\|\|0\)>=25; \}\)/.test(src));
+  // Empty-window safety: no samples must yield 0, never NaN printed as a headline.
+  const avgOf = (a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0);
+  ok('an empty window yields 0, not NaN', avgOf([]) === 0);
+  ok('the mean is a real mean', avgOf([10, 12, 20]) === 14);
+}
 
 console.log('\n' + Y + '=== clock labels come from the sample index ===' + X);
 {
