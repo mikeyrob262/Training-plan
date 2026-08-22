@@ -41563,6 +41563,19 @@ function openDesktopRideDetail(idx, _noFetch){
       '</div>'+
 
       // 4 METRIC CARDS
+      //
+      // ONE DEMOTION SIGNAL, NOT THREE. Each card carries a headline and one or two companions, and
+      // the companion used to be pushed back by size AND weight AND colour at once - 20px/700/--d-t1
+      // against 14px/600/--d-t3. Three signals stacked read as a footnote rather than a peer, so Max
+      // looked like an afterthought next to Avg even when it is the more interesting number: 30.7 mph
+      // against a 19.2 average, 474W against 147. That was tolerable while Max was usually blank; now
+      // that the backfill populates it on the whole Strava library it is a real stat being whispered.
+      //
+      // The companion is now demoted by SIZE ALONE (17px), keeping weight 700 and lifting the colour
+      // to --d-t2. The card still has an obvious focal point - which is why this is not levelled to
+      // full equality, since Power would otherwise present three identical numbers with nothing to
+      // read first - but the companion is legible as data rather than as a caption. No height change:
+      // 17px sits inside the existing baseline row.
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid var(--d-line);background:var(--d-deep)">'+
 
         '<div style="padding:12px 14px;border-right:1px solid var(--d-line)">'+
@@ -41571,8 +41584,8 @@ function openDesktopRideDetail(idx, _noFetch){
             '<span style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.1em">Power</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
             '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">NP</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg</div></div>'+
+            '<div><div style="font-size:17px;font-weight:700;color:var(--d-t2)">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:17px;font-weight:700;color:var(--d-t2)">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg</div></div>'+
           '</div>'+
           spark(r.chartPwr,'#FC4C02')+
         '</div>'+
@@ -41583,7 +41596,7 @@ function openDesktopRideDetail(idx, _noFetch){
             '<span style="font-size:9px;font-weight:700;color:var(--c-red);text-transform:uppercase;letter-spacing:.1em">Heart Rate</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
             '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">bpm Avg</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:17px;font-weight:700;color:var(--d-t2)">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
           '</div>'+
           spark(r.chartHR,'#E24B4A')+
         '</div>'+
@@ -41594,7 +41607,7 @@ function openDesktopRideDetail(idx, _noFetch){
             '<span style="font-size:9px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.1em">Cadence</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
             '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">rpm Avg</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:17px;font-weight:700;color:var(--d-t2)">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
           '</div>'+
           spark(r.chartCad||null,'#A78BFA')+
         '</div>'+
@@ -41605,7 +41618,7 @@ function openDesktopRideDetail(idx, _noFetch){
             '<span style="font-size:9px;font-weight:700;color:var(--c-blue);text-transform:uppercase;letter-spacing:.1em">Speed</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
             '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg mph</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max mph</div></div>'+
+            '<div><div style="font-size:17px;font-weight:700;color:var(--d-t2)">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max mph</div></div>'+
           '</div>'+
           spark(null,'#60A5FA')+
         '</div>'+
