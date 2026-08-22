@@ -36,7 +36,8 @@ ok('...on the NORMALISED date, not the raw argument', /_stampedRxFor_\(dk,/.test
 ok('...for the intent that was actually adjudicated', /_stampedRxFor_\(dk, ?pick\.intent\)/.test(SRC));
 ok('...guarded, so a missing helper cannot throw the whole prescription away', /typeof _stampedRxFor_==='function'/.test(SRC));
 ok('the stamp overrides both edges of the band', /if\(_stamp\)\{ ?t\.powerLo=_stamp\.lo; ?t\.powerHi=_stamp\.hi; ?\}/.test(SRC));
-ok('the stamp is disclosed on the result, not applied invisibly', /stampedRx:\(_stamp\?\{ ?lo:_stamp\.lo, ?hi:_stamp\.hi, ?ftp:_stamp\.ftp ?\}:null\)/.test(SRC));
+ok('the stamp is disclosed on the result, not applied invisibly',
+   /stampedRx:\(_stamp\?\{ ?lo:_stamp\.lo, ?hi:_stamp\.hi, ?ftp:_stamp\.ftp,/.test(SRC));
 
 console.log('\n' + Y + '=== it is applied where it cannot be undone ===' + X);
 {
@@ -89,6 +90,28 @@ console.log('\n' + Y + '=== the real parser, exercised ===' + X);
   ok('NEG: a malformed stamp is refused rather than half-read', (sessions = [{ intent:'vo2', zwoRx:'201220183' }], _stampedRxFor_('2026-08-18','vo2') === null));
   ok('NEG: an inverted band is refused', (sessions = [{ intent:'vo2', zwoRx:'220-201@183' }], _stampedRxFor_('2026-08-18','vo2') === null));
   ok('NEG: no date and no intent are both refused', _stampedRxFor_('', 'vo2') === null && _stampedRxFor_('2026-08-18','') === null);
+}
+
+console.log('\n' + Y + '=== the coach can EXPLAIN the band, not only state it ===' + X);
+{
+  // Getting the number right was the first half. The second is that the coach could not say WHY it
+  // differed from the plan band on screen beside it, because the pre-stamp band was discarded at the
+  // resolver. Stating the right figure with no account of the difference reads as self-contradiction.
+  ok('the resolver captures the date-priced band BEFORE the stamp overwrites it',
+     /var _stamp=null, ?_derivedLo=t\.powerLo, ?_derivedHi=t\.powerHi;/.test(SRC));
+  ok('...and carries it on the stamp', /derivedLo:_derivedLo, ?derivedHi:_derivedHi/.test(SRC));
+  ok('...with a flag for whether the two actually differ', /differs:\(_derivedLo!=null && _derivedHi!=null/.test(SRC));
+  ok('_smurkelContext_ passes the stamp into the coach context', /stampedRx:_drx\.stampedRx\|\|null/.test(SRC));
+  ok('_smurkelFacts_ states the provenance', /that band is from the \.zwo FILE issued for this day/.test(SRC));
+  ok('...names the FTP the file was built at', /built at FTP '\+C\.rx\.stampedRx\.ftp/.test(SRC));
+  ok('...and what the plan says instead', /The plan now prices the same session at '/.test(SRC));
+  ok('gated on a REAL difference, so an ordinary day gains no noise',
+     /if\(C\.rx\.stampedRx && C\.rx\.stampedRx\.differs\)\{/.test(SRC));
+  // Exercise the gate rather than trusting the regex: identical bands must stay silent.
+  const differs = (dLo, dHi, sLo, sHi) => (dLo != null && dHi != null && (dLo !== sLo || dHi !== sHi));
+  ok('a stamp matching the plan says nothing', !differs(209, 228, 209, 228));
+  ok('the Aug 18 case does speak up', differs(209, 228, 201, 220));
+  ok('NEG: a day with no derived band cannot claim a difference', !differs(null, null, 201, 220));
 }
 
 console.log('\n' + Y + '=== the reported session, end to end ===' + X);

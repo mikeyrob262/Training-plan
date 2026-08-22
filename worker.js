@@ -33628,7 +33628,13 @@ function _smurkelContext_(dateKey, ride){
       var _drx=_sessionRxFor_(dateKey, ride||null);
       if(_drx) C.rx={ name:_drx.name, intent:_drx.intent, lo:_drx.lo, hi:_drx.hi, zone:_drx.zone,
                       rules:_drx.rules, hrLo:null, hrHi:null, hrCap:_drx.hrCap,
-                      durationMin:_drx.durationMin, struct:_drx.struct||'', via:_drx.via };
+                      durationMin:_drx.durationMin, struct:_drx.struct||'', via:_drx.via,
+                      // Carried so the coach can EXPLAIN the band rather than only state it. When a
+                      // .zwo was issued for the day its band outranks the plan's, and the two can
+                      // disagree by a lot once FTP moves - on 2026-08-18 the file said 201-220W and
+                      // the plan had moved to 209-228W. Stating the right number without being able
+                      // to say where it came from reads as the coach contradicting the screen.
+                      stampedRx:_drx.stampedRx||null };
     }
   }catch(e){}
   try{
@@ -33945,6 +33951,20 @@ function _smurkelFacts_(C){
   if(C.rx){
     L.push('TODAY: '+C.rx.name+(C.rx.lo!=null&&C.rx.hi!=null?(', target band '+C.rx.lo+'-'+C.rx.hi+'W'):', no specific power band')
       +(C.rx.zone?(' ('+C.rx.zone+')'):'')+'.');
+    // WHERE THAT BAND CAME FROM, but only when it is a live question. A .zwo issued for the day
+    // outranks the plan — it is the workout he was actually handed and rode in ERG — and once FTP
+    // moves afterwards the two disagree: on 2026-08-18 the file was built at FTP 183 and targeted
+    // 201-220W while the plan had moved to 209-228W. Stating the right number with no account of
+    // the difference reads as the coach contradicting the band on screen beside it. Emitted ONLY
+    // when a stamp exists AND the two actually differ, so an ordinary day gains no noise.
+    // FACTS ONLY, as everywhere in this builder: the numbers and their provenance, no instruction
+    // about how to phrase it — that is the coach's job, in the coach's own words.
+    if(C.rx.stampedRx && C.rx.stampedRx.differs){
+      L.push('  that band is from the .zwo FILE issued for this day, built at FTP '+C.rx.stampedRx.ftp
+        +' and targeting '+C.rx.stampedRx.lo+'-'+C.rx.stampedRx.hi+'W. The plan now prices the same session at '
+        +C.rx.stampedRx.derivedLo+'-'+C.rx.stampedRx.derivedHi+'W, because FTP changed after the file was built.'
+        +' He rode the FILE, so the file is what he is judged against — the plan band is not a miss on his part.');
+    }
     // The HR band is the whole prescription on a run, so it is stated as its own line rather than
     // buried — and the ceiling is called a ceiling, because that is how it is meant to be judged.
     if(C.rx.hrLo!=null && C.rx.hrHi!=null) L.push('  HR band to hold: '+C.rx.hrLo+'-'+C.rx.hrHi+' bpm.');
@@ -42717,13 +42737,20 @@ function _sessionRxFor_(dateKey, ride){
   //
   // MUST stay below the targets merge: applied above it, pick.targets would overwrite the stamp and
   // the bug would survive its own fix. rx-stamp-prose-test.mjs pins that order.
-  var _stamp=null;
+  // The date-priced band is captured BEFORE the stamp overwrites it. Not bookkeeping: it is the only
+  // way a surface can explain WHY the number it prints disagrees with the plan shown next to it.
+  // Without it the coach can state the right band and still sound like it is contradicting itself.
+  var _stamp=null, _derivedLo=t.powerLo, _derivedHi=t.powerHi;
   try{ if(!isRun && typeof _stampedRxFor_==='function') _stamp=_stampedRxFor_(dk, pick.intent); }catch(e){}
   if(_stamp){ t.powerLo=_stamp.lo; t.powerHi=_stamp.hi; }
   return {
     // The stamp, carried so a surface can SAY the band came from the issued file rather than
-    // silently printing a number that disagrees with the plan on screen next to it.
-    stampedRx:(_stamp?{ lo:_stamp.lo, hi:_stamp.hi, ftp:_stamp.ftp }:null),
+    // silently printing a number that disagrees with the plan on screen next to it. derivedLo/Hi are
+    // what the date-priced band WOULD have been, so the difference can be named rather than implied.
+    stampedRx:(_stamp?{ lo:_stamp.lo, hi:_stamp.hi, ftp:_stamp.ftp,
+                        derivedLo:_derivedLo, derivedHi:_derivedHi,
+                        differs:(_derivedLo!=null && _derivedHi!=null
+                                 && (_derivedLo!==_stamp.lo || _derivedHi!==_stamp.hi)) }:null),
     intent:pick.intent, name:def.name||pick.intent,
     // WATTS ARE DROPPED ENTIRELY ON A RUN. Running power is not comparable to cycling FTP, so a
     // band derived from pctFtp is meaningless here — and suppressing it at the resolver rather than
