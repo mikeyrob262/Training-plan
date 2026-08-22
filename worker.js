@@ -624,8 +624,17 @@ window.parseFitFile = function(arrayBuffer, callback) {
         if (s.sub_sport != null) result.subSport = String(s.sub_sport);
 
         // Per-second record stream -> GPS + power curve + chart streams
-        var eleStream = [], hrStream = [];
+        // SPEED IS COLLECTED HERE NOW. FIT records carry it as enhanced_speed (or speed) in m/s, so
+        // the maximum below is a real measurement rather than something reconstructed from distance
+        // deltas. It has to happen at import: the per-record array exists only here, and only the
+        // decimated chart survives into storage - a max taken from that would understate a spiky
+        // signal like speed badly.
+        var eleStream = [], hrStream = [], spdStream = [];
         records.forEach(function(r) {
+          var _sp = r.enhanced_speed != null ? r.enhanced_speed : r.speed;
+          // 50 m/s (~112 mph) is the same sanity cap fetchStravaStreams_ applies, so a corrupt
+          // sample cannot become a headline number.
+          if (_sp != null && _sp >= 0 && _sp < 50) spdStream.push(_sp);
           if (r.position_lat != null && r.position_long != null) {
             var lat = r.position_lat, lon = r.position_long;
             if (lat !== 0 && lon !== 0 && lat > -90 && lat < 90) {
@@ -684,6 +693,21 @@ window.parseFitFile = function(arrayBuffer, callback) {
         result.chartEle = dsChart(eleStream, 200);
         result.chartPwr = dsChart(result.pwrStream, 200);
         result.chartHR  = dsChart(hrStream, 200);
+        result.chartSpd = dsChart(spdStream.map(function(v){ return Math.round(v*2.23694*10)/10; }), 200); // m/s -> mph
+
+        // THE MAXES, IN THE UNITS EVERY READER ALREADY ASSUMES. A FIT import previously wrote neither,
+        // so Max Speed and Max Elevation read "--" on every one of these rides forever - the Strava
+        // backfill cannot reach them because they carry no stravaId and there is no stream to ask for.
+        //
+        // UNITS ARE THE TRAP HERE, and this file has paid for it before (a metre/foot slip leaves an
+        // exact 3.28084 ratio behind). eleStream is ALREADY FEET - converted at the push above - so it
+        // must NOT be converted again. spdStream is m/s and must be. maxSpeed is stored in MPH, which
+        // matters more than it looks: the ride-detail card decides whether it is holding mph or m/s by
+        // testing whether the value exceeds 10, so a 9 m/s max stored raw would render as "9.0 mph".
+        // Both match fetchStravaStreams_ exactly, so the field means one thing whatever imported it.
+        var _maxOfArr = function(arr){ var m=0; for(var i=0;i<arr.length;i++){ var v=arr[i]; if(v!=null && v>m) m=v; } return m||null; };
+        if (spdStream.length) { var _ms = _maxOfArr(spdStream); if (_ms) result.maxSpeed = Math.round(_ms*2.23694*10)/10; }
+        if (eleStream.length) { var _me = _maxOfArr(eleStream); if (_me) result.maxElev = _me; }   // already feet
 
         // Run HR-zone distribution from record HR. Bands come from runHrZonePcts_ - the ONE
         // reference both import paths read - rather than from numbers written into this file.
@@ -16737,6 +16761,30 @@ function importRideFile(input){
 
           var elevM = parseFloat(getCol(row,'total_elevation_gain'))||0;
           var elevFt = Math.round(elevM*3.2808);
+          // MAX SPEED AND HIGH POINT, which this import never read - so every intervals ride showed
+          // "--" for both, permanently: they carry no stravaId, so the Strava stream backfill can
+          // never reach them, and no per-point series is stored to derive from later.
+          //
+          // Column names are tried in order because this export follows Strava's activity model for
+          // the non-icu_ fields (it is where average_heartrate, max_heartrate and
+          // total_elevation_gain above come from) but the elevation high point has been spelled more
+          // than one way. A column that is absent simply yields null and the field stays unset, which
+          // is the honest outcome - better a blank than a fabricated maximum.
+          var _firstCol = function(names){
+            for(var i=0;i<names.length;i++){
+              var v = parseFloat(getCol(row,names[i]));
+              if(isFinite(v) && v>0) return v;
+            }
+            return null;
+          };
+          // m/s -> mph and m -> ft, matching fetchStravaStreams_ and the FIT importer so the stored
+          // field means the same thing whatever route the ride arrived by.
+          var _maxSpdMs = _firstCol(['max_speed','icu_max_speed']);
+          var _maxSpdMph = (_maxSpdMs!=null && _maxSpdMs<50) ? Math.round(_maxSpdMs*2.23694*10)/10 : null;
+          var _avgSpdMs = _firstCol(['average_speed','icu_average_speed']);
+          var _avgSpdMph = (_avgSpdMs!=null && _avgSpdMs<50) ? Math.round(_avgSpdMs*2.23694*10)/10 : null;
+          var _highM = _firstCol(['elev_high','elevation_high','icu_elevation_high','max_altitude']);
+          var _highFt = (_highM!=null) ? Math.round(_highM*3.2808) : null;
 
           var dateRaw = getCol(row,'start_date_local');
           var dateParts = dateRaw.split('T')[0];
@@ -16780,6 +16828,11 @@ function importRideFile(input){
             maxHR: parseInt(getCol(row,'max_heartrate'))||0,
             calories: parseInt(getCol(row,'calories'))||0,
             elev: elevFt,
+            // Omitted entirely when the column is absent, rather than written as 0: a stored 0 reads
+            // as "measured, and it was zero", and every downstream presence test here uses ==null.
+            maxSpeed: _maxSpdMph,
+            avgSpeed: _avgSpdMph,
+            maxElev: _highFt,
             cadence: Math.round(parseFloat(getCol(row,'average_cadence'))||0),
             variability: parseFloat(getCol(row,'icu_variability'))||0,
             efficiency: parseFloat(getCol(row,'icu_efficiency'))||0,

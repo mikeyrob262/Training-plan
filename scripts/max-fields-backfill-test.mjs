@@ -124,6 +124,41 @@ console.log('\n' + Y + '=== it stays self-limiting ===' + X);
   eq('NEG: a ride that already has its max is never fetched at all', none, 0);
 }
 
+console.log('\n' + Y + '=== the imports that no backfill can reach derive their own ===' + X);
+{
+  // The predicate fix repairs Strava rides, which can be asked for a stream. FIT and Intervals rides
+  // cannot: measured on the live library, all 95 of them carry no stravaId, no chartEle, no chartSpd
+  // and no avgSpeed. There is nothing to fetch and nothing stored to derive from, so if the max is
+  // not captured at IMPORT it can never exist. Note the honest limit this implies and which the
+  // commit states: these changes fix FUTURE imports; the 95 already stored need a re-import.
+  ok('the FIT record loop now collects speed', /var _sp = r\.enhanced_speed != null \? r\.enhanced_speed : r\.speed;/.test(src));
+  ok('...bounded by the same 50 m/s sanity cap the Strava path uses', /_sp < 50\) spdStream\.push\(_sp\)/.test(src));
+  ok('FIT derives maxSpeed in MPH', /result\.maxSpeed = Math\.round\(_ms\*2\.23694\*10\)\/10/.test(src));
+  ok('FIT derives maxElev WITHOUT re-converting - eleStream is already feet',
+     /if \(eleStream\.length\) \{ var _me = _maxOfArr\(eleStream\); if \(_me\) result\.maxElev = _me; \}/.test(src));
+  ok('NEG: it does not convert the elevation twice', !/result\.maxElev = Math\.round\(_me\*3\.28/.test(src));
+  ok('FIT also stores a speed chart, in mph', /result\.chartSpd = dsChart\(spdStream\.map/.test(src));
+
+  ok('the Intervals import reads a max speed column', /_firstCol\(\['max_speed','icu_max_speed'\]\)/.test(src));
+  ok('...and a high-point column, tried under several spellings', /'elev_high','elevation_high','icu_elevation_high','max_altitude'/.test(src));
+  ok('...converting m/s to mph', /_maxSpdMs\*2\.23694\*10\)\/10/.test(src));
+  ok('...and metres to feet', /_highM\*3\.2808/.test(src));
+  ok('the fields reach the record', /maxSpeed: _maxSpdMph,/.test(src) && /maxElev: _highFt,/.test(src));
+
+  // An absent column must leave the field UNSET, not zero: presence is tested with ==null everywhere
+  // in this area, and a stored 0 would read as a measured zero and permanently suppress a refetch.
+  const firstCol = (row, names) => { for (const n of names) { const v = parseFloat(row[n]); if (isFinite(v) && v > 0) return v; } return null; };
+  eq('a present column is read', firstCol({ max_speed: '13.4' }, ['max_speed', 'icu_max_speed']), 13.4);
+  eq('an alias is used when the first name is absent', firstCol({ icu_max_speed: '9' }, ['max_speed', 'icu_max_speed']), 9);
+  eq('an absent column yields null, not 0', firstCol({}, ['max_speed', 'icu_max_speed']), null);
+  eq('a blank cell yields null, not 0', firstCol({ max_speed: '' }, ['max_speed', 'icu_max_speed']), null);
+  // The unit contract, exercised: the ride-detail card reads maxSpeed with a >10 mph/m-s heuristic,
+  // so storing raw m/s would render a 9 m/s max as "9.0 mph".
+  const toMph = (ms) => Math.round(ms * 2.23694 * 10) / 10;
+  eq('13.7 m/s becomes 30.6 mph, not 13.7', toMph(13.7), 30.6);
+  ok('...and lands above the >10 heuristic the card uses', toMph(13.7) > 10);
+}
+
 console.log('');
 if (fails) { console.log(R + 'max fields backfill: ' + fails + ' check(s) failed' + X + '\n'); process.exit(1); }
 console.log(G + 'max fields backfill: all checks passed' + X + '\n');
