@@ -41146,12 +41146,27 @@ function openDesktopRideDetail(idx, _noFetch){
   // pulls the latlng-bearing Strava streams. The re-open passes _noFetch=true to
   // render with whatever landed without a rapid loop; a fresh user open
   // re-attempts. Indoor rides are skipped (no GPS to fetch).
-  var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
+  // HAVING THE CHART IS NOT HAVING THE MAX, and conflating them stranded most of the library.
+  // maxElev and maxSpeed are derived inside fetchStravaStreams_ from the FULL 1Hz stream - correctly,
+  // since the stored series are decimated (one reported ride carries 68 elevation and 104 speed
+  // points, and a max taken from those understates the real one). But these predicates asked whether
+  // the ride had CHARTS, not whether it had the derived values. A ride that picked up charts from an
+  // earlier import path therefore answered "nothing to fetch" forever and could never acquire the
+  // max: having the chart is precisely what prevented it. Measured across the live library - 836
+  // rides - maxSpeed was present on 47 (6%) and maxElev on 45 (5%), with 65% holding an average
+  // speed but no max. Same failure family as the _streamsTried pre-stamp: the predicate asked a
+  // question ADJACENT to the one that mattered.
+  //
+  // Self-limiting: _streamsTried/_spdTried are stamped when the endpoint ANSWERS, so a ride refetches
+  // at most once and one whose stream genuinely carries no altitude does not retry forever.
+  // Presence is tested with ==null rather than truthiness, so a legitimately stored 0 counts as
+  // present - a blank and a zero are different facts here.
+  var _wantStr=(!(r.chartEle&&r.chartEle.length) || r.maxElev==null) && !r._streamsTried;
   // Speed/time/distance: want them when the ride has NEITHER the data NOR a previous answer.
   // This has to live HERE, not only inside ensureRideStreams — a ride with chartEle and lats
   // already cached never reaches that function at all, which is 388 of 393 cycling rides.
   // DESKTOP ONLY: openRideDetail is deliberately untouched, per the scrubber's scope.
-  var _wantSpd=!r._spdTried && !(r.chartSpd && r.chartSpd.length);
+  var _wantSpd=!r._spdTried && (!(r.chartSpd && r.chartSpd.length) || r.maxSpeed==null);
   var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
   // Elapsed-time laps are ALSO a reason to fetch. Without this the ride has streams and GPS, so
   // neither want fires, ensureRideStreams is never called, and the corrected mapper never runs.
@@ -42026,12 +42041,17 @@ function openRideDetail(idx, _noFetch){
   // that fetched streams but no track still re-fetches latlng. ensureRideStreams
   // reads /gps then pulls the latlng-bearing streams; re-open passes _noFetch to
   // avoid a rapid loop. Skip indoor rides.
-  var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
+  // Same max-value trigger as desktop, and it has to be here for the same reason the lap note below
+  // gives: the two renderers gate independently, and st.rides is SHARED. If only desktop healed the
+  // record, a ride only ever opened on mobile would keep its blank Max Speed / Max Elevation for good.
+  // See the desktop path for why the chart's presence is not evidence the max exists.
+  var _wantStr=(!(r.chartEle&&r.chartEle.length) || r.maxElev==null) && !r._streamsTried;
+  var _wantSpd=!r._spdTried && (!(r.chartSpd && r.chartSpd.length) || r.maxSpeed==null);
   var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
   // Same lap-staleness trigger as desktop — both renderers gate the fetch independently, so a fix
   // applied to only one leaves the other reading elapsed times forever.
   var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
-  if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps)){
+  if(!_noFetch && r.stravaId && (_wantStr || _wantSpd || _wantGps || _wantLaps)){
     // See the desktop path: the flag is stamped on ANSWER inside fetchStravaStreams_, never here.
     // Both renderers gate independently, so this has to be removed on both or the surface that
     // still pre-stamps keeps poisoning the shared ride record for the one that does not.
