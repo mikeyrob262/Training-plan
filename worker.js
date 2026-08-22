@@ -5127,8 +5127,19 @@ function ensureRideStreams(r){
   // the cache is even read, so a ride holding chartEle + lats in memory returned at this line and
   // never reached either the /gps read-back or the second short-circuit — which is why the first
   // two attempts at this fix changed nothing for the 388 rides that needed it.
+  // THE MAX CLAUSES BELONG HERE TOO, for the same reason the speed clause did. Fixing only the
+  // ride-detail predicates changed nothing: those decide whether to CALL this function, and this
+  // gate then decided there was nothing to do. The reported ride satisfied every condition above -
+  // chartEle 68, lats 114, chartSpd 104, laps fine - and returned on this line without a request,
+  // so its blank Max Speed and Max Elevation survived the fix intended to repair them. That is the
+  // third time this shape has bitten: caller and callee both gate, and both have to learn the reason.
+  //
+  // GATED ON THE TRIED FLAG, not on the data, exactly as the note below insists. A ride whose Strava
+  // stream genuinely carries no altitude or velocity must not re-fetch forever, so presence of the
+  // max is only one way to be complete - having ASKED is the other, and it is stamped on answer.
   if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)
-     && (r._spdTried || (r.chartSpd && r.chartSpd.length))
+     && (r._streamsTried || r.maxElev!=null)
+     && (r._spdTried || (r.chartSpd && r.chartSpd.length && r.maxSpeed!=null))
      && !lapsNeedMovingFix_(r)) return Promise.resolve(r);
   // Downsample to n points for charts; compute maxes on the FULL-res stream.
   function ds(arr,n){ if(!arr||arr.length<2) return null; if(arr.length<=n) return arr.slice(); var s=Math.ceil(arr.length/n),o=[]; for(var i=0;i<arr.length;i+=s) o.push(arr[i]); return o; }
@@ -5161,8 +5172,12 @@ function ensureRideStreams(r){
     // streams endpoint ANSWERS (whether or not it carried speed), so each ride re-fetches exactly
     // once and then short-circuits permanently. It also covers chartDist: one fetch writes both, so
     // distance needs no second condition.
+    // Same max clauses as the pre-cache gate above, and for the same reason: the /gps cache can
+    // restore chartEle and chartSpd without ever carrying the scalar maxes, so a ride could pass
+    // this point on cached charts alone and still have nothing to show for Max Speed.
     if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)
-       && (r._spdTried || (r.chartSpd && r.chartSpd.length))
+       && (r._streamsTried || r.maxElev!=null)
+       && (r._spdTried || (r.chartSpd && r.chartSpd.length && r.maxSpeed!=null))
        && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });

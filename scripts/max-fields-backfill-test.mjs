@@ -46,6 +46,33 @@ console.log('\n' + Y + '=== the predicate asks about the MAX, not only the chart
   ok('the mobile renderer actually acts on the speed want', /\(_wantStr \|\| _wantSpd \|\| _wantGps \|\| _wantLaps\)/.test(src));
 }
 
+console.log('\n' + Y + '=== ensureRideStreams learned the same reason ===' + X);
+{
+  // THE FIRST CUT OF THIS FIX CHANGED NOTHING ON THE REPORTED RIDE, and the unit tests were green.
+  // The predicates above decide whether to CALL ensureRideStreams; ensureRideStreams then has its
+  // OWN short-circuit, and that gate still asked only about charts. The ride satisfied every
+  // condition - chartEle 68, lats 114, chartSpd 104, laps fine - and returned without a request.
+  // Caller and callee both gate, so both have to learn the reason. Verified end to end against the
+  // live app afterwards, not inferred from the suite passing.
+  const gates = (src.match(/&& \(r\._streamsTried \|\| r\.maxElev!=null\)\s*\n\s*&& \(r\._spdTried \|\| \(r\.chartSpd && r\.chartSpd\.length && r\.maxSpeed!=null\)\)/g) || []).length;
+  eq('BOTH short-circuits in ensureRideStreams check the maxes', gates, 2);
+  ok('NEG: neither gate is chart-only any more',
+     !/&& \(r\._spdTried \|\| \(r\.chartSpd && r\.chartSpd\.length\)\)\s*\n\s*&& !lapsNeedMovingFix_/.test(src));
+  // The gate must stay keyed on the TRIED flag, or a ride whose stream genuinely carries no altitude
+  // or velocity re-fetches on every open forever - the guard-on-attempt mistake this file has already
+  // paid for twice via _gpsTried.
+  const complete = (r) => !!((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)
+    && (r._streamsTried || r.maxElev != null)
+    && (r._spdTried || (r.chartSpd && r.chartSpd.length && r.maxSpeed != null)));
+  const base = { chartEle: [1], lats: [1], chartSpd: [1] };
+  ok('the reported shape is INCOMPLETE, so it fetches', !complete({ ...base, maxElev: null, maxSpeed: null }));
+  ok('...and complete once the maxes land', complete({ ...base, maxElev: 812, maxSpeed: 31.4 }));
+  ok('a stream that answered but carried no altitude is complete, not a forever-refetch',
+     complete({ ...base, maxElev: null, maxSpeed: null, _streamsTried: true, _spdTried: true }));
+  ok('NEG: missing charts still fetch regardless of the maxes',
+     !complete({ lats: [1], maxElev: 812, maxSpeed: 31.4, _streamsTried: true, _spdTried: true }));
+}
+
 console.log('\n' + Y + '=== presence is ==null, not truthiness ===' + X);
 {
   // A stored 0 is a value; a missing field is not. Truthiness cannot tell them apart, and this app
