@@ -39991,6 +39991,21 @@ function _ptVerdict_(d, rangeKey){
 }
 // The interpretive line. Says what the number MEANS, and only claims a comparison it can support -
 // "strongest in N days" is asserted only when the series actually reaches back that far.
+// A DIVERGENCE IS A FINDING, NOT A CONTRADICTION - but only if something says so. Training rate can
+// climb while output does not: that is a real and common state (more volume, less top-end sharpness,
+// or fitness banked but not yet expressed). The card used to leave the reader to reconcile an up
+// arrow and a wall of down arrows unaided, which reads as a bug in the app rather than a fact about
+// the athlete. Returns null when both halves point the same way and there is nothing to reconcile.
+function _ptDiverge_(d, f){
+  if(!d || !f || !f.haveBoth) return null;
+  if(!f.causes.length || !f.outcomes.length) return null;
+  var mean=function(a){ var s=0; a.forEach(function(x){ s+=x.pct; }); return s/a.length; };
+  var c=mean(f.causes), o=mean(f.outcomes);
+  if(Math.abs(c)<3 && Math.abs(o)<3) return null;
+  if(c>=3 && o<=-3) return 'Training load is up while output is not - either the work has not surfaced yet, or volume is crowding out sharpness.';
+  if(c<=-3 && o>=3) return 'You are riding less but performing better - form is holding on less work, which is what a taper looks like.';
+  return null;
+}
 function _ptInsight_(d, w){
   if(!d) return 'Ride more and this will fill in - a trajectory needs a few weeks of history behind it.';
   var span=(w.days>0?w.days:(w.all.length||0));
@@ -40008,57 +40023,93 @@ function _ptInsight_(d, w){
   }catch(e){}
   return s;
 }
-// WHAT IS DRIVING IT, from metrics that actually exist.
+// TWO PANELS, BECAUSE THERE ARE TWO QUESTIONS - and the first cut of this card conflated them into
+// one and produced a self-contradiction on screen: "Fitness is climbing fast, +29%" printed directly
+// above four red down-arrows, with nothing to explain how both could be true.
 //
-// The design reference named "Climbing Performance" and "HR Efficiency"; neither exists anywhere in
-// this codebase, and inventing two plausible percentages to fill a panel is the exact anti-pattern
-// this app keeps having to undo. These four are real and each is computed the same way: the metric
-// over the window against the SAME metric over the window immediately before it, so the comparison
-// is like-for-like. A factor that cannot be computed for BOTH windows is omitted rather than shown
-// at zero - an absent measurement and no change are different facts.
-function _ptDrivers_(days){
-  var out=[];
+// Three faults, and the deepest one was not the window:
+//
+//  1. CATEGORY. The panel was titled "what is driving it" under a CTL headline and showed 20-minute
+//     power, W/kg and efficiency. Those are OUTCOMES of fitness, not inputs to CTL. CTL is
+//     accumulated training load; what drives it is volume, intensity and frequency. Labelling
+//     outcomes as causes asserts a causal link that does not exist, so the two halves were free to
+//     disagree and the card had no way to say why. Fixing only the window would have produced
+//     something that looked coherent and was still wrong underneath.
+//  2. PEAK-VS-PEAK. It compared the single best effort in one window against the single best in
+//     another. That is dominated by one ride on each side and flips sign on a single good day - not
+//     a trend, and never comparable to a smooth CTL curve.
+//  3. WINDOW. The headline was two-point (CTL then vs CTL now); the panel was two adjacent
+//     aggregate windows. Neither was labelled.
+//
+// So: CAUSES are training-rate metrics over the window against the equally-long window before it.
+// That comparison IS the headline's comparison, because CTL at the window's start was produced by
+// the prior period's training and CTL now by this period's - they cannot contradict by construction.
+// OUTCOMES live in their own panel with their own honest title, measured stably, where a divergence
+// from the causes is a real finding the insight line then states out loud.
+function _ptFactors_(days){
+  var res={ causes:[], outcomes:[], haveBoth:false };
   try{
     var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]);
-    if(!rides || !rides.length) return out;
+    if(!rides || !rides.length) return res;
     var span=(days>0?days:365);
     var now=new Date(); now.setHours(0,0,0,0);
+    var end=new Date(now.getTime()+86400000);
     var cut1=new Date(now); cut1.setDate(cut1.getDate()-span);
     var cut2=new Date(now); cut2.setDate(cut2.getDate()-span*2);
     var inWin=function(r,a,b){ var d=new Date(String(r.date||'').slice(0,10)+'T00:00:00');
       return isFinite(d) && d>=a && d<b; };
     var cur=[], prv=[];
     rides.forEach(function(r){ if(!r||r.deleted) return;
-      if(inWin(r,cut1,new Date(now.getTime()+86400000))) cur.push(r);
-      else if(inWin(r,cut2,cut1)) prv.push(r); });
-    if(!cur.length || !prv.length) return out;
-    var bestPc=function(set,secs){ var m=0; set.forEach(function(r){
-      var pc=r&&r.powerCurve; var v=pc?(+pc[secs]||0):0; if(v>m) m=v; }); return m||null; };
-    var meanOf=function(set,fn){ var s=0,n=0; set.forEach(function(r){ var v=fn(r);
-      if(v!=null && isFinite(v) && v>0){ s+=v; n++; } }); return n?(s/n):null; };
-    var wt=(typeof stWeightLb_==='function')?stWeightLb_():null;
-    var push=function(label,col,a,b,dp){
-      if(a==null || b==null || !(b>0)) return;
-      var pct=Math.round((a-b)/b*100);
-      if(!isFinite(pct)) return;
-      out.push({ label:label, col:col, pct:pct });
+      if(inWin(r,cut1,end)) cur.push(r); else if(inWin(r,cut2,cut1)) prv.push(r); });
+    if(!cur.length || !prv.length) return res;
+    res.haveBoth=true;
+    var weeks=span/7;
+    var pct=function(a,b){ if(a==null||b==null||!(b>0)) return null;
+      var v=Math.round((a-b)/b*100); return isFinite(v)?v:null; };
+    var add=function(arr,label,col,a,b,detail){
+      var p=pct(a,b); if(p==null) return;
+      arr.push({ label:label, col:col, pct:p, detail:detail||'' });
     };
-    push('Sustained Power','#60a5fa', bestPc(cur,1200), bestPc(prv,1200));
-    push('Aerobic Depth','#4ade80',  bestPc(cur,3600), bestPc(prv,3600));
-    if(wt>0){
+    // ---- CAUSES: the rate of training, which is what CTL integrates ----
+    var tssOf=function(r){ return (typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(+r.tss||0); };
+    var sum=function(set,fn){ var s=0; set.forEach(function(r){ s+=(fn(r)||0); }); return s; };
+    var tssC=sum(cur,tssOf)/weeks, tssP=sum(prv,tssOf)/weeks;
+    var rideC=cur.length/weeks,    rideP=prv.length/weeks;
+    var hrC=sum(cur,function(r){ return (+r.movingSecs||0)/3600; })/weeks;
+    var hrP=sum(prv,function(r){ return (+r.movingSecs||0)/3600; })/weeks;
+    add(res.causes,'Weekly TSS','#22c55e', tssC, tssP, Math.round(tssC)+' vs '+Math.round(tssP));
+    add(res.causes,'Rides / week','#60a5fa', rideC, rideP, (Math.round(rideC*10)/10)+' vs '+(Math.round(rideP*10)/10));
+    add(res.causes,'Hours / week','#a78bfa', hrC, hrP, (Math.round(hrC*10)/10)+' vs '+(Math.round(hrP*10)/10));
+    // ---- OUTCOMES: whether it is showing up in the numbers ----
+    // MEAN OF THE TOP THREE, not the single best. One exceptional ride should not decide whether a
+    // year reads as progress, which is exactly what the max-based version did.
+    var top3=function(set,secs){
+      var v=[]; set.forEach(function(r){ var pc=r&&r.powerCurve; var x=pc?(+pc[secs]||0):0; if(x>0) v.push(x); });
+      if(v.length<3) return null;
+      v.sort(function(a,b){ return b-a; });
+      return (v[0]+v[1]+v[2])/3;
+    };
+    var meanOf=function(set,fn){ var s=0,n=0; set.forEach(function(r){ var x=fn(r);
+      if(x!=null && isFinite(x) && x>0){ s+=x; n++; } }); return n?(s/n):null; };
+    var c20=top3(cur,1200), p20=top3(prv,1200);
+    add(res.outcomes,'Best 20-min power','#60a5fa', c20, p20,
+        (c20!=null&&p20!=null)?(Math.round(c20)+'W vs '+Math.round(p20)+'W'):'');
+    var wt=(typeof stWeightLb_==='function')?stWeightLb_():null;
+    if(wt>0 && c20!=null && p20!=null){
       var kg=wt/2.20462;
-      var c20=bestPc(cur,1200), p20=bestPc(prv,1200);
-      push('W/kg','#f59e0b', c20!=null?(c20/kg):null, p20!=null?(p20/kg):null);
+      add(res.outcomes,'W/kg at 20 min','#f59e0b', c20/kg, p20/kg,
+          (Math.round(c20/kg*100)/100)+' vs '+(Math.round(p20/kg*100)/100));
     }
-    // Aerobic efficiency: speed carried per heartbeat. Documented elsewhere in this file as a REAL
-    // proxy for the question "am I getting more for the same effort", which is what the reference
-    // called HR Efficiency.
-    var eff=function(r){ var mi=parseFloat(r.distance)||0, sec=(r.movingSecs||0);
+    // Speed carried per heartbeat - already a mean, so stable, and the honest version of what the
+    // design reference called "HR Efficiency".
+    var eff=function(r){ var mi=parseFloat(r.distance)||0, sec=(+r.movingSecs||0);
       var hr=parseFloat(r.avgHR)||0; if(!(mi>0&&sec>0&&hr>0)) return null;
       return (mi/(sec/3600))/hr; };
-    push('Aerobic Efficiency','#a78bfa', meanOf(cur,eff), meanOf(prv,eff));
+    add(res.outcomes,'Speed per heartbeat','#4ade80', meanOf(cur,eff), meanOf(prv,eff));
   }catch(e){}
-  return out.slice(0,4);
+  res.causes=res.causes.slice(0,3);
+  res.outcomes=res.outcomes.slice(0,3);
+  return res;
 }
 // The ridge itself. Three layers, deliberately unequal: fitness is a filled area with a bright
 // stroke on top (the skyline), load is a softer fill beneath it, and form is a thin band on the
@@ -40125,18 +40176,42 @@ function _ptCardHTML_(lbl, link){
       +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
   });
 
-  var drivers=_ptDrivers_(w.days);
-  var dHTML='';
-  if(drivers.length){
-    drivers.forEach(function(x){
+  var fact=_ptFactors_(w.days);
+  // EVERY PANEL CARRIES ITS OWN TIMEFRAME, in words, from one shared pair of strings so the two can
+  // never drift apart. The headline is a POINT comparison (fitness now against fitness then); the
+  // panels are PERIOD comparisons (this window against the one before it). Those are different
+  // questions and the card now says which is which instead of stacking them and hoping.
+  var periodTxt=(_ptRange==='ALL')?'vs the first half of your history'
+               :(_ptRange==='1Y'?'vs the previous year':('vs the previous '+w.days+' days'));
+  var rows=function(list){
+    var h='';
+    list.forEach(function(x){
       var up=(x.pct>=0);
-      dHTML+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">'
-        +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3)"><span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'+x.label+'</span>'
-        +'<span style="font-size:11px;font-weight:700;color:'+(up?'#22c55e':'#ef4444')+'">'+(up?'&uarr;':'&darr;')+' '+Math.abs(x.pct)+'%</span></div>';
+      h+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
+        +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
+          +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
+          +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
+        +'<span style="font-size:11px;font-weight:700;color:'+(up?'#22c55e':'#ef4444')+';flex-shrink:0">'+(up?'&uarr;':'&darr;')+' '+Math.abs(x.pct)+'%</span></div>'
+        +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail+'</div>'):'');
     });
+    return h;
+  };
+  var head2=function(t){ return '<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">'+t+'</div>'
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+periodTxt+'</div>'; };
+  var dHTML='';
+  if(fact.causes.length){
+    dHTML+=head2('What is driving it')+rows(fact.causes);
   } else {
     // NOT an empty panel and NOT invented numbers: say which comparison could not be made.
-    dHTML='<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>';
+    dHTML+=head2('What is driving it')
+      +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>';
+  }
+  if(fact.outcomes.length){
+    // A SEPARATE QUESTION, SEPARATELY TITLED. These are outcomes of fitness, not inputs to it, so
+    // they belong under their own heading - putting them under "what is driving it" claimed a causal
+    // link that does not exist and let the card appear to contradict itself.
+    dHTML+='<div style="height:1px;background:var(--d-edge);margin:9px 0"></div>'
+      +head2('Is it translating')+rows(fact.outcomes);
   }
 
   var inner=lbl('PERFORMANCE TRAJECTORY', toggle);
@@ -40167,7 +40242,11 @@ function _ptCardHTML_(lbl, link){
   // The interpretive line, given its own band so it reads as the coach speaking rather than a caption.
   inner+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
-    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_ptInsight_(d, w)+'</span></div>';
+    // The divergence sentence comes FIRST when there is one: it is the thing the reader is already
+    // puzzling over, and answering it after two paragraphs of trend summary is answering it too late.
+    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'
+      +((_ptDiverge_(d,fact))?('<b style="color:var(--d-t1)">'+_ptDiverge_(d,fact)+'</b> '):'')
+      +_ptInsight_(d, w)+'</span></div>';
   return inner;
 }
 function dsShowDashboard(){
