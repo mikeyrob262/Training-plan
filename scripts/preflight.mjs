@@ -1370,6 +1370,20 @@ try {
     fail('the trajectory card can mislabel outcomes as causes or contradict itself (see above).');
   }
 
+  // STEP 85 - taper awareness. Guards the two things that decay quietly here: the band written into
+  //           the copy drifting from the band used in the comparison, and the milestone date being
+  //           retyped as a constant instead of looked up by slug. Eight places in this file once held
+  //           these dates and a respace orphaned every one keyed on a date string.
+  console.log(`${D}. checking taper awareness...${X}`);
+  try {
+    const so = execSync('node scripts/taper-window-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the taper reminder can quote a band it does not use, or miss a moved test date (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

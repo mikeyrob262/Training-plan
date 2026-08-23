@@ -30925,6 +30925,20 @@ var _BLOCK_MILESTONES=[
   {slug:'ventop', date:'2026-12-12', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
    icon:'M6 21V4 M6 4h11l-2 3.5 2 3.5H6', sTitle:'Ven-Top summit', sSub:'The main event', benefit:'Mission complete'}
 ];
+// ARRIVING FRESH FOR A MEASURED EFFORT. A retest or a benchmark attempt only means anything if the
+// athlete turns up rested enough to express their fitness: a test ridden at form -8 measures fatigue
+// as much as it measures FTP, and this app then prices every training band off that number for weeks
+// afterwards - so a tired test is not one bad afternoon, it is a wrong FTP with a long tail.
+//
+// Standard taper guidance puts the useful arrival window at roughly +5 to +15 TSB: fresh enough to
+// produce, not so rested that sharpness has gone. Named here rather than written into a sentence so
+// the band can be argued with in one place, and so the copy and the comparison cannot drift apart.
+// Fourteen days is the lead-in because that is about when volume decisions start to matter for a
+// test two weeks out; earlier than that the advice is just "keep training".
+var _TAPER_TSB_LO=5, _TAPER_TSB_HI=15, _TAPER_LEAD_D=14;
+// Only efforts the athlete is MEASURED on qualify. 'four-weeks' is a consistency gate, not a ride,
+// and arriving fresh for it means nothing.
+var _TAPER_BENCH_SLUGS={'ftp-retest':1,'chalet':1,'alpe':1,'ventop':1,'tenk':1};
 var _BLOCK_RETEST_YM='2026-10';                // the FTP-retest month — the TSS/zone discontinuity
 var _BLOCK_Z2_HR=135, _BLOCK_THR_W=181, _BLOCK_VO2_FLAT_FT=650;
 // FLATNESS IS A DENSITY, NOT A TOTAL — the VO2 session is prescribed "flat" and the only way to
@@ -39357,6 +39371,43 @@ function dsAttention_(){
   else if(ramp!=null && ramp<=-6 && !inTaper) push(1,'training','Fitness is sliding (CTL down '+Math.abs(ramp)+' per week). You are detraining faster than ideal — get an easy ride in.');
   else if(ramp!=null && ramp<=-6 && inTaper) out.positives.push('Fitness easing on plan — that is the taper, not lost fitness');
   if(wkLast>=150 && wkThis < wkLast*0.5 && !inTaper) push(1,'training','This week is well below last ('+wkThis+' vs '+wkLast+' TSS). If it is not a planned rest week, you are leaving fitness on the table.');
+  // TAPER AWARENESS FOR A MEASURED EFFORT — is form heading into the window that makes the result
+  // mean something? See _TAPER_TSB_LO/HI for why +5 to +15 and not some other band.
+  //
+  // THE DATE COMES FROM THE MILESTONE LIST BY SLUG, never a constant retyped here.
+  // _blockMilestonesEffective_ returns the SLID dates, so a gate that moves with the streak moves
+  // this reminder with it, and every surface still reads one list. Matching on slug rather than on a
+  // date string is the standing rule in this area: eight places once held these dates, and a respace
+  // silently orphaned the ones keyed on the string.
+  try{
+    var _tpMs=(typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(new Date()):[];
+    var _tpToday=new Date(); _tpToday.setHours(0,0,0,0);
+    var _tpNext=null;
+    (_tpMs||[]).forEach(function(m){
+      if(!m || !m.date || !_TAPER_BENCH_SLUGS[m.slug]) return;
+      var dd=Math.round((new Date(m.date+'T00:00:00')-_tpToday)/86400000);
+      if(!(dd>=0) || dd>_TAPER_LEAD_D) return;              // past, or too far out to act on
+      if(!_tpNext || dd<_tpNext.days) _tpNext={ days:dd, label:m.label };
+    });
+    // A RULE WITH NO DATA SKIPS. Without a loaded fitness reading there is no form to judge, and
+    // inventing one to fill the panel is the failure this ladder exists to avoid. getFitness_ is the
+    // single source, so this can never disagree with the readiness ring beside it.
+    if(_tpNext && fit && fit.loaded){
+      var _tpWhen=(_tpNext.days===0?'Today':(_tpNext.days===1?'Tomorrow':(_tpNext.days+' days')));
+      var _tpLead=(_tpNext.days<=1?(_tpWhen+': '+_tpNext.label):(_tpWhen+' to '+_tpNext.label));
+      var _tpF=(tsb>0?'+':'')+tsb;
+      if(tsb<_TAPER_TSB_LO){
+        push(1,'training',_tpLead+' — form is '+_tpF+', under the +'+_TAPER_TSB_LO+' to +'+_TAPER_TSB_HI
+          +' an honest test wants. Easing volume from here arrives fresher; ridden tired it measures fatigue as much as fitness, and the FTP it sets prices your bands for weeks.');
+      } else if(tsb>_TAPER_TSB_HI){
+        push(1,'training',_tpLead+' — form is '+_tpF+', above the +'+_TAPER_TSB_LO+' to +'+_TAPER_TSB_HI
+          +' window. That is rested past sharp; keep a little intensity in the legs so the effort has some snap.');
+      } else {
+        out.positives.push('Form '+_tpF+' is in the window for '+_tpNext.label+(_tpNext.days<=1?'':(' in '+_tpNext.days+' days')));
+      }
+    }
+  }catch(e){}
+
   // Goals — next race + annual mileage pace.
   try{
     var races=(typeof upcomingRaces_==='function')?upcomingRaces_():[];
