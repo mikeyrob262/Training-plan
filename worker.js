@@ -39965,19 +39965,48 @@ function _ptWindow_(key){
   var pts=(days>0 && all.length>days) ? all.slice(-days) : all.slice();
   return { pts:pts, days:days, all:all };
 }
-// Percent change in FITNESS across the window. Guarded against a zero or absent start value: a
-// percentage against nothing is not a large improvement, it is undefined, and printing "+Infinity%"
-// as a training verdict is worse than printing nothing.
+// A PERCENTAGE NEEDS A BASE WORTH DIVIDING BY. Guarding only against zero was not enough: the ALL
+// range reported +2517%, which is not a fitness fact but a division artifact. These records start in
+// 2015 at a CTL of 2.4 and 3,555 of their 4,112 days sit below 15 - the ridge is flat and near zero
+// for a decade because that period contains almost no training, not because fitness was absent in
+// any meaningful sense. Dividing today by 2.4 measures the smallness of the starting point.
+//
+// The floor is 15 because CTL approximates average daily TSS: 15 is about 105 TSS a week, below
+// which somebody is not training consistently and a ratio against them is noise. Below it the
+// percentage is SUPPRESSED rather than rebased - rebasing would silently redefine what "ALL" means,
+// and a range labelled ALL that quietly starts in 2025 is a different lie. Absolute values are shown
+// instead, which lose no information and claim none.
+var _PT_BASE_FLOOR=15;
 function _ptDelta_(pts){
   if(!pts || pts.length<2) return null;
   var a=+pts[0].ctl, b=+pts[pts.length-1].ctl;
-  if(!(a>0) || !isFinite(a) || !isFinite(b)) return null;
-  return { from:Math.round(a), to:Math.round(b), pct:Math.round((b-a)/a*100) };
+  if(!isFinite(a) || !isFinite(b)) return null;
+  var weak=!(a>=_PT_BASE_FLOOR);
+  return { from:Math.round(a*10)/10, to:Math.round(b), weakBase:weak,
+           dir:(b>a?1:(b<a?-1:0)),
+           pct: weak?null:Math.round((b-a)/a*100) };
+}
+// When the base is too low to divide by, the card still needs to know where this history starts
+// being about training. Answers with the first day the series clears the floor, so the insight can
+// say so rather than leaving a decade of flat line unexplained.
+function _ptFirstReal_(all){
+  try{
+    for(var i=0;i<(all||[]).length;i++){ if((+all[i].ctl)>=_PT_BASE_FLOOR) return all[i]; }
+  }catch(e){}
+  return null;
 }
 // The verdict, written from the number rather than chosen from a list of moods. Thresholds are named
 // once here so every range says the same thing about the same magnitude.
 function _ptVerdict_(d, rangeKey){
   if(!d) return { head:'Not enough history yet', dir:'', tone:'flat' };
+  // With no usable base there is no rate to describe, so the verdict speaks in direction rather than
+  // magnitude. "Climbing fast" off a base of 2.4 would be a confident reading of an artifact.
+  if(d.weakBase){
+    return { head:(d.dir>0?'Fitness is far above where these records begin'
+                  :(d.dir<0?'Fitness is below where these records begin':'Fitness is level with where these records begin')),
+             dir:(d.dir>0?'up':(d.dir<0?'down':'flat')),
+             tone:(d.dir>0?'up':(d.dir<0?'down':'flat')) };
+  }
   var p=d.pct;
   var head = p>=15 ? 'Fitness is climbing fast'
            : p>=5  ? 'Fitness is building'
@@ -40024,6 +40053,21 @@ function _ptInsight_(d, w, f){
   var unit=(w.days===0)?'your whole history':(w.days>=365?'a year ago':(span+' days ago'));
   // The STEM carries no terminal punctuation, so it can either close as its own sentence or run on
   // into a clause. That is the whole trick: a divergence continues the fact rather than answering it.
+  // WEAK BASE GETS ITS OWN STEM AND ITS OWN EXPLANATION, and returns early: none of the readings
+  // below mean anything against a starting point of 2.4. The flat decade on the chart is the visible
+  // half of the same fact, so the sentence names when the records start being about training rather
+  // than leaving the reader to wonder what happened for ten years.
+  if(d.weakBase){
+    var fr=_ptFirstReal_(w.all||[]);
+    var when='';
+    if(fr && fr.date){
+      var mo=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      var yy=fr.date.slice(0,4), mm=parseInt(fr.date.slice(5,7),10)-1;
+      if(mo[mm]) when=' Consistent training in these records begins around '+mo[mm]+' '+yy+'.';
+    }
+    return 'Your fitness is '+d.to+' now, against '+d.from+' where these records begin - too low a '
+      +'starting point to turn into a percentage, so this range shows the two numbers instead.'+when;
+  }
   var stem=(d.pct>0?'Your fitness is '+Math.abs(d.pct)+'% higher than '+unit
            : d.pct<0?'Your fitness is '+Math.abs(d.pct)+'% lower than '+unit
            : 'Your fitness is level with '+unit);
@@ -40197,7 +40241,11 @@ function _ptCardHTML_(lbl, link){
             tsb:(f&&f.tsb!=null)?f.tsb:(tail?tail.tsb:null) };
   var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
   var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3)');
-  var pctTxt=d?((d.pct>0?'+':'')+d.pct+'%'):'&mdash;';
+  // ABSOLUTE PAIR WHERE A PERCENTAGE WOULD BE AN ARTIFACT. "2.4 to 63" says everything the ratio
+  // would have, without the false precision of a four-digit percentage.
+  var pctTxt=!d?'&mdash;'
+            :(d.weakBase?(d.from+' &rarr; '+d.to)
+            :((d.pct>0?'+':'')+d.pct+'%'));
   var vsTxt=(_ptRange==='ALL')?'across your whole history'
            :(_ptRange==='1Y'?'vs a year ago':('vs '+(w.days)+' days ago'));
   var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
@@ -40220,8 +40268,12 @@ function _ptCardHTML_(lbl, link){
   // never drift apart. The headline is a POINT comparison (fitness now against fitness then); the
   // panels are PERIOD comparisons (this window against the one before it). Those are different
   // questions and the card now says which is which instead of stacking them and hoping.
-  var periodTxt=(_ptRange==='ALL')?'vs the first half of your history'
-               :(_ptRange==='1Y'?'vs the previous year':('vs the previous '+w.days+' days'));
+  // ALL SAYS "vs the previous year" BECAUSE THAT IS WHAT IT DOES. _ptFactors_ falls back to a
+  // 365-day span when the range carries no day count, so the panels on ALL compare the last year
+  // against the year before it. The old label claimed "vs the first half of your history", which
+  // described a comparison the code has never made - a caption inventing its own arithmetic.
+  var periodTxt=(_ptRange==='ALL'||_ptRange==='1Y')?'vs the previous year'
+               :('vs the previous '+w.days+' days');
   var rows=function(list){
     var h='';
     list.forEach(function(x){

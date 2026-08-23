@@ -117,7 +117,7 @@ console.log('\n' + Y + '=== outcomes are stable, not peak-vs-peak ===' + X);
 }
 
 console.log('\n' + Y + '=== every panel states its own timeframe ===' + X);
-ok('one shared period string builds every panel label', /var periodTxt=\(_ptRange==='ALL'\)/.test(src));
+ok('one shared period string builds every panel label', /var periodTxt=\(_ptRange==='ALL'\|\|_ptRange==='1Y'\)/.test(src));
 ok('...and the heading helper always prints it', /head2=function\(t\)\{[\s\S]{0,400}periodTxt/.test(src));
 ok('the headline keeps its own POINT-comparison wording', /var vsTxt=\(_ptRange==='ALL'\)/.test(src));
 ok('the two strings are different, because the two comparisons are',
@@ -186,6 +186,61 @@ console.log('\n' + Y + '=== an omission is stated, not left as a gap ===' + X);
   eq('singular agreement', verb(1), ' needs');
   eq('plural agreement', verb(2), ' need');
 }
+
+console.log('\n' + Y + '=== a percentage needs a base worth dividing by ===' + X);
+{
+  // ALL reported +2517%. Not a fitness fact - a division artifact. These records begin in 2015 at a
+  // CTL of 2.4 and 3,555 of their 4,112 days sit below 15, so the ridge is flat and near zero for a
+  // decade because that period holds almost no training. Dividing today by 2.4 measures the smallness
+  // of the starting point. The old guard rejected only a base of zero, which 2.4 clears.
+  ok('a floor is declared, not buried in an expression', /var _PT_BASE_FLOOR=15;/.test(src));
+  ok('the delta flags a weak base rather than dividing anyway', /var weak=!\(a>=_PT_BASE_FLOOR\);/.test(src));
+  ok('...and returns null for the percentage in that case', /pct: weak\?null:Math\.round\(\(b-a\)\/a\*100\)/.test(src));
+  ok('NEG: the old zero-only guard is gone', !/if\(!\(a>0\) \|\| !isFinite\(a\)/.test(src));
+  ok('the headline shows the absolute pair instead', /d\.weakBase\?\(d\.from\+' &rarr; '\+d\.to\)/.test(src));
+  ok('the verdict stops claiming a rate', /Fitness is far above where these records begin/.test(src));
+  ok('the insight explains the flat stretch', /too low a[\s\S]{0,40}starting point to turn into a percentage/.test(src));
+  ok('...and names when real training starts', /Consistent training in these records begins around/.test(src));
+  // NOT REBASED - ALL still means all. Asserted on the code rather than on the word: the first cut
+  // of this check was !/rebase/i over the source, which matches "Firebase" and so could never fail.
+  // The real guarantee is that the delta still reads the FIRST point of the window, never a scanned
+  // "first meaningful day" - rebasing would make a range labelled ALL quietly start in 2025.
+  ok('the delta still reads pts[0], not a chosen start', /var a=\+pts\[0\]\.ctl, b=\+pts\[pts\.length-1\]\.ctl;/.test(src));
+  ok('...and _ptFirstReal_ is used only for the explanation, not to move the baseline',
+     /_ptFirstReal_\(w\.all\|\|\[\]\)/.test(src) && !/pts=.*_ptFirstReal_/.test(src));
+
+  // Run it. The reported case and the boundary either side of the floor.
+  const i = src.indexOf('function _ptDelta_(');
+  let j = src.indexOf('{', i), d0 = 0, end = -1;
+  for (; j < src.length; j++) { const c = src[j];
+    if (c === '{') d0++; else if (c === '}') { d0--; if (!d0) { end = j + 1; break; } } }
+  const delta = new Function('_PT_BASE_FLOOR', src.slice(i, end) + '; return _ptDelta_;')(15);
+  const pts = (a, b) => [{ ctl: a }, { ctl: b }];
+
+  const all = delta(pts(2.4, 63));
+  ok('the reported case is flagged weak', all.weakBase === true);
+  eq('...and prints no percentage at all', all.pct, null);
+  eq('...keeping both real numbers', [all.from, all.to], [2.4, 63]);
+  const ok90 = delta(pts(35.5, 63));
+  ok('a real 90-day base is not flagged', ok90.weakBase === false);
+  eq('...and still reports its percentage', ok90.pct, 77);
+  const edge = delta(pts(15, 63));
+  ok('exactly at the floor counts as usable', edge.weakBase === false);
+  const below = delta(pts(14.9, 63));
+  ok('just below it does not', below.weakBase === true);
+  const zero = delta(pts(0, 63));
+  ok('a zero base is weak, not a crash', zero.weakBase === true && zero.pct === null);
+  eq('direction survives even without a percentage', [all.dir, delta(pts(2, 1)).dir], [1, -1]);
+}
+
+console.log('\n' + Y + '=== the panel labels describe the comparison actually made ===' + X);
+ok('ALL says "vs the previous year", which is what _ptFactors_ does with no day count',
+   /\(_ptRange==='ALL'\|\|_ptRange==='1Y'\)\?'vs the previous year'/.test(src));
+// Comments stripped: the code EXPLAINS the caption it replaced, and a raw scan reads the
+// explanation as the caption.
+ok('NEG: the caption no longer claims a first-half comparison',
+   !/vs the first half of your history/.test(src.replace(/^\s*\/\/.*$/gm, '')));
+ok('...and the fallback span it describes is still 365', /var span=\(days>0\?days:365\);/.test(src));
 
 console.log('\n' + Y + '=== it still refuses to invent ===' + X);
 ok('a factor needs BOTH windows or it is omitted', /if\(!cur\.length \|\| !prv\.length\) return res;/.test(src));
