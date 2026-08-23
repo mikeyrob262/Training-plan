@@ -40198,21 +40198,26 @@ function _ptCardHTML_(lbl, link){
   };
   var head2=function(t){ return '<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">'+t+'</div>'
     +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+periodTxt+'</div>'; };
-  var dHTML='';
-  if(fact.causes.length){
-    dHTML+=head2('What is driving it')+rows(fact.causes);
-  } else {
+  // SIDE BY SIDE, NOT STACKED, and that is a height decision as much as a design one. Stacked, the
+  // column costs the SUM of both panels and pushed the card to 448px, putting the dashboard 42px
+  // over its viewport. Side by side it costs the MAX, which is what a pair of short lists should
+  // cost. Shaving padding and dropping the "512 vs 390" detail lines would have bought the same
+  // pixels by deleting exactly the figures that make the percentages checkable - the complaint this
+  // rebuild exists to answer.
+  //
+  // A SEPARATE QUESTION, SEPARATELY TITLED. Outcomes are results of fitness, not inputs to it, so
+  // they get their own heading; filing them under "what is driving it" claimed a causal link that
+  // does not exist and let the card appear to contradict itself.
+  var causesHTML = fact.causes.length
+    ? (head2('What is driving it')+rows(fact.causes))
     // NOT an empty panel and NOT invented numbers: say which comparison could not be made.
-    dHTML+=head2('What is driving it')
-      +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>';
-  }
-  if(fact.outcomes.length){
-    // A SEPARATE QUESTION, SEPARATELY TITLED. These are outcomes of fitness, not inputs to it, so
-    // they belong under their own heading - putting them under "what is driving it" claimed a causal
-    // link that does not exist and let the card appear to contradict itself.
-    dHTML+='<div style="height:1px;background:var(--d-edge);margin:9px 0"></div>'
-      +head2('Is it translating')+rows(fact.outcomes);
-  }
+    : (head2('What is driving it')
+       +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>');
+  var outHTML = fact.outcomes.length ? (head2('Is it translating')+rows(fact.outcomes)) : '';
+  var dHTML='<div style="display:flex;gap:14px;min-width:0">'
+    +'<div style="flex:1;min-width:0">'+causesHTML+'</div>'
+    +(outHTML?('<div style="flex:1;min-width:0;border-left:1px solid var(--d-edge);padding-left:12px">'+outHTML+'</div>'):'')
+    +'</div>';
 
   var inner=lbl('PERFORMANCE TRAJECTORY', toggle);
   inner+='<div style="display:flex;gap:16px;min-width:0;flex:1">';
@@ -40231,10 +40236,11 @@ function _ptCardHTML_(lbl, link){
       +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
     +'</div>';
   // RIGHT: headline percent + drivers
-  inner+='<div style="width:196px;flex-shrink:0;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
+  // Widened from 196px to carry two sub-columns. The chart is flex:1 and simply gives up the width,
+  // which it can afford far more easily than the card can afford the height.
+  inner+='<div style="width:344px;flex-shrink:0;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
     +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+pctTxt+'</div>'
     +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
-    +'<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px">What is driving it</div>'
     +dHTML
     +'<div style="margin-top:auto;text-align:right">'+link('View details &rarr;','ai')+'</div>'
     +'</div>';
