@@ -40047,7 +40047,12 @@ function _ptInsight_(d, w){
 // OUTCOMES live in their own panel with their own honest title, measured stably, where a divergence
 // from the causes is a real finding the insight line then states out loud.
 function _ptFactors_(days){
-  var res={ causes:[], outcomes:[], haveBoth:false };
+  // MISSING IS RECORDED, NOT JUST SKIPPED. Omitting a metric that cannot be computed for both
+  // windows is the right call - an absent measurement and no change are different facts - but a
+  // silent omission is indistinguishable from a bug, and the panel simply looked sparse at 30D where
+  // there are too few 20-minute efforts on both sides to compare. Naming what dropped out, and why,
+  // turns an unexplained gap into a stated limitation.
+  var res={ causes:[], outcomes:[], causesMiss:[], outcomesMiss:[], haveBoth:false };
   try{
     var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]);
     if(!rides || !rides.length) return res;
@@ -40066,8 +40071,9 @@ function _ptFactors_(days){
     var weeks=span/7;
     var pct=function(a,b){ if(a==null||b==null||!(b>0)) return null;
       var v=Math.round((a-b)/b*100); return isFinite(v)?v:null; };
-    var add=function(arr,label,col,a,b,detail){
-      var p=pct(a,b); if(p==null) return;
+    var add=function(arr,miss,label,col,a,b,detail){
+      var p=pct(a,b);
+      if(p==null){ if(miss) miss.push(label); return; }
       arr.push({ label:label, col:col, pct:p, detail:detail||'' });
     };
     // ---- CAUSES: the rate of training, which is what CTL integrates ----
@@ -40095,6 +40101,9 @@ function _ptFactors_(days){
     add(res.outcomes,'Best 20-min power','#60a5fa', c20, p20,
         (c20!=null&&p20!=null)?(Math.round(c20)+'W vs '+Math.round(p20)+'W'):'');
     var wt=(typeof stWeightLb_==='function')?stWeightLb_():null;
+    // The guard that skips W/kg has to report itself too, or the one metric carrying an extra
+    // precondition is the one that vanishes without explanation.
+    if(!(wt>0 && c20!=null && p20!=null)) res.outcomesMiss.push('W/kg at 20 min');
     if(wt>0 && c20!=null && p20!=null){
       var kg=wt/2.20462;
       add(res.outcomes,'W/kg at 20 min','#f59e0b', c20/kg, p20/kg,
@@ -40208,12 +40217,33 @@ function _ptCardHTML_(lbl, link){
   // A SEPARATE QUESTION, SEPARATELY TITLED. Outcomes are results of fitness, not inputs to it, so
   // they get their own heading; filing them under "what is driving it" claimed a causal link that
   // does not exist and let the card appear to contradict itself.
+  // WHAT DROPPED OUT, NAMED. A metric that cannot be computed for both windows is omitted, which is
+  // right - but at 30D that left "Is it translating" showing a single line with no way to tell a
+  // stated limitation from an arbitrary one. The note names the missing metrics and the reason, so
+  // the gap reads as an answer rather than an absence. Only shown when something is actually
+  // missing AND something is actually present: a panel with nothing in it already says so above.
+  var andList=function(a){
+    if(a.length<=1) return a[0]||'';
+    if(a.length===2) return a[0]+' and '+a[1];
+    return a.slice(0,-1).join(', ')+' and '+a[a.length-1];
+  };
+  var missNote=function(list, shown){
+    if(!list || !list.length || !shown) return '';
+    return '<div style="font-size:9.5px;color:var(--d-t4);line-height:1.45;margin-top:7px;padding-top:7px;border-top:1px dashed var(--d-edge)">'
+      +andList(list)+(list.length>1?' need':' needs')+' more history than this range holds.</div>';
+  };
   var causesHTML = fact.causes.length
-    ? (head2('What is driving it')+rows(fact.causes))
+    ? (head2('What is driving it')+rows(fact.causes)+missNote(fact.causesMiss, true))
     // NOT an empty panel and NOT invented numbers: say which comparison could not be made.
     : (head2('What is driving it')
        +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>');
-  var outHTML = fact.outcomes.length ? (head2('Is it translating')+rows(fact.outcomes)) : '';
+  var outHTML = fact.outcomes.length
+    ? (head2('Is it translating')+rows(fact.outcomes)+missNote(fact.outcomesMiss, true))
+    : (fact.outcomesMiss.length
+       ? (head2('Is it translating')
+          +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">'+andList(fact.outcomesMiss)
+          +(fact.outcomesMiss.length>1?' need':' needs')+' more history than this range holds. Try a longer range.</div>')
+       : '');
   var dHTML='<div style="display:flex;gap:14px;min-width:0">'
     +'<div style="flex:1;min-width:0">'+causesHTML+'</div>'
     +(outHTML?('<div style="flex:1;min-width:0;border-left:1px solid var(--d-edge);padding-left:12px">'+outHTML+'</div>'):'')

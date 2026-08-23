@@ -29,7 +29,7 @@ const eq = (l, got, want) => { const c = JSON.stringify(got) === JSON.stringify(
 
 console.log('\n' + Y + '=== causes are causes: training RATE, which is what CTL integrates ===' + X);
 ok('the factor builder returns causes and outcomes separately', /function _ptFactors_\(days\)\{/.test(src)
-   && /res=\{ causes:\[\], outcomes:\[\], haveBoth:false \}/.test(src));
+   && /res=\{ causes:\[\], outcomes:\[\],[^}]*haveBoth:false \}/.test(src));
 ok('weekly TSS is a cause', /add\(res\.causes,'Weekly TSS'/.test(src));
 ok('rides per week is a cause', /add\(res\.causes,'Rides \/ week'/.test(src));
 ok('hours per week is a cause', /add\(res\.causes,'Hours \/ week'/.test(src));
@@ -93,6 +93,31 @@ console.log('\n' + Y + '=== a divergence is stated, not left to look like a bug 
   eq('NEG: both rising is not a divergence', diverge([{pct:12}], [{pct:7}]), null);
   eq('NEG: both falling is not a divergence', diverge([{pct:-12}], [{pct:-7}]), null);
   eq('NEG: noise around zero says nothing', diverge([{pct:1}], [{pct:-2}]), null);
+}
+
+console.log('\n' + Y + '=== an omission is stated, not left as a gap ===' + X);
+{
+  // Omitting a metric that cannot be computed for both windows is correct - an absent measurement and
+  // no change are different facts - but a SILENT omission is indistinguishable from a bug. At 30D
+  // there are too few 20-minute efforts on both sides, so "Is it translating" showed one line and no
+  // reason. The panel now names what dropped out.
+  ok('omissions are collected, not just skipped', /causesMiss:\[\], outcomesMiss:\[\]/.test(src));
+  ok('the add helper records the label it could not compute', /if\(p==null\)\{ if\(miss\) miss\.push\(label\); return; \}/.test(src));
+  ok('...and the W/kg guard reports itself too', /if\(!\(wt>0 && c20!=null && p20!=null\)\) res\.outcomesMiss\.push/.test(src));
+  ok('the note names the metrics and the reason', /more history than this range holds/.test(src));
+  ok('a panel emptied entirely still explains itself', /Try a longer range/.test(src));
+  ok('NEG: no panel drops a metric with no note', !/rows\(fact\.outcomes\)\)$/m.test(src));
+  // The English, exercised - a list that reads wrong is its own small dishonesty.
+  const andList = (a) => a.length <= 1 ? (a[0] || '')
+    : a.length === 2 ? a[0] + ' and ' + a[1]
+    : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  eq('one missing metric', andList(['W/kg at 20 min']), 'W/kg at 20 min');
+  eq('two read naturally', andList(['Best 20-min power', 'W/kg at 20 min']), 'Best 20-min power and W/kg at 20 min');
+  eq('three use a serial comma-free list', andList(['A', 'B', 'C']), 'A, B and C');
+  eq('none yields nothing to print', andList([]), '');
+  const verb = (n) => (n > 1 ? ' need' : ' needs');
+  eq('singular agreement', verb(1), ' needs');
+  eq('plural agreement', verb(2), ' need');
 }
 
 console.log('\n' + Y + '=== it still refuses to invent ===' + X);
