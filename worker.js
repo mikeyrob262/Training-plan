@@ -39996,31 +39996,61 @@ function _ptVerdict_(d, rangeKey){
 // or fitness banked but not yet expressed). The card used to leave the reader to reconcile an up
 // arrow and a wall of down arrows unaided, which reads as a bug in the app rather than a fact about
 // the athlete. Returns null when both halves point the same way and there is nothing to reconcile.
+// Returns a KEY, not a sentence. The first cut returned finished prose and the card printed it
+// ahead of the trend summary, so two independently written sentences ended up glued together with a
+// space and no connector: "Training load is up while output is not - either the work has not
+// surfaced yet, or volume is crowding out sharpness. Your fitness is 29% higher than a year ago. You
+// are building toward your strongest block of the year." Cautionary, then celebratory, in one
+// breath, reading as the app arguing with itself. Both halves were individually true, which is
+// exactly what made it worse. The key lets ONE writer compose the whole thought.
 function _ptDiverge_(d, f){
   if(!d || !f || !f.haveBoth) return null;
   if(!f.causes.length || !f.outcomes.length) return null;
   var mean=function(a){ var s=0; a.forEach(function(x){ s+=x.pct; }); return s/a.length; };
   var c=mean(f.causes), o=mean(f.outcomes);
   if(Math.abs(c)<3 && Math.abs(o)<3) return null;
-  if(c>=3 && o<=-3) return 'Training load is up while output is not - either the work has not surfaced yet, or volume is crowding out sharpness.';
-  if(c<=-3 && o>=3) return 'You are riding less but performing better - form is holding on less work, which is what a taper looks like.';
+  if(c>=3 && o<=-3) return 'load-up';
+  if(c<=-3 && o>=3) return 'taper';
   return null;
 }
-function _ptInsight_(d, w){
+// ONE WRITER, ONE THOUGHT. This used to emit a self-contained trend summary which the card then
+// printed after a self-contained divergence warning, and the two had no idea the other existed:
+// a caution and a celebration in the same breath, joined by nothing. Composing here means the
+// magnitude, the peak claim and the divergence are decided together, and only one interpretation is
+// ever attached to the fact.
+function _ptInsight_(d, w, f){
   if(!d) return 'Ride more and this will fill in - a trajectory needs a few weeks of history behind it.';
   var span=(w.days>0?w.days:(w.all.length||0));
   var unit=(w.days===0)?'your whole history':(w.days>=365?'a year ago':(span+' days ago'));
-  var s=(d.pct>0?'Your fitness is '+Math.abs(d.pct)+'% higher than '+unit+'.'
-        : d.pct<0?'Your fitness is '+Math.abs(d.pct)+'% lower than '+unit+'.'
-        : 'Your fitness is level with '+unit+'.');
+  // The STEM carries no terminal punctuation, so it can either close as its own sentence or run on
+  // into a clause. That is the whole trick: a divergence continues the fact rather than answering it.
+  var stem=(d.pct>0?'Your fitness is '+Math.abs(d.pct)+'% higher than '+unit
+           : d.pct<0?'Your fitness is '+Math.abs(d.pct)+'% lower than '+unit
+           : 'Your fitness is level with '+unit);
   // A peak claim is checked against the whole series, not assumed from the direction of travel.
+  var atPeak=false;
   try{
     var all=w.all||[], cur=+all[all.length-1].ctl, best=0, bi=-1;
     for(var i=0;i<all.length;i++){ if(+all[i].ctl>best){ best=+all[i].ctl; bi=i; } }
-    if(bi>=0 && cur>=best-0.5) s+=' That is the highest it has been in this library.';
-    else if(d.pct>=5) s+=' You are building toward your strongest block of the year.';
-    else if(d.pct<=-5) s+=' Some of that is taper or time off - check Training Load before reading it as lost form.';
+    atPeak=(bi>=0 && cur>=best-0.5);
   }catch(e){}
+  var div=_ptDiverge_(d, f);
+  if(div==='load-up'){
+    // The fact, the peak if there is one, and the caveat, as a single sentence. No "strongest block
+    // of the year" here: that is the boilerplate that used to sit directly against the caution.
+    return stem+(atPeak?', the highest it has been in this library':'')
+      +', but your best efforts have not moved with it - which is often what banking fitness looks '
+      +'like before it shows up in your numbers.';
+  }
+  if(div==='taper'){
+    return stem+', yet your numbers are up - form holding on less work, which is what a taper '
+      +'looks like rather than a loss of fitness.';
+  }
+  // No divergence: the fact closes, and exactly one reading follows it.
+  var s=stem+'.';
+  if(atPeak) s+=' That is the highest it has been in this library.';
+  else if(d.pct>=5) s+=' You are building toward your strongest block of the year.';
+  else if(d.pct<=-5) s+=' Some of that is taper or time off - check Training Load before reading it as lost form.';
   return s;
 }
 // TWO PANELS, BECAUSE THERE ARE TWO QUESTIONS - and the first cut of this card conflated them into
@@ -40278,11 +40308,10 @@ function _ptCardHTML_(lbl, link){
   // The interpretive line, given its own band so it reads as the coach speaking rather than a caption.
   inner+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
-    // The divergence sentence comes FIRST when there is one: it is the thing the reader is already
-    // puzzling over, and answering it after two paragraphs of trend summary is answering it too late.
-    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'
-      +((_ptDiverge_(d,fact))?('<b style="color:var(--d-t1)">'+_ptDiverge_(d,fact)+'</b> '):'')
-      +_ptInsight_(d, w)+'</span></div>';
+    // ONE STRING, composed by _ptInsight_ with the factors in hand. The card no longer prepends a
+    // separate divergence sentence: that is what produced a caution and a celebration glued together
+    // with a space, each written without knowledge of the other.
+    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_ptInsight_(d, w, fact)+'</span></div>';
   return inner;
 }
 function dsShowDashboard(){

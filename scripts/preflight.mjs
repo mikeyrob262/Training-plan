@@ -1352,6 +1352,24 @@ try {
     fail('the recovery baseline can be empty, self-referential, or source-mixed (see above).');
   }
 
+  // STEP 84 - Performance Trajectory. Wired in after its own guard sat outside preflight for two
+  //           commits and a stale assertion in it went unnoticed the whole time: the check pinned the
+  //           exact _ptFactors_ return-object literal and broke the moment the object gained a field,
+  //           while the local runs that would have caught it were being read tail-first. A suite that
+  //           does not run in preflight is a suite nobody is actually relying on. It guards the three
+  //           faults this card was rebuilt for - drivers showing causes rather than outcomes, peak-vs-
+  //           peak comparisons that one ride can flip, and a caution and a celebration printed in the
+  //           same breath by two writers unaware of each other.
+  console.log(`${D}. checking Performance Trajectory...${X}`);
+  try {
+    const so = execSync('node scripts/perf-trajectory-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the trajectory card can mislabel outcomes as causes or contradict itself (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

@@ -78,9 +78,28 @@ ok('the two strings are different, because the two comparisons are',
 console.log('\n' + Y + '=== a divergence is stated, not left to look like a bug ===' + X);
 {
   ok('the divergence check exists', /function _ptDiverge_\(d, f\)\{/.test(src));
-  ok('...and is rendered ahead of the trend summary', /_ptDiverge_\(d,fact\)\)\?\(/.test(src));
-  ok('load up with output flat is named', /Training load is up while output is not/.test(src));
-  ok('...and the taper case too', /riding less but performing better/.test(src));
+  // IT RETURNS A KEY, NOT PROSE. Returning a finished sentence is what let the card print it beside
+  // a separately written trend summary - a caution and a celebration in one breath, joined by
+  // nothing and each unaware of the other. One writer has to own the whole thought.
+  ok('...and returns a key rather than a sentence', /return 'load-up';/.test(src) && /return 'taper';/.test(src));
+  ok('the insight composes it, with the factors in hand', /function _ptInsight_\(d, w, f\)\{/.test(src));
+  ok('...and the card calls that single composer', /_ptInsight_\(d, w, fact\)/.test(src));
+  ok('NEG: the card no longer prepends a second sentence', !/_ptDiverge_\(d,fact\)\)\?\(/.test(src));
+  ok('the stem carries no terminal stop, so a clause can continue it',
+     /var stem=\(d\.pct>0\?'Your fitness is '\+Math\.abs\(d\.pct\)\+'% higher than '\+unit$/m.test(src));
+  ok('load-up reads as one thought', /but your best efforts have not moved with it/.test(src));
+  {
+    // Comments stripped: the load-up branch EXPLAINS that it drops "strongest block of the year",
+    // and a naive scan reads the explanation as the offence. Third time this file has caught me
+    // that way - a comment naming the thing it removed looks identical to the thing.
+    const code = src.replace(/^\s*\/\/.*$/gm, '');
+    ok('...and suppresses the celebratory boilerplate',
+       /if\(div==='load-up'\)\{[\s\S]{0,300}banking fitness/.test(code)
+       && !/if\(div==='load-up'\)\{[\s\S]{0,300}strongest block/.test(code));
+    ok('the taper case likewise', /yet your numbers are up - form holding on less work/.test(code));
+    ok('the strongest-block line survives only on the non-diverging path',
+       /var s=stem\+'\.';[\s\S]{0,400}strongest block of the year/.test(code));
+  }
   // Exercise the gate: it must fire only on a real, signed disagreement.
   const mean = (a) => a.reduce((s, x) => s + x.pct, 0) / a.length;
   const diverge = (c, o) => { const cm = mean(c), om = mean(o);
