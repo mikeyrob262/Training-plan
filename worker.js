@@ -39941,6 +39941,235 @@ function _hdWalk_(cands, ftp, i, ctx){
     return _hdWalk_(cands, ftp, i+1, ctx);
   });
 }
+// ==================== PERFORMANCE TRAJECTORY ====================
+//
+// A PMC that INTERPRETS rather than reports. The traditional chart draws CTL, ATL and TSB as three
+// equal lines and leaves the athlete to work out what they mean together; this draws ONE ridge -
+// fitness - as terrain, with load and form as supporting layers beneath it, and states the verdict
+// in words above the chart. Same numbers, different question answered: not "what are my three
+// values" but "which way am I going".
+//
+// THE SERIES IS LOCAL, THE CURRENT TRIPLE IS NOT, and the two can legitimately disagree. pmcSeries_
+// computes daily CTL/ATL/TSB from this library and reaches back years; getFitness_ serves the
+// authoritative CURRENT numbers from intervals.icu, which only holds this account to 2026-02. So the
+// chart and the percentage are computed from the local series - the only thing with history - while
+// the readout beside them shows getFitness_ where it can. That is stated in the card rather than
+// hidden, because a rightmost chart point that differs from the printed Fitness number is otherwise
+// indistinguishable from a bug.
+var _PT_RANGES=[['7D',7],['30D',30],['90D',90],['1Y',365],['ALL',0]];
+var _ptRange='90D';
+function _ptWindow_(key){
+  var days=0; _PT_RANGES.forEach(function(r){ if(r[0]===key) days=r[1]; });
+  var all=(typeof fitnessSeries_==='function')?fitnessSeries_():[];
+  if(!all.length) return { pts:[], days:days, all:all };
+  var pts=(days>0 && all.length>days) ? all.slice(-days) : all.slice();
+  return { pts:pts, days:days, all:all };
+}
+// Percent change in FITNESS across the window. Guarded against a zero or absent start value: a
+// percentage against nothing is not a large improvement, it is undefined, and printing "+Infinity%"
+// as a training verdict is worse than printing nothing.
+function _ptDelta_(pts){
+  if(!pts || pts.length<2) return null;
+  var a=+pts[0].ctl, b=+pts[pts.length-1].ctl;
+  if(!(a>0) || !isFinite(a) || !isFinite(b)) return null;
+  return { from:Math.round(a), to:Math.round(b), pct:Math.round((b-a)/a*100) };
+}
+// The verdict, written from the number rather than chosen from a list of moods. Thresholds are named
+// once here so every range says the same thing about the same magnitude.
+function _ptVerdict_(d, rangeKey){
+  if(!d) return { head:'Not enough history yet', dir:'', tone:'flat' };
+  var p=d.pct;
+  var head = p>=15 ? 'Fitness is climbing fast'
+           : p>=5  ? 'Fitness is building'
+           : p>=1  ? 'Fitness is edging up'
+           : p<=-15? 'Fitness is dropping sharply'
+           : p<=-5 ? 'Fitness is fading'
+           : p<=-1 ? 'Fitness is easing back'
+           :         'Fitness is holding steady';
+  return { head:head, dir:(p>0?'up':(p<0?'down':'flat')),
+           tone:(p>=1?'up':(p<=-1?'down':'flat')) };
+}
+// The interpretive line. Says what the number MEANS, and only claims a comparison it can support -
+// "strongest in N days" is asserted only when the series actually reaches back that far.
+function _ptInsight_(d, w){
+  if(!d) return 'Ride more and this will fill in - a trajectory needs a few weeks of history behind it.';
+  var span=(w.days>0?w.days:(w.all.length||0));
+  var unit=(w.days===0)?'your whole history':(w.days>=365?'a year ago':(span+' days ago'));
+  var s=(d.pct>0?'Your fitness is '+Math.abs(d.pct)+'% higher than '+unit+'.'
+        : d.pct<0?'Your fitness is '+Math.abs(d.pct)+'% lower than '+unit+'.'
+        : 'Your fitness is level with '+unit+'.');
+  // A peak claim is checked against the whole series, not assumed from the direction of travel.
+  try{
+    var all=w.all||[], cur=+all[all.length-1].ctl, best=0, bi=-1;
+    for(var i=0;i<all.length;i++){ if(+all[i].ctl>best){ best=+all[i].ctl; bi=i; } }
+    if(bi>=0 && cur>=best-0.5) s+=' That is the highest it has been in this library.';
+    else if(d.pct>=5) s+=' You are building toward your strongest block of the year.';
+    else if(d.pct<=-5) s+=' Some of that is taper or time off - check Training Load before reading it as lost form.';
+  }catch(e){}
+  return s;
+}
+// WHAT IS DRIVING IT, from metrics that actually exist.
+//
+// The design reference named "Climbing Performance" and "HR Efficiency"; neither exists anywhere in
+// this codebase, and inventing two plausible percentages to fill a panel is the exact anti-pattern
+// this app keeps having to undo. These four are real and each is computed the same way: the metric
+// over the window against the SAME metric over the window immediately before it, so the comparison
+// is like-for-like. A factor that cannot be computed for BOTH windows is omitted rather than shown
+// at zero - an absent measurement and no change are different facts.
+function _ptDrivers_(days){
+  var out=[];
+  try{
+    var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]);
+    if(!rides || !rides.length) return out;
+    var span=(days>0?days:365);
+    var now=new Date(); now.setHours(0,0,0,0);
+    var cut1=new Date(now); cut1.setDate(cut1.getDate()-span);
+    var cut2=new Date(now); cut2.setDate(cut2.getDate()-span*2);
+    var inWin=function(r,a,b){ var d=new Date(String(r.date||'').slice(0,10)+'T00:00:00');
+      return isFinite(d) && d>=a && d<b; };
+    var cur=[], prv=[];
+    rides.forEach(function(r){ if(!r||r.deleted) return;
+      if(inWin(r,cut1,new Date(now.getTime()+86400000))) cur.push(r);
+      else if(inWin(r,cut2,cut1)) prv.push(r); });
+    if(!cur.length || !prv.length) return out;
+    var bestPc=function(set,secs){ var m=0; set.forEach(function(r){
+      var pc=r&&r.powerCurve; var v=pc?(+pc[secs]||0):0; if(v>m) m=v; }); return m||null; };
+    var meanOf=function(set,fn){ var s=0,n=0; set.forEach(function(r){ var v=fn(r);
+      if(v!=null && isFinite(v) && v>0){ s+=v; n++; } }); return n?(s/n):null; };
+    var wt=(typeof stWeightLb_==='function')?stWeightLb_():null;
+    var push=function(label,col,a,b,dp){
+      if(a==null || b==null || !(b>0)) return;
+      var pct=Math.round((a-b)/b*100);
+      if(!isFinite(pct)) return;
+      out.push({ label:label, col:col, pct:pct });
+    };
+    push('Sustained Power','#60a5fa', bestPc(cur,1200), bestPc(prv,1200));
+    push('Aerobic Depth','#4ade80',  bestPc(cur,3600), bestPc(prv,3600));
+    if(wt>0){
+      var kg=wt/2.20462;
+      var c20=bestPc(cur,1200), p20=bestPc(prv,1200);
+      push('W/kg','#f59e0b', c20!=null?(c20/kg):null, p20!=null?(p20/kg):null);
+    }
+    // Aerobic efficiency: speed carried per heartbeat. Documented elsewhere in this file as a REAL
+    // proxy for the question "am I getting more for the same effort", which is what the reference
+    // called HR Efficiency.
+    var eff=function(r){ var mi=parseFloat(r.distance)||0, sec=(r.movingSecs||0);
+      var hr=parseFloat(r.avgHR)||0; if(!(mi>0&&sec>0&&hr>0)) return null;
+      return (mi/(sec/3600))/hr; };
+    push('Aerobic Efficiency','#a78bfa', meanOf(cur,eff), meanOf(prv,eff));
+  }catch(e){}
+  return out.slice(0,4);
+}
+// The ridge itself. Three layers, deliberately unequal: fitness is a filled area with a bright
+// stroke on top (the skyline), load is a softer fill beneath it, and form is a thin band on the
+// baseline that can sit either side of zero. Drawn as one SVG with no library.
+function _ptChart_(pts, w, h){
+  if(!pts || pts.length<2) return '<div style="height:'+h+'px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--d-t4)">Not enough history to draw a trajectory yet.</div>';
+  var n=pts.length, pad=6, iw=w, ih=h-pad*2;
+  var ctl=pts.map(function(p){ return +p.ctl||0; });
+  var atl=pts.map(function(p){ return +p.atl||0; });
+  var tsb=pts.map(function(p){ return +p.tsb||0; });
+  var hi=0; ctl.concat(atl).forEach(function(v){ if(v>hi) hi=v; });
+  if(!(hi>0)) hi=1;
+  var x=function(i){ return (n===1)?0:(i/(n-1))*iw; };
+  var y=function(v){ return pad + ih - (v/hi)*ih*0.86; };
+  var line=function(arr){ var d=''; for(var i=0;i<n;i++){ d+=(i?'L':'M')+x(i).toFixed(1)+' '+y(arr[i]).toFixed(1); } return d; };
+  var area=function(arr){ return line(arr)+'L'+x(n-1).toFixed(1)+' '+(pad+ih).toFixed(1)+'L0 '+(pad+ih).toFixed(1)+'Z'; };
+  // Form rides the baseline: a thin band whose thickness is |TSB|, above the line when positive.
+  var tmax=1; tsb.forEach(function(v){ if(Math.abs(v)>tmax) tmax=Math.abs(v); });
+  var by=pad+ih;
+  var tband=''; for(var i=0;i<n;i++){ tband+=(i?'L':'M')+x(i).toFixed(1)+' '+(by-(tsb[i]/tmax)*10).toFixed(1); }
+  tband+='L'+x(n-1).toFixed(1)+' '+by.toFixed(1)+'L0 '+by.toFixed(1)+'Z';
+  var uid='ptg'+String(n)+String(Math.round(hi));
+  return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
+    +'<defs>'
+    +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ade80" stop-opacity=".55"/><stop offset="1" stop-color="#4ade80" stop-opacity=".04"/></linearGradient>'
+    +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa" stop-opacity=".45"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".03"/></linearGradient>'
+    +'</defs>'
+    +'<path d="'+area(ctl)+'" fill="url(#'+uid+'a)"/>'
+    +'<path d="'+area(atl)+'" fill="url(#'+uid+'b)"/>'
+    +'<path d="'+tband+'" fill="#a78bfa" fill-opacity=".38"/>'
+    // The skyline stroke is drawn LAST so the ridge reads as the subject. vector-effect keeps it
+    // 2px after the non-uniform viewBox scale, which would otherwise squash it to a hairline.
+    +'<path d="'+line(ctl)+'" fill="none" stroke="#22c55e" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
+    +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="#22c55e" vector-effect="non-scaling-stroke"/>'
+    +'</svg>';
+}
+function _ptCardHTML_(lbl, link){
+  var w=_ptWindow_(_ptRange);
+  var d=_ptDelta_(w.pts);
+  var v=_ptVerdict_(d, _ptRange);
+  var f=(typeof getFitness_==='function')?getFitness_():null;
+  var tail=w.pts.length?w.pts[w.pts.length-1]:null;
+  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
+  var cur={ ctl:(f&&f.ctl!=null)?f.ctl:(tail?tail.ctl:null),
+            atl:(f&&f.atl!=null)?f.atl:(tail?tail.atl:null),
+            tsb:(f&&f.tsb!=null)?f.tsb:(tail?tail.tsb:null) };
+  var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
+  var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3)');
+  var pctTxt=d?((d.pct>0?'+':'')+d.pct+'%'):'&mdash;';
+  var vsTxt=(_ptRange==='ALL')?'across your whole history'
+           :(_ptRange==='1Y'?'vs a year ago':('vs '+(w.days)+' days ago'));
+  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
+  _PT_RANGES.forEach(function(r){
+    var on=(r[0]===_ptRange);
+    toggle+='<span data-ptrange="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
+      +(on?('background:var(--d-panel);color:#22c55e;border:1px solid rgba(34,197,94,.45)'):'color:var(--d-t3);border:1px solid transparent')+'">'+r[0]+'</span>';
+  });
+  toggle+='</div>';
+
+  var legend='';
+  [['Fitness (CTL)','#22c55e',cur.ctl],['Training Load (ATL)','#60a5fa',cur.atl],['Form (TSB)','#a78bfa',cur.tsb]].forEach(function(row){
+    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3)"><span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
+  });
+
+  var drivers=_ptDrivers_(w.days);
+  var dHTML='';
+  if(drivers.length){
+    drivers.forEach(function(x){
+      var up=(x.pct>=0);
+      dHTML+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">'
+        +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3)"><span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'+x.label+'</span>'
+        +'<span style="font-size:11px;font-weight:700;color:'+(up?'#22c55e':'#ef4444')+'">'+(up?'&uarr;':'&darr;')+' '+Math.abs(x.pct)+'%</span></div>';
+    });
+  } else {
+    // NOT an empty panel and NOT invented numbers: say which comparison could not be made.
+    dHTML='<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>';
+  }
+
+  var inner=lbl('PERFORMANCE TRAJECTORY', toggle);
+  inner+='<div style="display:flex;gap:16px;min-width:0;flex:1">';
+  // LEFT: verdict, legend
+  inner+='<div style="width:186px;flex-shrink:0;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
+    +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
+    +legend
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto">All values are 7-day averages'
+    +((f&&f.source&&f.source!=='none')?(' &middot; current from '+f.source):'')+'</div>'
+    +'</div>';
+  // MIDDLE: the ridge
+  inner+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
+    +'<div style="flex:1;min-height:0">'+_ptChart_(w.pts, 600, 150)+'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
+      +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
+    +'</div>';
+  // RIGHT: headline percent + drivers
+  inner+='<div style="width:196px;flex-shrink:0;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+pctTxt+'</div>'
+    +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
+    +'<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px">What is driving it</div>'
+    +dHTML
+    +'<div style="margin-top:auto;text-align:right">'+link('View details &rarr;','ai')+'</div>'
+    +'</div>';
+  inner+='</div>';
+  // The interpretive line, given its own band so it reads as the coach speaking rather than a caption.
+  inner+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
+    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_ptInsight_(d, w)+'</span></div>';
+  return inner;
+}
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
@@ -40238,7 +40467,13 @@ function dsShowDashboard(){
   H+='</div>';
 
   // ===== ROW 2 =====
-  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
+  // ===== PERFORMANCE TRAJECTORY =====
+  // Its own full-width row, above the card strip. Placed here rather than inside a grid row
+  // because it IS the row: one card, and flex:0 0 auto so it neither grows into spare space nor
+  // is squeezed by the rows that do.
+  H+='<div style="display:grid;grid-template-columns:1fr;min-width:0;flex:0 0 auto">'+card(_ptCardHTML_(lbl,link))+'</div>';
+
+  H+='<div style="display:grid;grid-template-columns:repeat(7, minmax(0,1fr));gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
   // Recent Activities
   var ra=lbl('RECENT ACTIVITIES',link('View All Activities','activities'));
   if(!recent.length){ ra+='<div style="font-size:12px;color:var(--d-t4);padding:12px 0">No activities yet.</div>'; }
@@ -40429,10 +40664,6 @@ function dsShowDashboard(){
     bk+='</div>';
   });
   H+=card(bk);
-  H+='</div>';
-
-  // ===== ROW 3 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
   // Training Load — narrow gradient daily bars, right y-axis, and a CTL-derived
   // "Optimal Range" marker (real: CTL is your sustainable daily load), plus the
   // real week-over-week change. Matches the reference chart.
@@ -40543,32 +40774,6 @@ function dsShowDashboard(){
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'var(--d-t1)':'var(--d-dim)')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
   rd+='</div>';
   H+=card(rd);
-  // Consistency
-  var wd=['M','T','W','T','F','S','S'];
-  var monS=new Date(now); monS.setDate(now.getDate()-((now.getDay()===0)?6:now.getDay()-1));
-  var cs=lbl('CONSISTENCY');
-  cs+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">This Month</div>';
-  cs+='<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:800;color:var(--d-t1)">'+activeDays+'</span><span style="font-size:12px;color:var(--d-t3)">of '+elapsed+' days active</span></div>';
-  cs+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
-  for(var wk=0;wk<2;wk++){ for(var dd2=0;dd2<7;dd2++){ var cd=new Date(monS); cd.setDate(monS.getDate()+(wk*7)+dd2); var ck=normDate(cd.getFullYear()+'-'+(cd.getMonth()+1)+'-'+cd.getDate()); var on=!!activeSet[ck]; var fut=cd>now;
-    cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:var(--d-dim)">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?'#facc15':fut?'#171c2b':'#2a3550')+'"></span></div>';
-  }}
-  cs+='</div>';
-  cs+='<div style="font-size:11px;color:'+ACC.green+';text-align:center;margin-top:auto;padding-top:11px;font-weight:600">'+(activeDays>=elapsed*0.6?'Great consistency!':activeDays>=elapsed*0.4?'Solid rhythm.':'Keep showing up.')+'</div>';
-  H+=card(cs);
-  // Upcoming Events
-  var _mon=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  var ue=lbl('UPCOMING EVENTS',link('View Calendar','calendar'));
-  if(!upRaces.length){ ue+='<div data-act="addrace" style="font-size:12px;color:var(--d-t4);padding:10px 0;text-align:center;cursor:pointer">No races scheduled — add one</div>'; }
-  upRaces.slice(0,2).forEach(function(rr,ri){
-    var sIcon=rr.sport==='run'?ACC.red:rr.sport==='bike'?ACC.green:ACC.amber;
-    ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid var(--d-edge);':'')+'cursor:pointer">';
-    ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:var(--d-t4)">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:var(--d-t1);line-height:1">'+rr.dateObj.getDate()+'</div></div>';
-    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--d-head);'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:var(--c-amber)">(tentative)</span>':'')+'</div><div style="font-size:10px;color:var(--d-t4)">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
-    ue+='<div style="font-size:11px;font-weight:700;color:'+(rr.status==='cancelled'?ACC.red:ACC.green)+';flex-shrink:0">'+(rr.status==='cancelled'?'Cancelled':(rr.daysOut+' day'+(rr.daysOut===1?'':'s')))+'</div></div>';
-  });
-  ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:var(--d-t3);border:1px solid var(--d-edge);border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
-  H+=card(ue);
   H+='</div>';
 
   // Footer
@@ -40585,6 +40790,21 @@ function dsShowDashboard(){
   shell.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--d-deep);box-sizing:border-box';
   shell.innerHTML=H;
   mc.appendChild(shell);
+
+  // Range toggle on Performance Trajectory. Bound after the HTML is committed, and it re-renders the
+  // whole dashboard rather than patching the card: the verdict, the percentage, the axis labels, the
+  // insight sentence and the driver attributions ALL depend on the window, so repainting one piece
+  // would leave the others describing a different range - the failure this card exists to avoid.
+  try{
+    shell.querySelectorAll('[data-ptrange]').forEach(function(el){
+      el.addEventListener('click', function(){
+        var k=el.getAttribute('data-ptrange');
+        if(!k || k===_ptRange) return;
+        _ptRange=k;
+        try{ dsShowDashboard(); }catch(e){}
+      });
+    });
+  }catch(e){}
 
   // ---- attention panel (rules now, weather + AI async) ----
   try{
