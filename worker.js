@@ -40113,9 +40113,9 @@ function _ptFactors_(days){
     var rideC=cur.length/weeks,    rideP=prv.length/weeks;
     var hrC=sum(cur,function(r){ return (+r.movingSecs||0)/3600; })/weeks;
     var hrP=sum(prv,function(r){ return (+r.movingSecs||0)/3600; })/weeks;
-    add(res.causes,'Weekly TSS','#22c55e', tssC, tssP, Math.round(tssC)+' vs '+Math.round(tssP));
-    add(res.causes,'Rides / week','#60a5fa', rideC, rideP, (Math.round(rideC*10)/10)+' vs '+(Math.round(rideP*10)/10));
-    add(res.causes,'Hours / week','#a78bfa', hrC, hrP, (Math.round(hrC*10)/10)+' vs '+(Math.round(hrP*10)/10));
+    add(res.causes,res.causesMiss,'Weekly TSS','#22c55e', tssC, tssP, Math.round(tssC)+' vs '+Math.round(tssP));
+    add(res.causes,res.causesMiss,'Rides / week','#60a5fa', rideC, rideP, (Math.round(rideC*10)/10)+' vs '+(Math.round(rideP*10)/10));
+    add(res.causes,res.causesMiss,'Hours / week','#a78bfa', hrC, hrP, (Math.round(hrC*10)/10)+' vs '+(Math.round(hrP*10)/10));
     // ---- OUTCOMES: whether it is showing up in the numbers ----
     // MEAN OF THE TOP THREE, not the single best. One exceptional ride should not decide whether a
     // year reads as progress, which is exactly what the max-based version did.
@@ -40128,7 +40128,7 @@ function _ptFactors_(days){
     var meanOf=function(set,fn){ var s=0,n=0; set.forEach(function(r){ var x=fn(r);
       if(x!=null && isFinite(x) && x>0){ s+=x; n++; } }); return n?(s/n):null; };
     var c20=top3(cur,1200), p20=top3(prv,1200);
-    add(res.outcomes,'Best 20-min power','#60a5fa', c20, p20,
+    add(res.outcomes,res.outcomesMiss,'Best 20-min power','#60a5fa', c20, p20,
         (c20!=null&&p20!=null)?(Math.round(c20)+'W vs '+Math.round(p20)+'W'):'');
     var wt=(typeof stWeightLb_==='function')?stWeightLb_():null;
     // The guard that skips W/kg has to report itself too, or the one metric carrying an extra
@@ -40136,7 +40136,7 @@ function _ptFactors_(days){
     if(!(wt>0 && c20!=null && p20!=null)) res.outcomesMiss.push('W/kg at 20 min');
     if(wt>0 && c20!=null && p20!=null){
       var kg=wt/2.20462;
-      add(res.outcomes,'W/kg at 20 min','#f59e0b', c20/kg, p20/kg,
+      add(res.outcomes,res.outcomesMiss,'W/kg at 20 min','#f59e0b', c20/kg, p20/kg,
           (Math.round(c20/kg*100)/100)+' vs '+(Math.round(p20/kg*100)/100));
     }
     // Speed carried per heartbeat - already a mean, so stable, and the honest version of what the
@@ -40144,7 +40144,7 @@ function _ptFactors_(days){
     var eff=function(r){ var mi=parseFloat(r.distance)||0, sec=(+r.movingSecs||0);
       var hr=parseFloat(r.avgHR)||0; if(!(mi>0&&sec>0&&hr>0)) return null;
       return (mi/(sec/3600))/hr; };
-    add(res.outcomes,'Speed per heartbeat','#4ade80', meanOf(cur,eff), meanOf(prv,eff));
+    add(res.outcomes,res.outcomesMiss,'Speed per heartbeat','#4ade80', meanOf(cur,eff), meanOf(prv,eff));
   }catch(e){}
   res.causes=res.causes.slice(0,3);
   res.outcomes=res.outcomes.slice(0,3);

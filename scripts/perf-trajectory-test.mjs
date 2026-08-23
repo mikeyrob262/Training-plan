@@ -30,17 +30,65 @@ const eq = (l, got, want) => { const c = JSON.stringify(got) === JSON.stringify(
 console.log('\n' + Y + '=== causes are causes: training RATE, which is what CTL integrates ===' + X);
 ok('the factor builder returns causes and outcomes separately', /function _ptFactors_\(days\)\{/.test(src)
    && /res=\{ causes:\[\], outcomes:\[\],[^}]*haveBoth:false \}/.test(src));
-ok('weekly TSS is a cause', /add\(res\.causes,'Weekly TSS'/.test(src));
-ok('rides per week is a cause', /add\(res\.causes,'Rides \/ week'/.test(src));
-ok('hours per week is a cause', /add\(res\.causes,'Hours \/ week'/.test(src));
+ok('weekly TSS is a cause', /add\(res\.causes,res\.causesMiss,'Weekly TSS'/.test(src));
+ok('rides per week is a cause', /add\(res\.causes,res\.causesMiss,'Rides \/ week'/.test(src));
+ok('hours per week is a cause', /add\(res\.causes,res\.causesMiss,'Hours \/ week'/.test(src));
 ok('...all divided by the window length, so they are RATES not totals', /var weeks=span\/7;/.test(src));
 ok('TSS uses the shared ride-TSS accessor, not a raw field', /constRideTSS_\(r\)\|\|0/.test(src));
 ok('NEG: no outcome metric is filed under causes',
    !/add\(res\.causes,'Best 20-min power'/.test(src) && !/add\(res\.causes,'W\/kg/.test(src));
 
+console.log('\n' + Y + '=== _ptFactors_ RUN, not just read ===' + X);
+{
+  // THE TEST THAT WOULD HAVE CAUGHT THE REGRESSION, and every check above it would not have.
+  //
+  // add() gained a `miss` parameter in second position. The six call sites were meant to be rewired
+  // in the same edit, but the script that did it asserted BETWEEN mutations and threw before its
+  // write, so every replacement it had made in memory was discarded. The definition changed and the
+  // callers did not. Each then passed the LABEL where `miss` was expected, so miss.push threw on the
+  // first factor, the outer catch swallowed it, and the card rendered "not enough matched history"
+  // over a library with 48 and 58 rides in the two windows.
+  //
+  // Nothing pattern-based caught it: the source assertions were still matching the OLD call shape,
+  // so they passed against exactly the broken arrangement they were meant to pin. Executing the
+  // function with known input is the only check that could not be fooled that way.
+  const i = src.indexOf('function _ptFactors_(');
+  let j = src.indexOf('{', i), d = 0, end = -1;
+  for (; j < src.length; j++) { const c = src[j];
+    if (c === '{') d++; else if (c === '}') { d--; if (!d) { end = j + 1; break; } } }
+  const body = src.slice(i, end);
+
+  const day = (n) => { const t = new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate() - n);
+    return t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0'); };
+  const ride = (ago, tss, secs, pc) => ({ date: day(ago), tss, movingSecs: secs, powerCurve: pc,
+    distance: 20, avgHR: 140 });
+  // Two windows of 30 days: the current one trains harder than the previous.
+  const rides = [];
+  for (let k = 1; k <= 8; k++)  rides.push(ride(k * 3,      100, 5400, { 1200: 260, 3600: 230 }));
+  for (let k = 1; k <= 6; k++)  rides.push(ride(30 + k * 4,  70, 3600, { 1200: 250, 3600: 220 }));
+
+  const fn = new Function('allRidesDeduped_', 'st', 'constRideTSS_', 'stWeightLb_',
+    body + '; return _ptFactors_;')(() => rides, { rides }, (r) => r.tss, () => 160);
+  const res = fn(30);
+
+  ok('it reports having both windows', res.haveBoth === true);
+  eq('all three causes are produced', res.causes.map((c) => c.label),
+     ['Weekly TSS', 'Rides / week', 'Hours / week']);
+  ok('NEG: causes are not silently empty', res.causes.length > 0);
+  ok('the arithmetic is right - harder block reads as more weekly TSS',
+     res.causes[0].pct > 0);
+  ok('...and more rides per week', res.causes[1].pct > 0);
+  ok('outcomes are produced too', res.outcomes.length > 0);
+  ok('each row carries the figures behind its percentage', !!res.causes[0].detail);
+  // The exact failure shape, asserted absent: windows present but every list empty.
+  ok('NEG: not the regression shape (haveBoth with nothing in it)',
+     !(res.haveBoth && !res.causes.length && !res.outcomes.length
+       && !res.causesMiss.length && !res.outcomesMiss.length));
+}
+
 console.log('\n' + Y + '=== outcomes live in their own panel, honestly titled ===' + X);
-ok('best 20-min power is an outcome', /add\(res\.outcomes,'Best 20-min power'/.test(src));
-ok('W/kg is an outcome', /add\(res\.outcomes,'W\/kg at 20 min'/.test(src));
+ok('best 20-min power is an outcome', /add\(res\.outcomes,res\.outcomesMiss,'Best 20-min power'/.test(src));
+ok('W/kg is an outcome', /add\(res\.outcomes,res\.outcomesMiss,'W\/kg at 20 min'/.test(src));
 ok('the card renders a separate heading for them', /head2\('Is it translating'\)/.test(src));
 ok('...distinct from the causes heading', /head2\('What is driving it'\)/.test(src));
 ok('NEG: the old single undifferentiated panel is gone', !/_ptDrivers_/.test(src));
