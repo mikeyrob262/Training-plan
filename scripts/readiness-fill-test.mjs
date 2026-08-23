@@ -104,11 +104,25 @@ console.log('\n' + Y + '=== no surface prints the fill as a score ===' + X);
   ok('...and its arc is driven by fill', /ringOff=ringC\*\(1-\(rdy\?rdy\.fill:0\)\)/.test(ds));
   // The arc was hardcoded green, so it stayed green through Loaded and Fatigued.
   ok('...and its colour comes from the band', /ringCol=\(rdy&&rdy\.loaded\)\?rdy\.color/.test(ds));
-  ok('the Form Readiness card prints the TSB too', /recBig=\(rdy&&rdy\.loaded\)\?rdy\.value/.test(ds));
-  ok('...and takes the SHARED band label, not taperVerdict_ own', !/recLabel=verdict\.readyLabel/.test(ds));
-  // HRV+RHR genuinely IS a 0-100 composite of two measurements - that branch must keep its percent.
-  ok('...while a real HRV+RHR recovery score keeps its percentage', /recBig=recScore\+'%'/.test(ds));
-  ok('...and the taper note survives as the sub-line', /recSub=verdict\.readyNote/.test(ds));
+  // THE RECOVERY CARD LEFT THE DASHBOARD for Athlete Intelligence -> Current state, so the three
+  // checks that pinned its two modes no longer have a surface to test. They are not simply deleted:
+  // one of the guarantees they carried is still live and has moved with the card, and the other two
+  // described the FORM-READINESS fallback branch, which is gone because the Readiness ring above
+  // already answers that question and the card was a second answer to it.
+  ok('NEG: the Dashboard no longer builds a Recovery card', !/var rd=lbl\(recTitle/.test(ds) && !/H\+=card\(rd\)/.test(ds));
+  ok('...and its variables left with it', !/recBig|recScore|recSub|recLabel|haveRecovery/.test(ds));
+  // THE GUARANTEE THAT SURVIVED, re-pointed at where it now lives. HRV+RHR against a baseline
+  // genuinely IS a 0-100 composite of two measurements, so it reads as a percentage - unlike a
+  // form-readiness BAND, which is one input scored into a range and must never be dressed as one.
+  {
+    const cs = src.slice(src.indexOf('function _ovwCurrentStateHTML_('),
+                         src.indexOf('function _ovwCurrentStateHTML_(') + 6000);
+    ok('the recovery composite keeps its percentage on its new surface',
+       /\{ k:'Recovery', v:rec\.score, unit:'%'/.test(cs));
+    ok('...computed once, in the shared accessor', /_recoveryNow_\(\)/.test(cs));
+    ok('...and an absent reading says absent rather than substituting a band',
+       /No HRV or resting heart rate for today/.test(cs));
+  }
 
   // Calendar ring - the one that printed it outright with a % sign.
   const cal = src.slice(src.indexOf('function showCalendarTab('), src.indexOf('function showCalendarTab(') + 40000);

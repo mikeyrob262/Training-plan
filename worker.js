@@ -24506,6 +24506,33 @@ function _hrvSrcLabel_(w){
   if(w.src==='manual') return 'logged manually';
   return w.on ? ('logged manually '+w.on) : 'logged manually, date unknown';
 }
+// THE RECOVERY COMPOSITE, IN ONE PLACE. Extracted when the Recovery card moved off the Dashboard to
+// Athlete Intelligence: the score is a real 0-100 composite of two measurements against the
+// athlete's own rolling baseline, and the arithmetic had lived inline in the card that rendered it.
+// Moving the card without extracting this would have meant retyping the formula on the new surface -
+// two computations of one number, which is the failure this app keeps having to undo.
+//
+// ONE MODE ONLY, deliberately. The old card had a second branch that fell back to a FORM-readiness
+// verdict when no HRV or RHR existed. That branch duplicated what the Readiness ring already says,
+// and the ring stays on the Dashboard - so here an absent reading reports absent rather than
+// quietly answering a different question with a different number.
+function _recoveryNow_(){
+  var w=(typeof _hrvToday_==='function')?_hrvToday_():{hrv:null,rhr:null,src:null,on:null};
+  var hrv=(w&&w.hrv!=null)?w.hrv:null, rhr=(w&&w.rhr!=null)?w.rhr:null;
+  var src=(typeof _hrvSrcLabel_==='function')?_hrvSrcLabel_(w):'';
+  if(hrv==null || rhr==null) return { have:false, hrv:hrv, rhr:rhr, src:src, baselineN:0 };
+  // Baseline from BOTH stores, medianed, over a trailing window that EXCLUDES today - see
+  // _hrvBaseline_. With no baseline yet the deviations are zero and the score sits at the neutral
+  // 65, which is why that constant is the anchor rather than 50.
+  var bl=(typeof _hrvBaseline_==='function')?_hrvBaseline_():{hrv:null,rhr:null,n:0};
+  var hrvDev=(bl.hrv>0)?((hrv-bl.hrv)/bl.hrv):0;        // higher HRV is better
+  var rhrDev=(bl.rhr>0)?((rhr-bl.rhr)/bl.rhr):0;        // higher resting HR is worse
+  var score=Math.max(0,Math.min(100,Math.round(65 + hrvDev*120 - rhrDev*160)));
+  return { have:true, hrv:hrv, rhr:rhr, src:src, score:score,
+           label:(score>=75?'Good':score>=55?'Fair':score>=35?'Low':'Poor'),
+           col:(score>=75?'#4ade80':score>=55?'#FFB938':'#e24b4a'),
+           baselineN:(bl.n||0), bHRV:bl.hrv, bRHR:bl.rhr };
+}
 // hrvDaily rows are {hrv, rhr, at}. Returns the trailing series EXCLUDING today, so today is
 // judged against its own history rather than against itself.
 function _ovwWellnessSeries_(field, days){
@@ -30019,7 +30046,53 @@ function _ovwCurrentStateHTML_(){
       +_ovwDelta_(c.d, c.up)+'</div>'
       +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:3px">'+((c.d==null)?'&nbsp;':'vs 7 days ago')+'</div></div>';
   });
-  return _ovwCard_(H+'</div>');
+  H+='</div>';
+  // RECOVERY LIVES HERE NOW, not on the Dashboard. It is diagnostic rather than plan-actionable -
+  // the Dashboard keeps Readiness, which is the daily verdict you act on - and this is the section
+  // that already answers "where am I right now", so the two readings sit together instead of one
+  // being a card of its own on a page with no room for it.
+  //
+  // The composite comes from _recoveryNow_, so the number cannot diverge from wherever else it is
+  // read, and the entry point survives the move: openRecoveryEditor_ is global and the label links
+  // straight to it, which is what the Dashboard card's Edit affordance did.
+  try{
+    var rec=(typeof _recoveryNow_==='function')?_recoveryNow_():null;
+    if(rec){
+      H+='<div style="height:1px;background:var(--d-edge);margin:14px 0 12px"></div>';
+      H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+        +'<span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">Recovery</span>'
+        +'<span onclick="if(window.openRecoveryEditor_)openRecoveryEditor_()" style="font-size:11px;font-weight:600;color:var(--c-green);cursor:pointer">Log today</span>'
+        +'</div>';
+      if(!rec.have){
+        // ABSENT SAYS ABSENT. No substitute number, no readiness verdict wearing a recovery label.
+        H+='<div style="font-size:12px;color:var(--d-dim);line-height:1.5">No HRV or resting heart rate for today. '
+          +'Recovery is a composite of those two against your own baseline, so it needs both before it can say anything.</div>';
+      } else {
+        var rcells=[
+          // THE PERCENT SIGN IS LOAD-BEARING. HRV+RHR against a baseline genuinely is a 0-100
+          // composite of two measurements, so it reads as a percentage - unlike a form-readiness
+          // BAND, which is one input scored into a range and must never be dressed as one. That
+          // distinction is why the old Recovery card had two modes and why only this one moved.
+          { k:'Recovery', v:rec.score, unit:'%', col:rec.col, sub:rec.label },
+          { k:'HRV',      v:rec.hrv,   unit:' ms', col:'var(--d-head)', sub:(rec.bHRV?('baseline '+Math.round(rec.bHRV)+' ms'):'no baseline yet') },
+          { k:'Resting HR', v:rec.rhr, unit:' bpm', col:'var(--d-head)', sub:(rec.bRHR?('baseline '+Math.round(rec.bRHR)+' bpm'):'no baseline yet') }
+        ];
+        H+='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">';
+        rcells.forEach(function(c){
+          H+='<div><div style="font-size:10.5px;color:var(--d-dim)">'+c.k+'</div>'
+            +'<div style="font-size:22px;font-weight:800;color:'+c.col+';line-height:1;margin-top:3px">'+c.v+c.unit+'</div>'
+            +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:3px">'+c.sub+'</div></div>';
+        });
+        H+='</div>';
+        // THE BASELINE'S SIZE, STATED. "vs your baseline" with two days behind it and with
+        // twenty-eight are different claims, and the score alone cannot tell them apart.
+        H+='<div style="font-size:9.5px;color:var(--d-dim);margin-top:9px">'
+          +(rec.baselineN?('Scored against your '+rec.baselineN+'-day baseline'):'Building a baseline - the score is provisional until there is history behind it')
+          +(rec.src?(' &middot; '+rec.src):'')+'</div>';
+      }
+    }
+  }catch(e){}
+  return _ovwCard_(H);
 }
 
 // Goal TRAJECTORIES. A bar says where you are; a line says whether you are pacing ahead or behind,
@@ -40720,7 +40793,7 @@ function dsShowDashboard(){
   // is squeezed by the rows that do.
   H+='<div style="display:grid;grid-template-columns:1fr;min-width:0;flex:0 0 auto">'+card(_ptCardHTML_(lbl,link))+'</div>';
 
-  H+='<div style="display:grid;grid-template-columns:repeat(7, minmax(0,1fr));gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
+  H+='<div style="display:grid;grid-template-columns:repeat(6, minmax(0,1fr));gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
   // Recent Activities
   var ra=lbl('RECENT ACTIVITIES',link('View All Activities','activities'));
   if(!recent.length){ ra+='<div style="font-size:12px;color:var(--d-t4);padding:12px 0">No activities yet.</div>'; }
@@ -40942,85 +41015,11 @@ function dsShowDashboard(){
   days7.forEach(function(k){ tl+='<div style="flex:1;text-align:center;font-size:9px;color:var(--d-dim)">'+['S','M','T','W','T','F','S'][new Date(k+"T00:00:00").getDay()]+'</div>'; });
   tl+='</div><div style="width:22px"></div></div>';
   H+=card(tl);
-  // Recovery card. TWO honest modes:
-  //  (a) real HRV + Resting HR entered → a genuine recovery score from them.
-  //  (b) neither entered → this is NOT recovery, it is a FORM-readiness view, so
-  //      it is LABELLED as such and its verdict comes from the SAME shared
-  //      taper-aware function as the IQ + Load cards. On a taper (TSB +11, CTL
-  //      falling) that reads "Race-ready", never a bare "Fair".
-  var rC=2*Math.PI*30;
-  // Resolved through _hrvToday_, not read from st.hrv directly: the Garmin sync writes st.hrvDaily
-  // and this card was the one place readiness is actually used, so reading only the manual field
-  // meant the auto-sync had no consumer at all.
-  var _w=(typeof _hrvToday_==='function')?_hrvToday_():{hrv:null,rhr:null,src:null,on:null};
-  var hrv=(_w.hrv!=null)?_w.hrv:null, rhr=(_w.rhr!=null)?_w.rhr:null;
-  var hrvSrc=(typeof _hrvSrcLabel_==='function')?_hrvSrcLabel_(_w):'';
-  var haveRecovery=(hrv!=null && rhr!=null);
-  // recFill drives the ARC (0-1); recBig is what the ring PRINTS. They are separate because the two
-  // branches below are genuinely different KINDS of number: HRV+RHR really is a 0-100 composite of
-  // two measurements, while form readiness is a band on one input and must never be dressed as a
-  // percentage. Collapsing both into one "score" is what put "98/100" on this card.
-  var recScore, recLabel, recColor, recTitle, recSub, recFill, recBig;
-  if(haveRecovery){
-    // Real recovery from manual HRV + Resting HR, blended against the user's own
-    // rolling baseline so the number means something. Higher HRV and lower RHR =
-    // better recovered. Falls back gracefully until a few days of baseline exist.
-    // Baseline from BOTH stores, medianed, over a trailing window that EXCLUDES today - see
-    // _hrvBaseline_. Reading recoveryLog alone left the baseline empty in the normal case, and
-    // including today made the deviation exactly zero whenever it was the only entry, which is why
-    // the score sat on a flat 65 no matter what the reading was.
-    var _bl=(typeof _hrvBaseline_==='function')?_hrvBaseline_():{hrv:null,rhr:null,n:0,garmin:0,manual:0};
-    var bHRV=_bl.hrv, bRHR=_bl.rhr;
-    // % deviation from baseline; if no baseline yet, score around neutral 65.
-    var hrvDev=(bHRV&&bHRV>0)?((hrv-bHRV)/bHRV):0;        // + is good
-    var rhrDev=(bRHR&&bRHR>0)?((rhr-bRHR)/bRHR):0;        // + is bad
-    var raw=65 + hrvDev*120 - rhrDev*160;
-    recScore=Math.max(0,Math.min(100,Math.round(raw)));
-    recLabel=recScore>=75?'Good':recScore>=55?'Fair':recScore>=35?'Low':'Poor';
-    recColor=recScore>=75?'#4ade80':recScore>=55?'#FFB938':'#e24b4a';
-    recTitle='RECOVERY';
-    // Source named on the card. An automatic reading and a typed one are different kinds of fact,
-    // and the distinction between a real recovery composite and a manual entry is one the athlete
-    // already cares about - so it is stated rather than left to be inferred from the number.
-    // The sub-line states the baseline's SIZE, not merely that one exists. 'vs your baseline' with
-    // two days behind it and with twenty-eight are different claims, and the score alone cannot tell
-    // them apart.
-    recSub=(bHRV?('vs your '+_bl.n+'-day baseline'):'building baseline')+(hrvSrc?(' &middot; '+hrvSrc):'');
-    recFill=recScore/100; recBig=recScore+'%';   // a real composite of two measurements
-  } else {
-    // No wearable/manual recovery inputs → honest form-readiness, from the ONE readiness read.
-    //
-    // The label used to come from taperVerdict_, which carries its OWN band vocabulary and its own
-    // thresholds: at TSB +8 it said "Fresh" while _RDY_BANDS said "Balanced", so the two surfaces
-    // disagreed about the verdict even when they agreed about the number. The band label is the
-    // shared one now.
-    //
-    // The taper-aware line SURVIVES as the sub-line, because it says something the band cannot -
-    // whether the freshness came from a taper, from planned load, or from detraining. That is a
-    // note explaining the reading, not a second verdict competing with it.
-    recColor=(rdy&&rdy.loaded)?rdy.color:'#94a3b8';
-    recLabel=(rdy&&rdy.loaded)?rdy.label:'—';
-    recFill=(rdy&&rdy.loaded)?rdy.fill:0;
-    recBig=(rdy&&rdy.loaded)?rdy.value:'—';
-    recTitle='FORM READINESS';
-    recSub=verdict.readyNote;
-  }
-  var rd=lbl(recTitle,'<span data-act="recovery" style="font-size:10px;font-weight:600;color:var(--c-green);cursor:pointer">Edit</span>');
-  rd+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">'+recSub+'</div>';
-  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recFill)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:var(--d-t1);line-height:1">'+recBig+'</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
-  rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
-  // THEME-AWARE, like the ring number beside them. These carried a hardcoded #e8edf5 against a
-  // var(--d-inset) box: fine in dark mode where the inset is #171c2b, invisible in light mode where
-  // it is #F1F3F7 - near-white text on a near-white box. The ring next to them never had the problem
-  // because it already used var(--d-t1); the chips just never got the same treatment.
-  //
-  // var() is safe HERE because these are HTML style attributes. It is INVALID in an SVG presentation
-  // attribute and would silently drop the colour, so a colour sweep has to classify the context
-  // before substituting - see the light-mode notes.
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'var(--d-t1)':'var(--d-dim)')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'var(--d-t1)':'var(--d-dim)')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
-  rd+='</div>';
-  H+=card(rd);
+  // Recovery moved to Athlete Intelligence -> Current state, where the diagnostic readings live.
+  // The Dashboard keeps READINESS, which is the daily verdict you act on; Recovery is the evidence
+  // behind it, and the two were competing for the same glance on a page already fitting exactly.
+  // The composite now has one home and one implementation, _recoveryNow_, and openRecoveryEditor_
+  // remains the entry point from the label there.
   H+='</div>';
 
   // Footer

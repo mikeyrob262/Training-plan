@@ -37,7 +37,9 @@ console.log('\n' + Y + '=== the baseline reads both stores, not just the manual 
 ok('_hrvBaseline_ exists', /function _hrvBaseline_\(days\)/.test(SRC));
 ok('it reads the Garmin store', /var h=\(st && st\.hrvDaily\)\?st\.hrvDaily:\{\}/.test(SRC));
 ok('...and the manual log', /Array\.isArray\(st\.recoveryLog\)\?st\.recoveryLog:\[\]/.test(SRC));
-ok('the card uses it', /var _bl=\(typeof _hrvBaseline_==='function'\)\?_hrvBaseline_\(\)/.test(SRC));
+// The consumer moved to Athlete Intelligence and the composite was extracted into _recoveryNow_ on
+// the way, so these follow the guarantee rather than the card that used to carry it.
+ok('the composite uses it', /var bl=\(typeof _hrvBaseline_==='function'\)\?_hrvBaseline_\(\)/.test(SRC));
 ok('NEG: the card no longer builds a baseline from recoveryLog alone', !/var hist=\(st\.recoveryLog\|\|\[\]\)\.filter/.test(SRC));
 ok('NEG: and the old unbounded mean is gone', !/hist\.reduce/.test(SRC));
 
@@ -55,9 +57,9 @@ ok('a day needs BOTH hrv and rhr', /hv==null \|\| !isFinite\(hv\) \|\| rv==null 
 ok('the mix is counted, so the composition is knowable', /if\(d\.src==='garmin'\) out\.garmin\+\+; else out\.manual\+\+;/.test(SRC));
 
 console.log('\n' + Y + '=== the card states how much baseline there is ===' + X);
-ok('the sub-line names the day count', /'vs your '\+_bl\.n\+'-day baseline'/.test(SRC));
-ok('...and still says when it is building', /:'building baseline'/.test(SRC));
-ok('the reading source is still named alongside it', /\+\(hrvSrc\?\(' &middot; '\+hrvSrc\):''\)/.test(SRC));
+ok('the sub-line names the day count', /'Scored against your '\+rec\.baselineN\+'-day baseline'/.test(SRC));
+ok('...and still says when it is building', /Building a baseline - the score is provisional/.test(SRC));
+ok('the reading source is still named alongside it', /\+\(rec\.src\?\(' &middot; '\+rec\.src\):''\)/.test(SRC));
 
 console.log('\n' + Y + '=== the baseline, exercised ===' + X);
 {

@@ -30,7 +30,13 @@ const ok = (l, c) => { if (!c) fails++; console.log('  ' + (c ? G+'PASS'+X : R+'
 
 console.log('\n' + Y + '=== one resolver, and the card uses it ===' + X);
 ok('_hrvToday_ exists', /function _hrvToday_\(\)/.test(SRC));
-ok('the card resolves through it', /var _w=\(typeof _hrvToday_==='function'\)\?_hrvToday_\(\)/.test(SRC));
+// The consumer moved: the Recovery card left the Dashboard for Athlete Intelligence, and the
+// composite was extracted into _recoveryNow_ on the way so the arithmetic has one home. The
+// guarantee is unchanged - the reading resolves through _hrvToday_, never off st.hrv - so the check
+// follows it rather than being deleted with the card.
+ok('the recovery composite resolves through it',
+   /var w=\(typeof _hrvToday_==='function'\)\?_hrvToday_\(\)/.test(SRC));
+ok('...and it is the shared accessor every surface reads', /function _recoveryNow_\(\)\{/.test(SRC));
 ok('NEG: the card no longer reads st.hrv directly', !/var hrv=\(st\.hrv!=null\)\?st\.hrv:null/.test(SRC));
 ok('it reads the Garmin store the sync writes', /st\.hrvDaily/.test(SRC) && /h\[tk\]/.test(SRC));
 ok('...handling both object rows and bare legacy numbers', /\(r && typeof r==='object'\)\?r\.hrv:r/.test(SRC));
@@ -49,7 +55,8 @@ ok('a label helper exists', /function _hrvSrcLabel_\(w\)/.test(SRC));
 ok('Garmin is named', /return 'from Garmin';/.test(SRC));
 ok('a manual entry is named', /return 'logged manually';/.test(SRC));
 ok('a stale manual value carries its date', /'logged manually '\+w\.on/.test(SRC));
-ok('the card appends it to the sub-line', /\+\(hrvSrc\?\(' &middot; '\+hrvSrc\):''\)/.test(SRC));
+ok('the surface still names the source', /\+\(rec\.src\?\(' &middot; '\+rec\.src\):''\)/.test(SRC));
+ok('...and the accessor carries it', /src:src,/.test(SRC));
 
 console.log('\n' + Y + '=== the resolution, exercised ===' + X);
 {
