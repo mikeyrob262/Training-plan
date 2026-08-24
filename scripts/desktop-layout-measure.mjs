@@ -72,9 +72,16 @@ try {
       window.st = window.st || {};
       st.rides = st.rides || [];
       var laps=[]; for(var i=0;i<8;i++) laps.push({distance:12.4, time:5025, avgPower:1234, avgHR:148});
+      // A REAL TRACK. Without GPS the ride-detail map never mounts and #rd-map is replaced by a
+      // 200px "GPS data unavailable" placeholder — measuring that instead of the map is how the
+      // first pass of this probe reported a box that does not exist in the case being asked about.
+      var la=[], lo=[];
+      for(var g=0; g<220; g++){ var th=g/220*Math.PI*2;
+        la.push(42.8700 + 0.018*Math.sin(th)); lo.push(-85.5900 + 0.024*Math.cos(th)); }
       st.rides.unshift({ id:'probe', stravaId:999999, date:'2026-08-20', name:'Probe Ride',
         type:'Ride', sportType:'Ride', distance:42.5, movingTime:9000, elapsedTime:9300,
-        avgPower:215, np:228, avgHR:142, maxHR:171, elev:1450, calories:900, laps:laps });
+        avgPower:215, np:228, avgHR:142, maxHR:171, elev:1450, calories:900, laps:laps,
+        lats:la, lons:lo, gpsLats:la, gpsLons:lo });
 
       if(typeof openDesktopRideDetail!=='function') return {err:'openDesktopRideDetail missing'};
       openDesktopRideDetail(0, true);
@@ -91,6 +98,16 @@ try {
               y:Math.round(b.y), bottom:Math.round(b.bottom), h:Math.round(b.height),
               sw:el.scrollWidth, cw:el.clientWidth, sh:el.scrollHeight, ch:el.clientHeight}; };
     var main=r('#ds-main-area'), rp=r('#ds-rpanel')||r('.ds-rpanel'), laps=r('table.ds-laps');
+    var rdmap=r('#rd-map'), rdscroll=r('#rd-scroll'), stats=r('#rd-tab-overview > div:nth-of-type(2)');
+    var _m=document.getElementById('rd-map');
+    var _mi={found:!!_m};
+    if(_m){ var cs=getComputedStyle(_m);
+      _mi.inlineStyle=_m.getAttribute('style');
+      _mi.computed={width:cs.width,height:cs.height,maxWidth:cs.maxWidth,aspectRatio:cs.aspectRatio,margin:cs.margin};
+      _mi.parentId=_m.parentElement?(_m.parentElement.id||_m.parentElement.className):null;
+      _mi.count=document.querySelectorAll('#rd-map').length;
+      _mi.hasLeaflet=!!_m.querySelector('.leaflet-container');
+    }
     var shell=r('#desktop-shell');
     var rps=[].slice.call(document.querySelectorAll('.ds-rpanel .ds-rp')).map(function(el,i){
       var b=el.getBoundingClientRect();
@@ -100,7 +117,7 @@ try {
               y:Math.round(b.y), bottom:Math.round(b.bottom),
               sw:el.scrollWidth, cw:el.clientWidth, overflowsX:(el.scrollWidth>el.clientWidth+1)};
     });
-    return {viewport:{w:innerWidth,h:innerHeight}, shell:shell, main:main, rpanel:rp, lapsTable:laps,
+    return {viewport:{w:innerWidth,h:innerHeight}, shell:shell, main:main, rpanel:rp, lapsTable:laps, rdmap:rdmap, rdmapInfo:_mi, rdscroll:rdscroll, statsRow:stats,
             panels:rps,
             rpanelStyle:(function(){ var el=document.querySelector('.ds-rpanel'); if(!el) return null;
               var c=getComputedStyle(el); return {position:c.position, width:c.width, flexShrink:c.flexShrink, overflowX:c.overflowX}; })(),

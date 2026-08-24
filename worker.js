@@ -42122,7 +42122,22 @@ function openDesktopRideDetail(idx, _noFetch){
       '<div id="rd-tab-overview">'+
 
       // MAP
-      '<div id="rd-map" style="width:100%;max-width:520px;aspect-ratio:4/3;margin:0 auto;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
+      // FULL COLUMN WIDTH. This was width:100% capped at max-width:520px with margin:0 auto, so on
+      // a desktop main area around 1300px the map sat in the middle with roughly 390px of dead
+      // gutter each side — while every other element in this pane (the 4-col stat grid below it,
+      // the section rows under that) runs edge to edge. The map was the only inset thing here, and
+      // the Map tab next door already draws its route across the full column.
+      //
+      // THE HEIGHT HAD TO STOP COMING FROM THE WIDTH. aspect-ratio:4/3 was fine at a 520px cap
+      // (390px tall) and absurd without one — at 1300px wide it would have been 975px tall, a map
+      // taller than the viewport. It is an explicit 390px now, which is exactly what the capped
+      // version rendered, so this changes the width and nothing else.
+      //
+      // It also removes a foot-gun rather than adding one: the blank-map race documented in
+      // renderRideMap_ is specifically that aspect-ratio derives height from a WIDTH that is 0
+      // before layout settles. A fixed height cannot be 0, so the ResizeObserver there now has one
+      // less way to be needed.
+      '<div id="rd-map" style="width:100%;height:390px;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
 
       // 4-col stats below map
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:var(--d-deep);border-bottom:1px solid var(--d-line);flex-shrink:0">'+
@@ -44082,8 +44097,10 @@ function renderRideMap_(mapId, lats, lons, opts){
   map.invalidateSize();
   setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} },300);
   // A LEAFLET MAP MOUNTED AT ZERO SIZE STAYS BLANK FOREVER, and nothing above notices.
-  // #rd-map takes its height from aspect-ratio off its own WIDTH, so any moment the container is
-  // measured before layout settles - or while an ancestor is still hidden - it is 0x0. Leaflet then
+  // #rd-map USED TO take its height from aspect-ratio off its own WIDTH — it carries an explicit
+  // 390px now, so that particular route to 0x0 is closed. The guard stays because the condition it
+  // protects against has not gone away: any container measured before layout settles - or while an
+  // ancestor is still hidden, which is every map in a display:none tab - is 0x0. Leaflet then
   // computes an empty viewport, requests two degenerate tiles and never re-measures. Measured on the
   // mobile shell: height 0, 2 tiles, 76 route paths present, and nothing visible. That is the blank
   // dark box, and it is intermittent purely because it is a race with layout.
