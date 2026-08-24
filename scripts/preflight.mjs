@@ -1447,6 +1447,22 @@ try {
     fail('a session type the library defines cannot be written to the plan, or the generator fails silently (see above).');
   }
 
+  // STEP 90 - the daily mobility routine. Swapping a 21-item menu for an 8-item prescribed sequence
+  //           meant completion could no longer be keyed on ARRAY INDEX (editing the list re-points
+  //           every historical tick), and exposed a streak that built its date key UNPADDED while
+  //           every writer used getTodayKey(), so all of August looked up an empty bucket. Pins the
+  //           order, the stable ids, that a leftover numeric tick is not progress through the new
+  //           routine but is still a real mobility day, and that the row body has one builder.
+  console.log(`${D}. checking the daily mobility routine...${X}`);
+  try {
+    const so = execSync('node scripts/mobility-routine-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the mobility routine lost its order, its identity, or its streak key (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

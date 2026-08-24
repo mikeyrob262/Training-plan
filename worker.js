@@ -10332,9 +10332,11 @@ function showProg(){
     if(ws2.core&&ws2.core.date) allSessions.push({date:ws2.core.date,type:'core'});
   }
   // Mobility
+  // MOB_DAY_DONE_MIN, not a second hand-typed 6 — the routine shrank from 21 items to 8 and a
+  // threshold typed in two places only moves in one of them.
   if(st.mob){Object.keys(st.mob).forEach(function(d){
     var done=Object.values(st.mob[d].done||{}).filter(Boolean).length;
-    if(done>=6) allSessions.push({date:d,type:'mobility'});
+    if(done>=MOB_DAY_DONE_MIN) allSessions.push({date:d,type:'mobility'});
   });}
   // Conditioning
   if(st.cond){Object.keys(st.cond).forEach(function(d){
@@ -50930,38 +50932,53 @@ function _esc2_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ re
 
 // ── MOBILITY MODULE ──────────────────────────────────────────────────────────
 
+// THE DAILY ROUTINE, AS PRESCRIBED — 15-17 min, updated 2026-08-24.
+//
+// This replaced a 21-item, four-goal library (palms-to-floor / floor sit-stand / toe independence /
+// cycling mobility). That was a menu; this is a SEQUENCE, and the order is part of the
+// prescription — so the screen renders it in order and shows the target area as a tag, rather than
+// grouping by area and scrambling it.
+//
+// THE FIFTH ELEMENT IS A STABLE ID, AND IT IS LOAD-BEARING. Completion used to be stored as
+// st.mob[date].done[ARRAY INDEX]. Editing this list therefore silently re-pointed every historical
+// tick at whatever exercise now sits at that index — the same positional-identity failure that
+// duplicated plan sessions and forked shoes. Ids are slugs of the name, so the record says WHAT was
+// done. Old numeric keys are left in place as history and simply stop being read; they are not
+// migrated, because index 4 in the old list ("Strap-Assisted Toe Touch") has no counterpart here
+// and inventing one would be fabricating a log entry.
+//
+// THE RIGHT-LEG ASYMMETRY IS DELIBERATELY NOT ENCODED. The routine prescribes one extra set of
+// eccentric toe raises and extra massage time on the right; perSide here is a boolean with no way
+// to express "3x15 both, +1 right", and a half-expressed asymmetry is worse than an absent one.
+// It stays in the written routine. Revisit at the 2-3 week re-evaluation.
 var MOB_EX = [
-  // [name, hold/reps, cue, goal_tag]
-  ['Standing Forward Fold',          '30s hold',          'Knees soft, let gravity work — straighten legs gradually over time', 'palms-floor'],
-  ['Jefferson Curl',                 '5 slow reps',       'Tuck chin, roll down one vertebra at a time, 5–15 lbs max', 'palms-floor'],
-  ['Seated Pike Stretch',            '30s hold',          'Legs straight, hinge at hips — no rounding the back', 'palms-floor'],
-  ['Straddle Stretch',               '40s hold',          'Wide legs, hinge forward at hips — chest toward floor, not nose', 'palms-floor'],
-  ['Strap-Assisted Toe Touch',       '30s hold',          'Loop a strap around feet, pull yourself forward — feel the hamstrings load', 'palms-floor'],
-  ['Deep Squat Hold',                '60s hold',          'Heels flat, chest up, elbows push knees out — work toward 2 min', 'stand-up'],
-  ['Squat-to-Stand',                 '8 reps',            'Squat deep, grab toes, straighten legs while holding — repeat', 'stand-up'],
-  ['90/90 Hip Stretch',              '40s each side',     'Front shin parallel, back shin parallel — sit tall, no lean', 'stand-up'],
-  ['Couch Stretch',                  '40s each side',     'Back foot on wall, front shin vertical — critical for cyclists', 'stand-up'],
-  ['Single-Leg Balance (eyes closed)','30s each side',    'Stand on one foot, eyes closed — proprioception for floor-to-stand control', 'stand-up'],
-  ['Slow Eccentric Step-Up',         '6 reps each side',  '3-count lower off a step — builds quad/glute control for sit-to-stand', 'stand-up'],
-  ['Toe Yoga',                       '10 reps',           'Lift big toe only, hold 3s. Then lift other 4 toes only, hold 3s', 'toe-lift'],
-  ['Towel Scrunches',                '20 reps',           'Scrunch a towel with your toes — builds intrinsic foot muscles', 'toe-lift'],
-  ['Marble Pickups',                 '10 each foot',      'Pick up marbles with toes and drop in a cup — fastest intrinsic foot builder', 'toe-lift'],
-  ['Single-Leg Calf Raise + Toe Spread','12 reps each',  'At the top of each raise, actively spread all toes wide before lowering', 'toe-lift'],
-  ['Ankle Circles + Dorsiflexion',   '10 each direction', 'Circles full range. Then drive knee over pinky toe for dorsiflexion', 'toe-lift'],
-  ['Thoracic Rotation',              '10 reps each side', 'Side-lying, rotate top shoulder to floor — open chest, not hips', 'cycling'],
-  ['Pigeon Pose / Figure-4',         '45s each side',     'Glute and hip external rotator stretch — key for saddle comfort', 'cycling'],
-  ['Doorway Pec Stretch',            '30s each side',     'Arm at 90°, lean through doorway — counters chronic forward hunch from riding', 'cycling'],
-  ['Cat-Cow',                        '10 slow reps',      'On all fours — full spinal flexion and extension, 3s each direction', 'cycling'],
-  ['Childs Pose with Lateral Reach','30s each side',    'From childs pose, walk hands to one side — thoracic and lat stretch', 'cycling'],
-  ['Wrist Circles + Extensions',     '10 each direction', 'Full circles both ways, then prayer stretch and reverse prayer — for aero position', 'cycling'],
+  // [name, hold/reps, cue, area_tag, stable_id]
+  ['Heel Walking',              '90 sec',            'Walk on your heels, toes lifted as high as you can hold — the direct tibialis anterior loader', 'tib', 'heel-walking'],
+  ['Couch Stretch',             '3 min',             'Back foot up on a wall or couch, front shin vertical, squeeze the glute to keep the pelvis tucked', 'hip', 'couch-stretch'],
+  ['Kneeling Hip Flexor Stretch','2 min',            'Half-kneeling, tuck the pelvis under before leaning in — the tuck is the stretch, not the lean', 'hip', 'kneeling-hip-flexor'],
+  ['Standing Calf Stretch',     '2 min',             'Back leg straight and heel down for gastroc, then bend that knee slightly for soleus', 'calf', 'standing-calf-stretch'],
+  ['Adductor Rock-Back',        '1 min (2×8 each side)', 'Kneeling, one leg straight out to the side. Weight back onto the bent knee’s hip and rock the hips back until you feel it up the inner thigh of the straight leg. Switch sides', 'groin', 'adductor-rock-back'],
+  ['Eccentric Toe Raises',      '3 min (3×15)',      'Lift the toes fast, lower them slow — the slow lowering is the whole point', 'tib', 'eccentric-toe-raises'],
+  ['Tib Anterior Massage + CBD','2 min',             'Along the muscle beside the shin bone, not on the bone itself', 'tib', 'tib-massage'],
+  ['Legs Up the Wall',          '10 min',            'Lie down, legs vertical against a wall, and stay there — this is the recovery block, not a stretch', 'recovery', 'legs-up-wall'],
 ];
 
-var MOB_GOALS = {
-  'palms-floor': '🤲 Palms to Floor',
-  'stand-up':    '🧘 Floor Sit-Stand',
-  'toe-lift':    '🦶 Toe Independence',
-  'cycling':     '🚴 Cycling Mobility'
+
+// Target areas, for the tag on each row. The two priority issues the routine was rewritten around
+// — the right tibialis anterior and the new bilateral groin tightness — are named as such, so the
+// screen says WHY an exercise is in the list.
+var MOB_AREAS = {
+  'tib':      { label: 'Tib anterior', color: '#f59e0b' },
+  'hip':      { label: 'Hip flexors',  color: '#a855f7' },
+  'calf':     { label: 'Calves',       color: '#22d3ee' },
+  'groin':    { label: 'Groin',        color: '#4ade80' },
+  'recovery': { label: 'Recovery',     color: '#64748b' }
 };
+// A day counts toward the streak at this many ticks. ONE constant, read by the streak and by the
+// session rollup, which had the same 6 typed into both. It used to mean 6 of 21 — a quarter of a
+// menu. The list is now 8 prescribed items, so 6 is a much higher bar by the same number; that is
+// deliberate, but it is a JUDGEMENT and it lives here where it can be changed in one place.
+var MOB_DAY_DONE_MIN = 6;
 
 // Progression tracking exercises [name, unit, key]
 var MOB_PROG = [
@@ -52298,16 +52315,44 @@ function getMobDay(k){
   return st.mob[k];
 }
 
+// THE STREAK WAS READING A BUCKET NOTHING EVER WROTE.
+//
+// It built its key as getFullYear()+'-'+(getMonth()+1)+'-'+getDate() — UNPADDED. Every writer on
+// this screen uses getTodayKey(), which pads: '2026-08-24'. So for all of August (and every month
+// or day-of-month below 10) the streak looked up '2026-8-24', found nothing, and reported 0 while
+// the ticks sat safely in the padded bucket beside it. Padded here now, and getMobDay is no longer
+// used to READ, because it CREATES the day it is asked for — walking 365 days backwards through it
+// wrote 365 empty objects into synced state on every render.
+function _mobKey_(d){
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+// Ticks against the CURRENT routine's ids. The progress bar has to use this rather than a count of
+// every truthy key, or a leftover numeric tick from the old 21-item list reads as progress through
+// a routine that no longer contains that exercise.
+function mobRoutineDone_(day){
+  if(!day || !day.done) return 0;
+  var n=0;
+  for(var i=0;i<MOB_EX.length;i++){ if(day.done[MOB_EX[i][4]]) n++; }
+  return n;
+}
+// Any tick on the day, whatever list it came from. The STREAK reads this deliberately: a day in
+// March on which six of the old twenty-one were done was a real mobility day, and rewriting the
+// routine does not un-do it.
+function mobDoneCount_(dateKey){
+  var day=(st.mob&&st.mob[dateKey])||null;
+  if(!day || !day.done) return 0;
+  var n=0;
+  for(var k in day.done){ if(day.done[k]) n++; }
+  return n;
+}
 function getMobStreak(){
   var streak=0;
   var d=new Date();
   for(var i=0;i<365;i++){
     var dt=new Date(d); dt.setDate(d.getDate()-i);
-    var k=dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate();
-    var day=getMobDay(k);
-    var doneCount=Object.values(day.done).filter(Boolean).length;
-    if(doneCount>=6) streak++;
+    if(mobDoneCount_(_mobKey_(dt))>=MOB_DAY_DONE_MIN) streak++;
     else if(i>0) break;
+    else continue;   // today incomplete does not end the streak — yesterday still counts
   }
   return streak;
 }
@@ -52315,7 +52360,7 @@ function getMobStreak(){
 function renderMob(){
   var today=getTodayKey();
   var day=getMobDay(today);
-  var doneCount=Object.values(day.done).filter(Boolean).length;
+  var doneCount=mobRoutineDone_(day);
   var total=MOB_EX.length;
   var streak=getMobStreak();
   var pct=Math.round(doneCount/total*100);
@@ -52348,26 +52393,21 @@ function renderMob(){
     +'<div style="background:var(--green);height:100%;border-radius:6px;width:'+pct+'%;transition:width .3s"></div></div>';
   container.appendChild(progWrap);
 
-  // Group by goal
-  var groups={};
-  MOB_EX.forEach(function(ex,i){
-    var g=ex[3];
-    if(!groups[g]) groups[g]=[];
-    groups[g].push({ex:ex,i:i});
-  });
-
-  Object.keys(MOB_GOALS).forEach(function(gk){
-    if(!groups[gk]) return;
+  // IN SEQUENCE, NOT GROUPED. The routine prescribes an order — heel walking first because it is
+  // the warm-up for the tib work, legs up the wall last because it is the recovery block — and
+  // grouping by target area scrambled exactly that. The area is a tag on the row instead.
+  (function(){
     var sec=document.createElement('div');
     sec.style.cssText='padding:0 16px;margin-bottom:8px';
 
     var secHdr=document.createElement('div');
     secHdr.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;padding:10px 0 6px';
-    secHdr.textContent=MOB_GOALS[gk];
+    secHdr.textContent='Daily sequence &middot; 15-17 min';
+    secHdr.innerHTML='Daily sequence <span style="color:var(--t4);letter-spacing:0;text-transform:none;font-weight:600">&middot; 15&ndash;17 min, in order</span>';
     sec.appendChild(secHdr);
 
-    groups[gk].forEach(function(item){
-      var ex=item.ex; var idx=item.i;
+    MOB_EX.forEach(function(ex, i){
+      var idx=ex[4];                       // STABLE ID, never the array position
       var done=day.done[idx]||false;
 
       var card=document.createElement('div');
@@ -52380,12 +52420,27 @@ function renderMob(){
       chk.style.cssText='width:26px;height:26px;border-radius:50%;border:2px solid '+(done?'var(--green)':'rgba(255,255,255,.2)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;background:'+(done?'var(--green)':'transparent')+';transition:all .2s';
       if(done) chk.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
 
+      // ONE BUILDER FOR THE ROW BODY, used by the first paint AND by the toggle. They were two
+      // separate template strings, and they had already drifted: ticking an exercise re-rendered it
+      // WITHOUT the tutorial link, so the link vanished the moment you used the screen. A second
+      // copy of a template is a second thing to forget to update — the step number and the area tag
+      // would have gone the same way.
+      var infoHTML=function(isDone){
+        var area=MOB_AREAS[ex[3]]||{label:ex[3], color:'var(--t3)'};
+        var ns='font-size:14px;font-weight:700;color:'+(isDone?'var(--t3)':'var(--t1)')+';text-decoration:'+(isDone?'line-through':'none');
+        return '<div style="'+ns+';display:flex;align-items:center;gap:6px">'
+            +'<span style="color:var(--t4);font-weight:600;font-size:12px;flex-shrink:0">'+(i+1)+'.</span>'+ex[0]
+            +'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' mobility stretch tutorial')+'" target="_blank" style="font-size:10px;color:#FF0000;text-decoration:none;font-weight:600">&#9654;</a></div>'
+          +'<div style="display:flex;align-items:center;gap:7px;margin-top:2px;flex-wrap:wrap">'
+            +'<span style="font-size:11px;color:var(--orange);font-weight:600">'+ex[1]+'</span>'
+            +'<span style="font-size:9.5px;font-weight:700;color:'+area.color+';background:'+area.color+'1f;border-radius:6px;padding:2px 6px;text-transform:uppercase;letter-spacing:.04em">'+area.label+'</span>'
+          +'</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:3px;line-height:1.4">'+ex[2]+'</div>';
+      };
+
       var info=document.createElement('div');
       info.style.cssText='flex:1;min-width:0';
-      var nameStyle='font-size:14px;font-weight:700;color:'+(done?'var(--t3)':'var(--t1)')+';text-decoration:'+(done?'line-through':'none');
-      info.innerHTML='<div style="'+nameStyle+';display:flex;align-items:center;gap:6px">'+ex[0]+'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' mobility stretch tutorial')+'" target="_blank" style="font-size:10px;color:#FF0000;text-decoration:none;font-weight:600">▶</a></div>'
-        +'<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:1px">'+ex[1]+'</div>'
-        +'<div style="font-size:11px;color:var(--t3);margin-top:2px;line-height:1.4">'+ex[2]+'</div>';
+      info.innerHTML=infoHTML(done);
 
       row.appendChild(chk); row.appendChild(info);
       card.appendChild(row);
@@ -52400,12 +52455,10 @@ function renderMob(){
           capChk.style.borderColor=d?'var(--green)':'rgba(255,255,255,.2)';
           capChk.innerHTML=d?'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':'';
           capCard.style.borderColor=d?'rgba(0,200,150,.3)':'var(--b2)';
-          var ns='font-size:14px;font-weight:700;color:'+(d?'var(--t3)':'var(--t1)')+';text-decoration:'+(d?'line-through':'none');
-          capInfo.innerHTML='<div style="'+ns+'">'+capEx[0]+'</div>'
-            +'<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:1px">'+capEx[1]+'</div>'
-            +'<div style="font-size:11px;color:var(--t3);margin-top:2px;line-height:1.4">'+capEx[2]+'</div>';
-          // Update progress bar
-          var dc=Object.values(day.done).filter(Boolean).length;
+          capInfo.innerHTML=infoHTML(d);
+          // Update progress bar — CURRENT-ROUTINE ids only, so a tick left over from the old
+          // 21-item list cannot report 7/8 on a day nothing was actually done.
+          var dc=mobRoutineDone_(day);
           var pb=container.querySelector('div[style*="background:var(--green);height:100%"]');
           if(pb) pb.style.width=Math.round(dc/total*100)+'%';
           var pcEl=container.querySelectorAll('[style*="font-weight:700;color:var(--t2)"]')[0];
@@ -52417,7 +52470,7 @@ function renderMob(){
     });
 
     container.appendChild(sec);
-  });
+  })();
 
   // Progression Tracker
   var progSec=document.createElement('div');
