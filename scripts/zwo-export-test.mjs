@@ -34,12 +34,22 @@ const asServed = (s) => s.replace(/\\([\s\S])/g, (_, c) => (c === '\\' ? '\\' : 
 // structure cannot be resolved must now REFUSE rather than flatten into one block at the band
 // midpoint. Without them here _zwoFor_ throws inside its own try/catch and silently returns null,
 // which is how this harness failed — a missing extraction, not a behaviour change.
-let code = extractVar('_ZWO_WARM_SEC') + extractVar('_ZWO_INTERVAL_INTENTS');
-for (const f of ['_structIntervals_','_zwoEsc_','_zwoPwr_','_zwoSession_','_zwoStructFor_','_zwoFor_']) code += extract(f);
+// SESSION_DEFS is a multi-line object, so it needs a brace-matched extractor rather than the
+// to-end-of-line one. It is pulled in because THE FIXTURES ARE NOW DERIVED FROM IT (see below).
+function extractObj(name){
+  const i = src.indexOf('var ' + name + '=');
+  if (i < 0) throw new Error('obj not found: ' + name);
+  let k = src.indexOf('{', i), d = 0;
+  for (; k < src.length; k++) { const c = src[k]; if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } }
+  return src.slice(i, k + 1) + ';\n';
+}
+let code = extractVar('_ZWO_WARM_SEC') + extractVar('_ZWO_INTERVAL_INTENTS') + extractVar('_FTP_DEFAULT')
+  + extractObj('SESSION_DEFS');
+for (const f of ['_structIntervals_','_zwoEsc_','_zwoPwr_','_zwoSession_','_zwoStructFor_','_zwoFor_','_planZoneFromPct_']) code += extract(f);
 code = asServed(code);
 const M = new Function('st','ftpOn_','blockPlanFor_','_planSessionFromDef_',
-  code + '\n;return {_structIntervals_,_zwoSession_,_zwoFor_,_zwoPwr_};')(
-  { ftp:190 }, () => 190, () => ({ phaseLabel:'Base build', weekInPhase:1 }), () => null);
+  code + '\n;return {_structIntervals_,_zwoSession_,_zwoFor_,_zwoPwr_,_planZoneFromPct_,SESSION_DEFS};')(
+  { ftp:190 }, (dk) => (dk === '__183__' ? 183 : 190), () => ({ phaseLabel:'Base build', weekInPhase:1 }), () => null);
 
 let fails=0;
 const R='\x1b[31m', G='\x1b[32m', X='\x1b[0m';
@@ -48,8 +58,30 @@ function check(label, got, want){
   if(!ok) fails++;
   console.log('  '+(ok?G+'PASS'+X:R+'FAIL'+X)+'  '+label+(ok?'':'  got '+JSON.stringify(got)+', want '+JSON.stringify(want)));
 }
-const T = { powerLo:181, powerHi:200, ftp:190, durationMin:45, zone:'Z5' };   // real VO2 targets
-const TH = { powerLo:162, powerHi:181, ftp:190, durationMin:75, zone:'Z4' };  // real threshold targets
+// THE FIXTURES ARE DERIVED FROM SESSION_DEFS, NOT TYPED.
+//
+// They used to be hand-written literals, and one of them went stale and nobody noticed: T was
+// { powerLo:181, powerHi:200, ftp:190 } — 95-105% — commented "real VO2 targets". That is the
+// PRE-FIX threshold-intensity band, the exact bug 557c917 was raised to fix. So the export
+// assertion below happily pinned OnPower='1.003' (100.3% of FTP) while the band check further
+// down regex-scraped SESSION_DEFS and passed on the corrected 110-120%. Two halves of one test,
+// each right about its own half, and NOTHING JOINED THEM: a regression of the real band would
+// have left both green.
+//
+// Deriving them through _planZoneFromPct_ — the same function the app prescribes with — means the
+// exported file is checked against the definition in force, and the fixture cannot drift from it
+// again because there is no longer a second copy to drift.
+const band = (intent, dateKey) => Object.assign(
+  M._planZoneFromPct_(M.SESSION_DEFS[intent].pctFtp, dateKey || null),
+  { durationMin: M.SESSION_DEFS[intent].durationMin, zone: M.SESSION_DEFS[intent].zone });
+// The fraction the file must carry: the band midpoint over FTP, to 3dp, exactly as _zwoPwr_ does.
+const midFrac = (z) => Math.round(((z.powerLo + z.powerHi) / 2) / z.ftp * 1000) / 1000;
+const T  = band('vo2');
+const TH = band('threshold');
+// Z2 deliberately carries NO durationMin. The point of the continuous case is that the duration
+// comes from the STRUCT — "60-90 min" must take the low end, 60 — so handing it the def's 90 would
+// quietly test something else. Only the power band is derived here.
+const Z2 = M._planZoneFromPct_(M.SESSION_DEFS.z2.pctFtp, null);
 
 console.log('\n=== the parser that was silently dead ===');
 check('4x4 min, 3 min recovery', M._structIntervals_('4x4 min, 3 min recovery, flat'), {n:4, workMin:4, recMin:3});
@@ -74,7 +106,8 @@ check('is a bike workout', vo2.indexOf('<sportType>bike</sportType>')>=0, true);
 check('has a warm-up', /<Warmup Duration='600'/.test(vo2), true);
 check('4 repeats of 4 minutes', /<IntervalsT Repeat='4' OnDuration='240'/.test(vo2), true);
 check('3 minutes recovery between them', /OffDuration='180'/.test(vo2), true);
-check('on-power is the band midpoint as a fraction of FTP', /OnPower='1.003'/.test(vo2), true);
+check('on-power is the band midpoint as a fraction of FTP (' + midFrac(T) + ' = ' + T.powerLo + '-' + T.powerHi + 'W at FTP ' + T.ftp + ')',
+  vo2.indexOf("OnPower='" + midFrac(T) + "'") >= 0, true);
 check('has a cool-down', /<Cooldown Duration='300'/.test(vo2), true);
 check('NOT one long steady block', /<SteadyState/.test(vo2), false);
 check('three blocks total', a.blocks, 3);
@@ -82,7 +115,8 @@ check('three blocks total', a.blocks, 3);
 console.log('\n=== threshold: long efforts written out with explicit recovery ===');
 const th=M._zwoFor_({ intent:'threshold', struct:'3x12 min, 5 min recovery',
   rx:{ type:'ride', name:'Threshold', targets:TH } }, '2026-08-04');
-check('3 work blocks of 12 minutes', (th.xml.match(/<SteadyState Duration='720' Power='0\.903'\/>/g)||[]).length, 3);
+check('3 work blocks of 12 minutes at ' + midFrac(TH),
+  th.xml.split("<SteadyState Duration='720' Power='" + midFrac(TH) + "'/>").length - 1, 3);
 check('2 recovery blocks of 5 minutes between them', (th.xml.match(/<SteadyState Duration='300' Power='0\.55'\/>/g)||[]).length, 2);
 check('bracketed by warm-up and cool-down', [/^\s*<Warmup/m.test(th.xml), /<Cooldown/.test(th.xml)], [true,true]);
 check('seven blocks total', th.blocks, 7);
@@ -90,10 +124,10 @@ check('no IntervalsT — the recovery is explicit here', /<IntervalsT/.test(th.x
 
 console.log('\n=== continuous rides ===');
 const z2=M._zwoFor_({ intent:'z2', struct:'60-90 min',
-  rx:{ type:'ride', name:'Z2 Endurance', targets:{ powerLo:114, powerHi:152, ftp:190 } } }, '2026-07-30');
+  rx:{ type:'ride', name:'Z2 Endurance', targets:Z2 } }, '2026-07-30');
 check('one steady block', z2.blocks, 1);
 check('takes the LOW end of the stated range, not the high', /Duration='3600'/.test(z2.xml), true);
-check('at the band midpoint', /Power='0\.7'/.test(z2.xml), true);
+check('at the band midpoint (' + midFrac(Z2) + ')', z2.xml.indexOf("Power='" + midFrac(Z2) + "'") >= 0, true);
 
 console.log('\n=== power is a FRACTION of FTP, per the .zwo spec ===');
 check('190W at FTP 190 is 1.0', M._zwoPwr_(190,190), 1);
@@ -155,6 +189,45 @@ console.log('\n' + (typeof C !== 'undefined' ? C : '') + '=== VO2 is prescribed 
   // And it must not collide with the threshold prescription below it.
   const thr = /threshold:\s*\{[^}]*pctFtp:\[(\d+),(\d+)\]/.exec(defs);
   check('VO2 sits entirely above the threshold band', !!(!!thr && lo > +thr[2]), true);
+}
+
+// ── THE TWO HALVES MEET HERE ────────────────────────────────────────────────────────────────
+// Everything above this line checked ONE side. The block immediately above reads the DEFINITION
+// and never generates a file; the export section near the top generates a file from targets that
+// were, until now, hand-typed. So the band could regress to 95-105% and both would stay green:
+// the def check would fail loudly, yes — but the FILE was never asserted to carry what the def
+// says, which is the thing the athlete actually rides.
+//
+// This runs the whole chain the app runs: SESSION_DEFS -> _planZoneFromPct_ at the reported FTP
+// -> _zwoFor_ -> read the fraction back out of the XML and convert it to watts.
+console.log('\n=== end to end: the definition reaches the exported file ===');
+{
+  const FTP = 183;                                  // the FTP that produced the original report
+  const z = M._planZoneFromPct_(M.SESSION_DEFS.vo2.pctFtp, '__183__');
+  check('the band prices to the reported watts', [z.ftp, z.powerLo, z.powerHi], [183, 201, 220]);
+
+  const out = M._zwoFor_({ intent:'vo2', struct:'4x4 min, 3 min recovery, flat',
+    rx:{ type:'ride', name:'VO2', targets:z } }, '__183__');
+  check('a file was produced at all', !!(out && out.xml), true);
+
+  const on = /OnPower='([\d.]+)'/.exec(out ? out.xml : '');
+  check('it carries an OnPower fraction', !!on, true);
+  const watts = on ? Math.round(+on[1] * FTP) : 0;
+  check('the FILE prescribes ' + watts + 'W, inside the ' + z.powerLo + '-' + z.powerHi + 'W band',
+    !!(watts >= z.powerLo && watts <= z.powerHi), true);
+  check("...and it is Zwift's own 210 W", watts, 210);
+
+  // NEGATIVE CONTROL — the stale fixture that hid this. 95-105% at FTP 183 is 174-192 W, and the
+  // file would carry ~1.003. Asserting that the real chain does NOT produce it is what makes the
+  // check above mean something: without this, a band that silently reverted would still "pass"
+  // any assertion loose enough to accept a plausible number.
+  const old = M._zwoFor_({ intent:'vo2', struct:'4x4 min, 3 min recovery, flat',
+    rx:{ type:'ride', name:'VO2', targets:{ powerLo:174, powerHi:192, ftp:183 } } }, '__183__');
+  const oldOn = /OnPower='([\d.]+)'/.exec(old ? old.xml : '');
+  const oldW = oldOn ? Math.round(+oldOn[1] * FTP) : 0;
+  check('the pre-fix band would have exported ' + oldW + 'W (threshold, not VO2)', oldW, 183);
+  check('NEG: the real definition does not produce that', on && oldOn && on[1] !== oldOn[1], true);
+  check('NEG: 95-105% would fall OUTSIDE the prescribed band', !!(oldW < z.powerLo), true);
 }
 console.log('\n'+(fails? R+fails+' CHECK(S) FAILED'+X : G+'zwo-export: all checks passed'+X));
 process.exit(fails?1:0);

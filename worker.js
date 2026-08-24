@@ -34704,8 +34704,16 @@ function _smurkelHTML_(text){
   var cells=function(s){
     return String(s).trim().replace(/^\\|/,'').replace(/\\|$/,'').split('|').map(function(c){ return c.trim(); });
   };
-  var TD='padding:4px 8px;font-size:13.5px;color:var(--d-t2);border-top:1px solid var(--d-line);text-align:left';
-  var TH='padding:4px 8px;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--d-t3);text-align:left';
+  // THE DEBRIEF IS THE LONGEST READ ON THE CARD AND WAS SET THE SMALLEST ON IT.
+  //
+  // The panel around it runs 12-17px: 15px for the pre-session instructions, 14.5px for the session
+  // header, 14px for the fuel/expect/form lines, 12.5px for uppercase labels. The debrief body sat
+  // at 14px with 13.5px table cells and 12px table headers — the bottom of that range for the one
+  // block anyone actually reads a paragraph of. Raised to sit with the instruction text rather than
+  // under it: prose 15px, cells 14px, headers 12.5px to match the card's other uppercase labels.
+  // Line-height moves with it; 1.6 at 14px and 1.6 at 15px are not the same measure.
+  var TD='padding:5px 8px;font-size:14px;color:var(--d-t2);border-top:1px solid var(--d-line);text-align:left';
+  var TH='padding:5px 8px;font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--d-t3);text-align:left';
   for(var i=0;i<lines.length;i++){
     var raw=String(lines[i]||'');
     if(isRow(raw)){
@@ -34743,12 +34751,12 @@ function _smurkelHTML_(text){
     var body=fmt(ln);
     var isHeading=!isBullet && (marked || (ln.length<52 && ln.indexOf('.')<0 && (ln===ln.toUpperCase()) && /[A-Z]/.test(ln)));
     if(isHeading){
-      out.push('<div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+P+';margin:13px 0 5px">'+body+'</div>');
+      out.push('<div style="font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+P+';margin:14px 0 6px">'+body+'</div>');
     } else if(isBullet){
-      out.push('<div style="display:flex;gap:7px;font-size:14px;color:var(--d-soft);line-height:1.55;margin:3px 0">'
+      out.push('<div style="display:flex;gap:8px;font-size:15px;color:var(--d-soft);line-height:1.6;margin:4px 0">'
         +'<span style="color:'+P+';flex-shrink:0">&middot;</span><span style="min-width:0;overflow-wrap:anywhere">'+body+'</span></div>');
     } else {
-      out.push('<div style="font-size:14px;color:var(--d-t2);line-height:1.6;margin:6px 0;overflow-wrap:anywhere">'+body+'</div>');
+      out.push('<div style="font-size:15px;color:var(--d-t2);line-height:1.65;margin:7px 0;overflow-wrap:anywhere">'+body+'</div>');
     }
   }
   return out.join('');
@@ -34789,10 +34797,12 @@ function _smurkelMount_(dk){
       var tb=(typeof constRideTSS_==='function')?(constRideTSS_(b)||0):0;
       return tb-ta;
     });
-    host.innerHTML='<div style="font-size:12px;color:var(--d-dim)">Dr. Smurkel is reading your week&hellip;</div>';
+    // 13.5px, not 12px: these two lines occupy the debrief's own slot, and the block that says
+    // "loading" or "unavailable" should not be smaller than the block it stands in for.
+    host.innerHTML='<div style="font-size:13.5px;color:var(--d-dim)">Dr. Smurkel is reading your week&hellip;</div>';
     fetchSmurkelDebrief_(dk, todays[0], function(err, text){
       var h=document.getElementById('sm-debrief'); if(!h) return;
-      if(err || !text){ h.innerHTML='<div style="font-size:12px;color:var(--d-dim)">'+((typeof _cvEsc_==='function')?_cvEsc_(err||'Debrief unavailable.'):'Debrief unavailable.')+'</div>'; return; }
+      if(err || !text){ h.innerHTML='<div style="font-size:13.5px;color:var(--d-dim)">'+((typeof _cvEsc_==='function')?_cvEsc_(err||'Debrief unavailable.'):'Debrief unavailable.')+'</div>'; return; }
       // The spoken version reads the RAW debrief, not the rendered DOM - scraping the panel
       // would pick up tick glyphs, bullets and the reply UI's own labels.
       try{ h.setAttribute('data-raw', String(text||'')); }catch(e){}
