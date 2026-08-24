@@ -33,7 +33,9 @@ const M = new Function(asServed(
   'function mergeArrays_(a,b){ return (a||[]).concat((b||[]).filter(function(x){ return (a||[]).indexOf(x)<0; })); }\n' +
   'function _planTrace_(){}\n' +
   exFn('isPlainObj_') + exFn('mergeState_') + exVar('PLAN_LWW_FIELDS_') +
-  exFn('_isSession_') + exFn('mergeSession_') +
+  // _isSession_ reads PLAN_SESSION_TYPES rather than carrying its own copy of the type list —
+  // the two literals drifted once and cost every run and attempt in the plan.
+  exVar('PLAN_SESSION_TYPES') + exFn('_isSession_') + exFn('mergeSession_') +
   'return { mergeSession_, mergeState_, _isSession_, PLAN_LWW_FIELDS_ };'
 ))();
 

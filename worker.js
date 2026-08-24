@@ -6659,7 +6659,26 @@ function applyRideSync_(existing, incoming){
 // still qualified and the pair reached mergeSession_. The moment the fix converges and BOTH sides
 // read 'run', an incomplete list here would drop run sessions out of session merging altogether —
 // the repair would land and then quietly disable the machinery protecting it.
-function _isSession_(x){ return !!(x && typeof x==='object' && x.id!=null && typeof x.type==='string' && /^(ride|run|strength|mobility|rest|optional|attempt)$/.test(x.type)); }
+// WHAT A SESSION TYPE IS — ONE LIST, because two copies of it drifted and cost every run in the plan.
+//
+// This list and validateSession_'s PLAN_SESSION_TYPES were separate literals. This one carried all
+// seven types; that one carried four — 'run', 'attempt' and 'optional' were missing. SESSION_DEFS
+// defines sessions of all seven, so validateSession_ rejected every run, every attempt (Chalet,
+// Alpe, Ven-Top, the 10k, the FTP retest) and every optional day, planUpsertSession_ threw on each
+// one, and generateBlockPlan_'s per-slot try/catch SWALLOWED the throw.
+//
+// Nothing errored, so nothing looked wrong. Monday derived [easyRun, mobility] and stored Mobility
+// alone. Sunday derives easyRun ALONE and stored NOTHING — which is why the Calendar day-editor had
+// no row to open there and fell back to stale residue reading "Rest", and why the Dashboard needed
+// a block fallback to say anything at all. Measured over the block window: 39 runs, 4 attempts and
+// 4 optional days silently discarded; rides, strength, mobility and rest all unaffected, which is
+// exactly why the paired weekdays that DID work made the pairing look like the suspect.
+//
+// So the two readers now share one declaration. A type added to SESSION_DEFS and not to this regex
+// still breaks — but it breaks in ONE place, and it breaks for everything at once rather than for
+// three types quietly.
+var PLAN_SESSION_TYPES=/^(ride|run|strength|mobility|rest|optional|attempt)$/;
+function _isSession_(x){ return !!(x && typeof x==='object' && x.id!=null && typeof x.type==='string' && PLAN_SESSION_TYPES.test(x.type)); }
 // Returns 0-100, or null when there's nothing meaningful to score against.
 // Volume-weighted (sets x reps) for strength; duration ratio for mobility.
 // Overshoot capped at 100. Strength reads the log off the session (sess.strengthLog);
@@ -11870,13 +11889,27 @@ function getWorkoutForDate_(dateKey){
   }
 
   // ---- 1. the persistent plan
+  // A STORED DAY WITH NOTHING FUELABLE IS NOT A VERDICT, IT IS A GAP. This used to return Rest
+  // right here, which made a single mobility row a full stop: on Sunday 2026-08-23 the block
+  // prescribes one session (easyRun, 4.5 mi from _RUN_BUILD) and the stored day held mobility
+  // only, so Today's Plan read "Rest Day / Recovery" and the block was never consulted. The
+  // filter above is a FUELLING rule — "rest + 15 min of mobility does not earn a training-day
+  // budget" — and that rule is still right; what was wrong was letting it answer the question
+  // "what is prescribed today" before the block had been asked.
+  //
+  // So it falls through to the block instead, and the rest verdict is held as the LAST resort:
+  // returned only if the block agrees there is nothing fuelable, or if there is no block for this
+  // date at all (outside the window, where the stored mobility row is the only fact available).
+  var _restFallback=null;
   var _ov=(_planOwned && typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
   if(_ov && _ov.name){
     var f1=_fuelable(_ov.sessions&&_ov.sessions.length?_ov.sessions:[{type:_ov.type, intent:_ov.intent, name:_ov.name}]);
-    if(!f1.length) return _restResult('Rest + mobility');
+    if(!f1.length) _restFallback='Rest + mobility';
+    else{
     var s1=f1[0], nm1=s1.name||_ov.name;
     var dur1=(s1.targets&&s1.targets.durationMin!=null)?(s1.targets.durationMin+' min'):_ov.dur;
     return _shape(nm1, _mins(dur1, 90), f1);
+    }
   }
 
   // ---- 2. the training block, for this exact date
@@ -11889,13 +11922,18 @@ function getWorkoutForDate_(dateKey){
           return {type:def?def.type:'', intent:x.intent, name:(x.rx&&x.rx.name)||(def&&def.name)||x.intent,
                   targets:(x.rx&&x.rx.targets)||null};
         }));
-        if(!f2.length) return _restResult('Rest + mobility');
+        if(!f2.length) return _restResult(_restFallback||'Rest + mobility');
         var s2=f2[0];
         var dur2=(s2.targets&&s2.targets.durationMin!=null)?(s2.targets.durationMin+' min'):null;
         return _shape(s2.name, _mins(dur2, 90), f2);
       }
     }
   }catch(e){}
+
+  // The held-over rest verdict, now that the block has had its say and had nothing fuelable to add
+  // (or does not cover this date). This is the only path that still reports Rest off a stored
+  // mobility-only day, and it reaches it having ASKED the block first.
+  if(_restFallback) return _restResult(_restFallback);
 
   // Nothing prescribed for this date. Null, never a guess — calcTrainingAwareTargets_ reads that
   // as a rest day and uses the baseline, which is the honest answer for a day with no session.
@@ -31091,7 +31129,13 @@ function _blockNextMilestone_(now){
 // contradict itself on the card. Cycling load is untouched — _blockWeekAssess_ grades cycling only
 // (threshold/vo2/z2 via _blockCyc_), so neither edit moves the three-sessions/three-days gate or
 // the Four-weeks-consistent milestone.
-var _TB_VERSION='ventop-2026-5';   // bumped: attempts clustered to Oct 31 / Nov 7 / Nov 14, third run to Sunday
+// BUMPED TO FORCE ONE REGENERATION, not because the block changed. Every run, attempt and optional
+// slot had been failing validation and being swallowed since the type lists drifted, so st.plan is
+// missing 39 runs and 4 attempts that the block has always prescribed. generateBlockPlan_ is gated
+// on this string and is idempotent (it regenerates gen rows only and keeps user-owned/completed
+// days untouched), so bumping it is the sanctioned way to make the repair actually run. Its own
+// comment says the guard is an optimisation, not correctness — this is that distinction being used.
+var _TB_VERSION='ventop-2026-6';   // bumped: re-run generation now that run/attempt/optional validate
 var _TB_CACHE=null;   // module scope, NOT st: a derived cache must never enter synced state
 function _trainingBlock_(){
   if(typeof st==='undefined') return null;
@@ -31471,7 +31515,16 @@ function generateBlockPlan_(){
                   block:{ name:plan.phaseLabel, phase:plan.phase, week:plan.weekInPhase, struct:sl.struct||'' } };
           var sk=(s.type||'x')+'|'+(s.intent||'x');
           var idx=seenSlot[sk]||0; seenSlot[sk]=idx+1;
-          try{ planUpsertSession_(key, s, ['type','name','intent','status'], 'gen', idx); }catch(e){}
+          // A SWALLOWED THROW IS WHY THIS TOOK WEEKS TO SEE. planUpsertSession_ throws on an
+          // invalid session, and this catch used to be empty — so when the type list drifted and
+          // every run/attempt/optional failed validation, the generator reported success while
+          // dropping a third of the block on the floor. The catch stays (one bad slot must not
+          // abort the remaining days) but it is no longer silent.
+          try{ planUpsertSession_(key, s, ['type','name','intent','status'], 'gen', idx); }
+          catch(e){
+            out.failed=(out.failed||0)+1;
+            try{ console.warn('[blockPlan] '+key+' dropped '+(sl.intent||'?')+' ('+(s.type||'?')+'): '+((e&&e.message)||e)); }catch(_e){}
+          }
         });
         out.generated++;
       }
@@ -36293,16 +36346,62 @@ function dsShowGear(){
     wrap.appendChild(card);
   });
 
-  // Shoes & accessories
+  // Shoes — REAL DATA. This card used to render a hardcoded three-item array ('Lake CX301 Cycling
+  // Shoes', 'Garmin Edge 840', 'Garmin HR Strap') under the heading "Accessories", with no binding
+  // and no edit control, while st.shoes sat beside it holding the actual pairs. So the one screen
+  // that looks like the place to manage shoes was the one screen that could not. The placeholder is
+  // gone rather than kept alongside: a list the athlete cannot act on, sitting under the list they
+  // can, reads as data.
+  //
+  // Same accessors and same editor as the mobile Garage — see the desktop/mobile drift note: these
+  // are parallel renderers, and the only thing keeping them honest is that neither owns the store.
+  var shoes=(typeof shoesLive_==='function')?shoesLive_():[];
   var accCard=document.createElement('div');
   accCard.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:14px;padding:14px 16px;flex-shrink:0';
-  accCard.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:10px">Accessories</div>';
-  [['Lake CX301 Cycling Shoes','Footwear','#f59e0b'],['Garmin Edge 840','Computer','#4ade80'],['Garmin HR Strap','Heart Rate','#e24b4a']].forEach(function(x){
+  var accHdr=document.createElement('div');
+  accHdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
+  accHdr.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--d-t1)">Shoes</div>';
+  var addShoeB=document.createElement('div');
+  // .sm-ctl geometry: 9px radius, sized to its label. Not a pill — see the standing shape rule.
+  addShoeB.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--d-line);border-radius:9px;font-size:11px;font-weight:700;color:var(--d-t2);cursor:pointer';
+  addShoeB.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Add shoe</span>';
+  addShoeB.onclick=function(){ openShoeEdit(null, dsShowGear); };
+  accHdr.appendChild(addShoeB);
+  accCard.appendChild(accHdr);
+
+  if(!shoes.length){
+    // An empty store is stated as empty. Strava only syncs shoes it has gear registered for, and
+    // an athlete with none would otherwise read this blank card as "failed to load".
+    var accEmpty=document.createElement('div');
+    accEmpty.style.cssText='font-size:11px;color:var(--d-t4);line-height:1.6;padding:6px 0 2px';
+    accEmpty.textContent='No shoes yet. Shoes sync from Strava gear when a run carries one; add a pair here to track mileage against a replacement limit.';
+    accCard.appendChild(accEmpty);
+  }
+  shoes.forEach(function(shoe){
+    var maxMi=shoe.maxMiles||400, mi=shoe.miles||0;
+    var pct=Math.min(100, Math.round(mi/maxMi*100));
+    var remaining=Math.max(0, Math.round((maxMi-mi)*10)/10);
+    var col=pct>80?'#ef4444':pct>60?'#f59e0b':'#4ade80';
     var row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--d-chip)';
-    row.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+x[2]+';flex-shrink:0"></div>'+
-      '<div style="flex:1;font-size:12px;color:var(--d-t2)">'+x[0]+'</div>'+
-      '<div style="font-size:10px;color:var(--d-t4)">'+x[1]+'</div>';
+    row.style.cssText='padding:10px 0;border-top:1px solid var(--d-chip)';
+    row.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'
+      +'<div style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--d-t2);overflow-wrap:break-word">'+uiEsc_(shoe.name)+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:'+col+';white-space:nowrap">'+mi+' <span style="color:var(--d-t4);font-weight:400">/ '+maxMi+' mi</span></div></div>'
+      +'<div style="height:4px;background:var(--d-deep);border-radius:2px;margin-bottom:5px"><div style="height:4px;background:'+col+';border-radius:2px;width:'+pct+'%"></div></div>'
+      +'<div style="font-size:10px;color:var(--d-t4)">'+remaining+' mi remaining before replacement</div>';
+    var acts=document.createElement('div');
+    acts.style.cssText='display:flex;gap:14px;margin-top:7px';
+    var eB=document.createElement('span');
+    eB.style.cssText='font-size:11px;font-weight:700;color:var(--d-t3);cursor:pointer';
+    eB.textContent='Edit';
+    eB.onclick=(function(id){ return function(){ openShoeEdit(id, dsShowGear); }; })(shoe.id);
+    var dB=document.createElement('span');
+    dB.style.cssText='font-size:11px;font-weight:700;color:var(--c-red);cursor:pointer';
+    dB.textContent='Delete';
+    dB.onclick=(function(id){ return function(){ removeShoe(id, dsShowGear); }; })(shoe.id);
+    acts.appendChild(eB); acts.appendChild(dB);
+    row.appendChild(acts);
     accCard.appendChild(row);
   });
   wrap.appendChild(accCard);
@@ -44947,19 +45046,22 @@ function renderRideEquipmentTab(body, r, idx){
   // the gear display name directly on r.gearName. Runs resolve to a shoe
   // here rather than a bike.
   if(!bike){
+    // shoesLive_() rather than st.shoes: a deleted shoe is a tombstone that stays in the array,
+    // and resolving a run onto one would show mileage for a pair the athlete has retired.
+    var _shoes = (typeof shoesLive_==='function') ? shoesLive_() : (st.shoes||[]);
     var shoe = null;
     if(r.gearId){
       // gearId -> shoe name via the Strava gear map, then match st.shoes by name
       var mappedName = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
       if(mappedName){
-        shoe = (st.shoes||[]).find(function(s){ return s.name===mappedName || s.id===r.gearId; });
+        shoe = _shoes.find(function(s){ return s.name===mappedName || s.id===r.gearId; });
       }
       if(!shoe){
-        shoe = (st.shoes||[]).find(function(s){ return s.id===r.gearId; });
+        shoe = _shoes.find(function(s){ return s.id===r.gearId; });
       }
     }
     if(!shoe && r.gearName){
-      shoe = (st.shoes||[]).find(function(s){ return s.name===r.gearName; });
+      shoe = _shoes.find(function(s){ return s.name===r.gearName; });
     }
 
     if(shoe){
@@ -47597,10 +47699,11 @@ function openRunLog(){
     };
     // Update shoe mileage
     if(run.shoe&&run.distance){
-      if(!st.shoes) st.shoes=[];
-      var shoe=st.shoes.find(function(s){return s.name===run.shoe;});
-      if(!shoe){st.shoes.push({name:run.shoe,miles:run.distance,maxMiles:400});}
-      else{shoe.miles=Math.round((parseFloat(shoe.miles||0)+run.distance)*10)/10;}
+      // Through the accessor so the row gets a stable id and a re-used name resolves to the
+      // existing pair rather than forking a second one. shoeAdd_ returns the row whether it
+      // created it or found it, so the mileage add is one branch instead of two.
+      var shoe=shoeAdd_(run.shoe, 400, 0);
+      if(shoe) shoe.miles=Math.round((parseFloat(shoe.miles||0)+run.distance)*10)/10;
     }
     st.runs.push(run); sv(); modal.remove(); renderRun(); toast('Run logged! 🏃');
   };
@@ -48770,7 +48873,8 @@ function planDay_(dateKey, create){
 // four plan states; 'rest' is a FIRST-CLASS session (a Rest day persists + reads back as
 // Rest, not a bare deletion). No backslashes in these regexes — the served template
 // strips them.
-var PLAN_SESSION_TYPES=/^(ride|strength|mobility|rest)$/;
+// PLAN_SESSION_TYPES is declared ONCE, beside _isSession_ — the two used to be separate literals
+// and this copy was missing 'run', 'attempt' and 'optional'. See the note there.
 function normalizeSession_(sess, dateKey){
   var s=(sess && typeof sess==='object')?sess:{};
   // name -> trimmed string
@@ -49456,6 +49560,62 @@ function _plannedFromBlock_(dateStr){
     });
     var b=blockPlannedForDate_(dk);
     return (b && !tomb[b.intent]) ? b : null;
+  }catch(e){ return null; }
+}
+// WHICH BLOCK SLOTS THIS DAY DOES NOT ACTUALLY HOLD.
+//
+// The Dashboard reads getWorkoutForDate_, which falls back to the block when the stored day has
+// nothing fuelable. The Calendar day-editor edits STORED ROWS and cannot fall back to anything —
+// there is no row to open. So on a day whose stored rows contradict the block (a rest + mobility
+// pair left by an earlier generator on a Sunday the block prescribes an easy run), the two screens
+// disagree and only one of them can be right.
+//
+// THE FALLBACK IS NOT THE FIX. Reading through to the block on a third surface would paper over
+// the same gap a fourth time. What is actually wrong is that the block's session was never
+// generated into the day, and the honest thing for an EDITOR to do is say so and offer to write it,
+// rather than present a bare Rest as though the block had nothing to say.
+//
+// Coverage is keyed on type+intent, the same identity generateBlockPlan_ uses for its slots, so a
+// day that already holds the block's session reports nothing and the notice never appears.
+function _blockUncoveredFor_(dateKey){
+  try{
+    if(typeof blockPlanFor_!=='function' || typeof SESSION_DEFS==='undefined') return [];
+    var bp=blockPlanFor_(dateKey); if(!bp || !bp.sessions || !bp.sessions.length) return [];
+    var have={};
+    ((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey):[]).forEach(function(s){
+      if(s) have[(s.type||'x')+'|'+(s.intent||'x')]=1;
+    });
+    var out=[];
+    bp.sessions.forEach(function(sl){
+      var def=SESSION_DEFS[sl.intent]; if(!def) return;
+      var intent=(def.type==='rest')?'':sl.intent;
+      if(have[(def.type||'x')+'|'+(intent||'x')]) return;
+      out.push({ intent:sl.intent, type:def.type, name:def.name, struct:sl.struct||'',
+                 phase:bp.phaseLabel, phaseId:bp.phase, week:bp.weekInPhase });
+    });
+    return out;
+  }catch(e){ return []; }
+}
+// Write one block slot into st.plan for a date. IDENTITY ONLY and stamped 'gen' — the exact shape
+// generateBlockPlan_ writes, so the row it mints is indistinguishable from one the generator would
+// have produced and planResolve_ reprices it off current FTP rather than off a copy frozen here.
+// planUpsertSession_ derives the id from what the session IS, so running this twice replaces in
+// place instead of stacking a second row.
+function planAdoptBlockSession_(dateKey, intent){
+  try{
+    if(typeof planUpsertSession_!=='function' || typeof SESSION_DEFS==='undefined') return null;
+    var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null; if(!bp) return null;
+    var slot=null;
+    (bp.sessions||[]).forEach(function(sl){ if(!slot && sl.intent===intent) slot=sl; });
+    if(!slot) return null;
+    var def=SESSION_DEFS[intent]; if(!def) return null;
+    var s={ type:def.type, intent:(def.type==='rest'?'':intent), name:def.name, status:'planned',
+            block:{ name:bp.phaseLabel, phase:bp.phase, week:bp.weekInPhase, struct:slot.struct||'' } };
+    // The UPSERT's return carries the derived id — the local object above does not, and the caller
+    // needs the id to reopen on the row it just wrote rather than on the one that disagreed with it.
+    var written=planUpsertSession_(dateKey, s, ['type','name','intent','status'], 'gen', 0);
+    if(typeof sv==='function') sv();
+    return written||null;
   }catch(e){ return null; }
 }
 function getPlannedWorkoutForDate(dateStr){
@@ -50837,7 +50997,9 @@ function recomputeGearMileage(){
   }
 
   if(st.shoes){
-    st.shoes.forEach(function(shoe){
+    // Live only: a tombstoned shoe must not have its mileage recomputed, or the write re-stamps a
+    // row the athlete deleted and hands the merge a reason to keep it alive.
+    shoesLive_().forEach(function(shoe){
       // Strava-synced rides: match by gear_id via the gear map fetched from Strava's API
       var gearId = null;
       if(st.stravaGearMap){
@@ -50961,6 +51123,99 @@ function syncStravaGear(){
       recomputeGearMileage();
     }).catch(function(){ toast('Network error fetching gear'); });
   }, function(){ toast('Sync Strava first to get a token'); });
+}
+
+// ===== SHOES: one store, one set of accessors ================================================
+// st.shoes was a real store with no owner. It is written from three places (the Strava gear sync,
+// the manual run-log's shoe field, and the mobile Garage's Add Shoe modal), read by the run-detail
+// mileage warnings — and the DESKTOP Gear page showed a HARDCODED array beside it ('Lake CX301
+// Cycling Shoes', 'Garmin Edge 840', 'Garmin HR Strap'), so the one screen that looks like the
+// place to manage shoes was the one screen not connected to them.
+//
+// TWO SYNC TRAPS have to be closed before any of that can be surfaced, and both are the reason
+// this is a set of accessors rather than three more inline pushes:
+//
+//   1. NO ID MEANS NO IDENTITY. mergeArrays_ buckets by 'id' when any item carries one and
+//      otherwise falls back to deduping on JSON.stringify. Shoes carried neither, and their
+//      'miles' field is RECOMPUTED from matched rides — so the same pair of shoes with 214.3 mi
+//      on one device and 218.1 on another stringify differently and the union kept BOTH. The id
+//      is derived from the NAME rather than generated, because the name is already the identity
+//      everywhere else: the Strava gear map, the run-log field and the mileage matcher all join
+//      on it. Two devices that each add "Asics Nimbus 25" therefore converge instead of forking.
+//
+//   2. A REMOVAL NEEDS A TOMBSTONE. mergeState_ resolves two arrays by union, so a splice is
+//      undone by the next sync — the deleted shoe comes straight back from the remote copy. A
+//      deleted shoe stays in the array as {deleted:true} and the boolean OR-merges, which is
+//      exactly how st.bikes and st.rides already make a deletion travel.
+function _shoeKeyOf_(name){ return String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,''); }
+// Deterministic across devices — see trap 1. FNV-1a over the normalised name, hex, so the id is a
+// pure function of what the shoe is called and never of when it happened to be created.
+function _shoeIdFor_(name){
+  var k=_shoeKeyOf_(name); if(!k) return null;
+  var h=2166136261;
+  for(var i=0;i<k.length;i++){ h^=k.charCodeAt(i); h=(h*16777619)>>>0; }
+  return 'sh_'+h.toString(16);
+}
+// Normalises the store in place: array, ids backfilled on legacy entries, numbers coerced.
+// contentFingerprint_ ignores 'id', so backfilling one cannot disturb an existing merge match.
+function ensureShoes_(){
+  if(!Array.isArray(st.shoes)) st.shoes=[];
+  st.shoes.forEach(function(s){
+    if(!s || typeof s!=='object') return;
+    if(!s.id && s.name) s.id=_shoeIdFor_(s.name);
+    if(s.miles!=null) s.miles=parseFloat(s.miles)||0;
+    if(s.maxMiles!=null) s.maxMiles=parseFloat(s.maxMiles)||0;
+  });
+  return st.shoes;
+}
+// What every reader wants: live entries, tombstones filtered out.
+function shoesLive_(){
+  ensureShoes_();
+  return st.shoes.filter(function(s){ return s && !s.deleted && s.name; });
+}
+function shoeById_(id){
+  ensureShoes_();
+  for(var i=0;i<st.shoes.length;i++){ if(st.shoes[i] && st.shoes[i].id===id) return st.shoes[i]; }
+  return null;
+}
+// Add, or REVIVE. Because the id is name-derived, re-adding a shoe that was deleted resolves to
+// the same row: it is un-tombstoned rather than duplicated. Returns the row either way, so a
+// caller that wanted "the shoe named X" gets it whether or not it had to create it.
+function shoeAdd_(name, maxMiles, miles){
+  ensureShoes_();
+  name=String(name||'').trim(); if(!name) return null;
+  var id=_shoeIdFor_(name), ex=shoeById_(id);
+  if(ex){
+    ex.name=name; ex.deleted=false;
+    if(maxMiles!=null) ex.maxMiles=parseFloat(maxMiles)||400;
+    if(miles!=null) ex.miles=parseFloat(miles)||0;
+    return ex;
+  }
+  var row={ id:id, name:name, miles:parseFloat(miles)||0, maxMiles:parseFloat(maxMiles)||400 };
+  st.shoes.push(row);
+  return row;
+}
+// A RENAME IS A NEW IDENTITY. The id is derived from the name, so renaming in place would leave
+// the row keyed to a name it no longer has and let a second device re-create the old one. The
+// rename is therefore a tombstone plus an add, carrying the mileage across.
+function shoeUpdate_(id, patch){
+  var s=shoeById_(id); if(!s) return null;
+  patch=patch||{};
+  var nm=(patch.name!=null)?String(patch.name).trim():s.name;
+  if(!nm) return null;
+  var maxMiles=(patch.maxMiles!=null)?(parseFloat(patch.maxMiles)||400):s.maxMiles;
+  var miles=(patch.miles!=null)?(parseFloat(patch.miles)||0):s.miles;
+  if(_shoeIdFor_(nm)!==id){
+    s.deleted=true;
+    return shoeAdd_(nm, maxMiles, miles);
+  }
+  s.name=nm; s.maxMiles=maxMiles; s.miles=miles; s.deleted=false;
+  return s;
+}
+function shoeDelete_(id){
+  var s=shoeById_(id); if(!s) return false;
+  s.deleted=true;                       // tombstone, not a splice — see trap 2
+  return true;
 }
 
 function ensureBikes(){
@@ -51732,19 +51987,29 @@ function renderGarage(){
     h += '</div>';
   }
 
-  if(st.shoes && st.shoes.length){
+  // shoesLive_() — tombstones are filtered here, and the list gets the same Edit/Delete the bikes
+  // above it already have. This screen used to be add-only: a shoe could be created and never
+  // corrected or retired, which is how a typo'd name became permanent.
+  var _garageShoes = (typeof shoesLive_==='function') ? shoesLive_() : [];
+  if(_garageShoes.length){
     h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Shoes</div>';
     h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:12px 14px">';
-    st.shoes.forEach(function(shoe, si){
+    _garageShoes.forEach(function(shoe, si){
       var pct = Math.min(100, Math.round((shoe.miles||0)/(shoe.maxMiles||400)*100));
       var remaining = Math.max(0, (shoe.maxMiles||400)-(shoe.miles||0));
       var pctColor = pct>80?'#ef4444':pct>60?'#BA7517':'#0F6E56';
+      var sid = String(shoe.id||'').replace(/[^A-Za-z0-9_]/g,'');
       h += '<div style="padding:'+(si>0?'10px 0 0':'0 0 0')+';'+(si>0?'border-top:1px solid var(--b1)':'')+'">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
-        +'<span style="font-size:13px;font-weight:600;color:var(--t1)">'+shoe.name+'</span>'
+        +'<span style="font-size:13px;font-weight:600;color:var(--t1)">'+uiEsc_(shoe.name)+'</span>'
         +'<span style="font-size:13px;font-weight:600;color:'+pctColor+'">'+(shoe.miles||0)+' mi <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+(shoe.maxMiles||400)+' mi</span></span></div>'
         +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:4px"><div style="height:4px;background:'+pctColor+';border-radius:2px;width:'+pct+'%"></div></div>'
-        +'<div style="font-size:11px;color:var(--t3)">'+remaining+' mi remaining before replacement</div></div>';
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
+        +'<span style="font-size:11px;color:var(--t3)">'+remaining+' mi remaining before replacement</span>'
+        +'<span style="display:flex;gap:12px;flex-shrink:0">'
+        +'<span onclick="openShoeEdit(&#39;'+sid+'&#39;, renderGarage)" style="font-size:11px;font-weight:700;color:var(--t3);cursor:pointer">Edit</span>'
+        +'<span onclick="removeShoe(&#39;'+sid+'&#39;, renderGarage)" style="font-size:11px;font-weight:700;color:#E24B4A;cursor:pointer">Delete</span>'
+        +'</span></div></div>';
     });
     h += '</div>';
   }
@@ -51939,7 +52204,21 @@ function openBikeEdit(){
   document.body.style.overflow = 'hidden';
 }
 
-function openShoeEdit(){
+// Add OR edit, and callback-driven, so both Gear surfaces can open it and each re-renders itself
+// on save. openBikeEditor(idx, onSaved) next door has the same shape for the same reason — the
+// desktop Gear page and the mobile Garage are parallel renderers and a shared editor is the only
+// thing that keeps them from drifting.
+function removeShoe(id, onDone){
+  var s=(typeof shoeById_==='function')?shoeById_(id):null; if(!s) return;
+  Promise.resolve(uiConfirm('Delete "'+s.name+'"? Its mileage will no longer be tracked.',{danger:true}))
+    .then(function(yes){
+      if(!yes) return;
+      shoeDelete_(id); sv(); toast('Shoe removed');
+      if(typeof onDone==='function') onDone();
+    });
+}
+function openShoeEdit(editId, onSaved){
+  var existing = (editId && typeof shoeById_==='function') ? shoeById_(editId) : null;
   var modal = document.getElementById('mod-SERVICE');
   modal.innerHTML = '';
   modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
@@ -51949,7 +52228,7 @@ function openShoeEdit(){
 
   var title = document.createElement('div');
   title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
-  title.textContent = 'Add Shoe';
+  title.textContent = existing ? 'Edit Shoe' : 'Add Shoe';
   card.appendChild(title);
 
   function makeField(labelText, placeholder, type, defaultVal){
@@ -51969,9 +52248,12 @@ function openShoeEdit(){
     return input;
   }
 
-  var nameInput = makeField('Shoe name', 'e.g. Brooks Ghost 15');
-  var maxInput = makeField('Replace after (miles)', '400', 'number', '400');
-  var milesInput = makeField('Current mileage', '0', 'number');
+  var nameInput = makeField('Shoe name', 'e.g. Asics Gel-Nimbus 25', 'text', existing?existing.name:null);
+  var maxInput = makeField('Replace after (miles)', '400', 'number', existing?String(existing.maxMiles||400):'400');
+  // Prefilled with the CURRENT mileage when editing, blank-defaulting to 0 when adding. Note this
+  // figure is recomputed from matched rides whenever Strava gear data resolves for the shoe, so a
+  // hand-typed value is a starting point for a pair bought before the app, not a permanent override.
+  var milesInput = makeField('Current mileage', '0', 'number', existing?String(existing.miles||0):null);
 
   var actions = document.createElement('div');
   actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
@@ -51982,19 +52264,22 @@ function openShoeEdit(){
   cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
 
   var saveBtn = document.createElement('button');
-  saveBtn.textContent = 'Add Shoe';
+  saveBtn.textContent = existing ? 'Save' : 'Add Shoe';
   saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
   saveBtn.addEventListener('click', function(){
     var name = nameInput.value.trim();
     if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
     var maxMiles = parseFloat(maxInput.value) || 400;
     var miles = parseFloat(milesInput.value) || 0;
-    if(!st.shoes) st.shoes = [];
-    st.shoes.push({name:name, miles:miles, maxMiles:maxMiles});
+    if(existing) shoeUpdate_(existing.id, {name:name, maxMiles:maxMiles, miles:miles});
+    else shoeAdd_(name, maxMiles, miles);
     sv();
     closeServiceModal();
-    renderGarage();
-    toast('Shoe added');
+    // The caller re-renders itself. Defaults to renderGarage so the mobile screen's own
+    // add button keeps working unchanged.
+    if(typeof onSaved==='function') onSaved();
+    else if(typeof renderGarage==='function') renderGarage();
+    toast(existing?'Shoe updated':'Shoe added');
   });
 
   actions.appendChild(cancelBtn);
@@ -56319,6 +56604,53 @@ function openDayEditor(dateKey, targetId){
     sheetEl.appendChild(swRow);
   };
   _mkSwitcher(sheet, modal);
+  // THE BLOCK DISAGREES WITH WHAT IS STORED HERE. Only rendered when the block prescribes a session
+  // this day does not hold — on a day that already matches, _blockUncoveredFor_ returns [] and
+  // nothing is drawn. This is what closes the Dashboard/Calendar split: the Dashboard falls back to
+  // the block and names the Easy Run, the editor has no row to open and defaulted to whatever sat
+  // first in storage, and neither screen said the other existed. Adopting writes the row the
+  // generator should have written, so the disagreement is resolved in the DATA rather than hidden
+  // behind a third fallback.
+  (function(){
+    var _unc=(typeof _blockUncoveredFor_==='function')?_blockUncoveredFor_(dateKey):[];
+    if(!_unc.length) return;
+    var box=document.createElement('div');
+    box.style.cssText='margin:2px 0 12px;padding:10px 12px;border-radius:11px;border:1px solid rgba(47,168,224,.35);background:rgba(47,168,224,.08)';
+    var head=document.createElement('div');
+    head.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px';
+    head.textContent=_sessions.length?'The block prescribes something else':'From the training block';
+    box.appendChild(head);
+    _unc.forEach(function(u){
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0';
+      var lbl=document.createElement('div');
+      lbl.style.cssText='font-size:13px;color:var(--t1);font-weight:600;min-width:0;overflow-wrap:break-word';
+      lbl.textContent=u.name+(u.struct?(' — '+u.struct):'');
+      var btn=document.createElement('button');
+      // .sm-ctl geometry — 9px radius, sized to its label. Not a pill.
+      btn.style.cssText='flex-shrink:0;padding:6px 11px;border-radius:9px;border:1px solid #2FA8E0;background:transparent;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+      btn.textContent='Use this';
+      btn.onclick=(function(intent){ return function(){
+        var _w=planAdoptBlockSession_(dateKey, intent);
+        if(!_w) return;
+        modal.remove();
+        toast('Added from the block');
+        // Reopen ON THE ROW JUST WRITTEN. Without the id this reopens on _sessions[0], which is
+        // still the session that disagreed — the adopted row is appended, not prepended.
+        try{ openDayEditor(dateKey, _w.id); }catch(e){}
+        try{ if(typeof _syncRepaint_==='function') _syncRepaint_(); }catch(e){}
+      }; })(u.intent);
+      row.appendChild(lbl); row.appendChild(btn);
+      box.appendChild(row);
+    });
+    var note=document.createElement('div');
+    note.style.cssText='font-size:11px;color:var(--t3);line-height:1.5;margin-top:6px';
+    note.textContent=_sessions.length
+      ? 'This day holds a different session. Adding this writes the block’s prescription; the existing one stays until you delete it.'
+      : 'Nothing is stored for this day yet. The Dashboard already shows this session.';
+    box.appendChild(note);
+    sheet.appendChild(box);
+  })();
   // Part 5: a ride session offers the step-by-step interval view. Same overlay on both surfaces;
   // strength/mobility keep the editor as their detail (the anatomy view is a separate effort).
   if(sess && sess.type==='ride' && typeof showSessionDetail_==='function'){

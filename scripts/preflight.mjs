@@ -1384,6 +1384,69 @@ try {
     fail('the taper reminder can quote a band it does not use, or miss a moved test date (see above).');
   }
 
+  // STEP 86 - Today's Plan cannot report Rest without asking the block. getWorkoutForDate_ runs the
+  //           stored day through the FUELLING filter (rest and mobility are not fuelling events) and
+  //           used to answer Rest and return the moment that filter came back empty — so one stored
+  //           mobility row hid a prescribed session, and the block was never read. Sunday 2026-08-23
+  //           showed "Rest Day" against a block prescribing a 4.5 mi easy run. Pins that the rest
+  //           verdict is a last resort, and that a genuine rest+mobility day still reads as one.
+  console.log(`${D}. checking Today's Plan rest precedence...${X}`);
+  try {
+    const so = execSync('node scripts/todays-plan-rest-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a stored mobility row can hide the block’s session behind a Rest verdict (see above).');
+  }
+
+  // STEP 87 - the shoe store. The Gear page rendered a hardcoded 'Accessories' array beside a real
+  //           st.shoes it never read. Surfacing it needed identity (mergeArrays_ dedupes on
+  //           JSON.stringify without an id, and 'miles' is recomputed, so one pair became two
+  //           across devices) and tombstones (mergeState_ unions arrays, so a splice is undone by
+  //           the next sync). Both are asserted through the REAL merge, in both orders.
+  console.log(`${D}. checking the shoe store...${X}`);
+  try {
+    const so = execSync('node scripts/shoe-store-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('shoes can duplicate across devices, a deletion can come back, or the placeholder is back (see above).');
+  }
+
+  // STEP 88 - Dashboard vs. Calendar day-editor. getWorkoutForDate_ falls back to the block; the
+  //           day-editor edits STORED ROWS and cannot, so a day holding generator residue the block
+  //           does not prescribe made the two screens name different sessions. The editor now
+  //           REPORTS the unheld block slot and offers to write it, rather than a third fallback.
+  //           The load-bearing assertion is the negative one: a day already holding the block's
+  //           session must report nothing, or the notice appears everywhere and means nothing.
+  console.log(`${D}. checking block coverage in the day editor...${X}`);
+  try {
+    const so = execSync('node scripts/block-uncovered-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the day editor can disagree with the Dashboard, or nags on days that already match (see above).');
+  }
+
+  // STEP 89 - the plan's type list vs. the session library. PLAN_SESSION_TYPES and _isSession_ were
+  //           separate literals; the validator's copy carried four of the library's seven types, so
+  //           every run, attempt and optional session failed validateSession_, planUpsertSession_
+  //           threw, and generateBlockPlan_'s empty catch swallowed it. 39 runs and 4 attempts were
+  //           silently dropped. The regression is REPRODUCED against the old regex, not just
+  //           asserted away, and the blast radius is measured over the real block.
+  console.log(`${D}. checking plan session types against the library...${X}`);
+  try {
+    const so = execSync('node scripts/plan-run-type-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a session type the library defines cannot be written to the plan, or the generator fails silently (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
