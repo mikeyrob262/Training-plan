@@ -5,6 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -98,7 +99,7 @@ console.log('\n' + Y + '=== no surface prints the fill as a score ===' + X);
   ok('...carrying the shared band label', /label:r\.label/.test(r));
 
   // Desktop hero ring + desktop Form Readiness card.
-  const ds = src.slice(src.indexOf('function dsShowDashboard('), src.indexOf('function dsShowDashboard(') + 60000);
+  const ds = fnBody(src, 'dsShowDashboard');
   ok('the desktop hero ring prints the TSB, not a score', /'\+\(rdy\?rdy\.value:'—'\)\+'/.test(ds));
   ok('...with the band label under it, not "/100"', !/>\/100</.test(ds));
   ok('...and its arc is driven by fill', /ringOff=ringC\*\(1-\(rdy\?rdy\.fill:0\)\)/.test(ds));
@@ -115,8 +116,7 @@ console.log('\n' + Y + '=== no surface prints the fill as a score ===' + X);
   // genuinely IS a 0-100 composite of two measurements, so it reads as a percentage - unlike a
   // form-readiness BAND, which is one input scored into a range and must never be dressed as one.
   {
-    const cs = src.slice(src.indexOf('function _ovwCurrentStateHTML_('),
-                         src.indexOf('function _ovwCurrentStateHTML_(') + 6000);
+    const cs = fnBody(src, '_ovwCurrentStateHTML_');
     ok('the recovery composite keeps its percentage on its new surface',
        /\{ k:'Recovery', v:rec\.score, unit:'%'/.test(cs));
     ok('...computed once, in the shared accessor', /_recoveryNow_\(\)/.test(cs));
@@ -125,7 +125,7 @@ console.log('\n' + Y + '=== no surface prints the fill as a score ===' + X);
   }
 
   // Calendar ring - the one that printed it outright with a % sign.
-  const cal = src.slice(src.indexOf('function showCalendarTab('), src.indexOf('function showCalendarTab(') + 40000);
+  const cal = fnBody(src, 'showCalendarTab');
   ok('the calendar ring prints the TSB', /readyBig=\(_rdyC&&_rdyC\.loaded\)/.test(cal));
   ok('...and no longer renders a % sign', !/\+readiness\+'<tspan/.test(cal));
   ok('...its arc uses fill directly', /off=C\*\(1-readyFill\)/.test(cal));

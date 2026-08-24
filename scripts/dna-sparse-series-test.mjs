@@ -15,6 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -110,7 +111,7 @@ console.log('\n' + Y + '=== the Signature keeps its six months instead of averag
   ok('the per-month series is carried out of _dnaSignature_', /series:ser/.test(sig));
   ok('...built from the recent rows, oldest-first', /\.sort\(function\(a,b\)\{ return a\.lab<b\.lab\?-1:1; \}\)/.test(sig));
   ok('...and the mean is still reported as the headline', /z:mean/.test(sig));
-  const dnaTab = src.slice(src.indexOf('function aiRenderDNA_'), src.indexOf('function aiRenderDNA_') + 14000);
+  const dnaTab = fnBody(src, 'aiRenderDNA_');
   ok('the Signature draws the months as a line', /_gcTrend_\(ax\.series/.test(dnaTab));
   ok('...falling back to a bar ONLY when there is a single reading', /ax\.series\.length>1/.test(dnaTab));
 }
@@ -119,7 +120,7 @@ console.log('\n' + Y + '=== the Era timeline width means duration ===' + X);
 {
   // flex:1 0 auto gave every era the same width, so a 14-year era read as equal to a 2-year one
   // on a chart where width is the one thing a reader takes as duration.
-  const dnaTab = src.slice(src.indexOf('function aiRenderDNA_'), src.indexOf('function aiRenderDNA_') + 14000);
+  const dnaTab = fnBody(src, 'aiRenderDNA_');
   ok('era width is proportional to its span', /flex:'\+_yrs\+' 1 0/.test(dnaTab));
   ok('...no era is still hardcoded to equal width', !/flex:1 0 auto;min-width:150px/.test(dnaTab));
   ok('...with a min-width so a short era stays legible', /min-width:150px/.test(dnaTab));

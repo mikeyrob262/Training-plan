@@ -10,6 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -275,7 +276,7 @@ console.log('\n' + Y + '=== the slide copy describes what actually slides ===' +
 {
   // Scoped to the RETURNED STRING, not the function body: the comment above it deliberately quotes
   // the old wording to explain why it went, and a naive negative check would match its own epitaph.
-  const _fn = src.slice(src.indexOf('function _cvSlide_('), src.indexOf('function _cvSlide_(') + 7000);
+  const _fn = fnBody(src, '_cvSlide_');
   const cv = _fn.slice(_fn.lastIndexOf("return 'Two weeks"));
   ok('it no longer claims a missed week slid the retest', !/A missed week slid the retest/.test(cv));
   // It must LEAD with what he did. He rode through both weeks; opening on what has not banked is
@@ -303,7 +304,7 @@ console.log('\n' + Y + '=== the slide copy describes what actually slides ===' +
 // "Alpe Oct 13-14 / Ven-Top Nov 10-11" dates came from — an old version read back as current.
 console.log('\n' + Y + '=== the block is derived, never read back from synced state ===' + X);
 {
-  const fn = src.slice(src.indexOf('function _trainingBlock_('), src.indexOf('function _trainingBlock_(') + 12000);
+  const fn = fnBody(src, '_trainingBlock_');
   ok('the cache lives in module scope', /var _TB_CACHE=null/.test(src));
   ok('...and is keyed on the version', /_TB_CACHE && _TB_CACHE\.v===_TB_VERSION/.test(fn));
   ok('the builder no longer assigns into st', !/st\.trainingBlock=\{/.test(src));

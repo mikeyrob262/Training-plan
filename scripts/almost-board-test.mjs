@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -161,7 +162,7 @@ console.log('\n' + Y + '=== formatting ===' + X);
 // own .id, and all 247 Closing-in entries resolve in the library list.
 console.log('\n' + Y + '=== board rows link to the segment they name ===' + X);
 {
-  const sec = src.slice(src.indexOf('function aiRenderAlmost_('), src.indexOf('function aiRenderAlmost_(') + 6000);
+  const sec = fnBody(src, 'aiRenderAlmost_');
   ok('there is ONE row builder, not per-section navigation', /var segRow=function\(id, inner\)/.test(sec));
   ok('Closing in uses it', /h1\+=segRow\(x\.id,/.test(sec));
   ok('Almost-a-PB uses it too', /h2\+=segRow\(x\.id,/.test(sec));

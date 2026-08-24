@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -182,8 +183,7 @@ console.log('\n' + Y + '=== a formatted duration is not read as a number ===' + 
 // every load. Measured across two consecutive loads of the deployed app: same 49 both times.
 console.log('\n' + Y + '=== a repair that cannot reach the cloud is not a repair ===' + X);
 {
-  const afd = src.slice(src.indexOf('function applyFirebaseData('),
-                        src.indexOf('function applyFirebaseData(') + 9000);
+  const afd = fnBody(src, 'applyFirebaseData');
   ok('the repairs still run in applyFirebaseData, not at boot', /migrateSessionTypes_\(\)/.test(afd));
   ok('...and their counts are captured rather than discarded',
      /_mTypes=migrateSessionTypes_\(\)\|\|0/.test(afd) && /_mIntents=migrateSessionIntents_\(\)\|\|0/.test(afd));

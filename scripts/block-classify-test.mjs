@@ -13,6 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -103,7 +104,7 @@ console.log('\n' + Y + '=== it can only ever name the session the block prescrib
 
 console.log('\n' + Y + '=== the ordering is the fix, and it is asserted ===' + X);
 {
-  const fn = src.slice(src.indexOf('function _blockSessionOf_('), src.indexOf('function _blockSessionOf_(') + 2000);
+  const fn = fnBody(src, '_blockSessionOf_');
   ok('intensity is tried first', fn.indexOf('_blockIntervalIntent_') < fn.indexOf('_blockIntentByStructure_'));
   ok('...then structure', fn.indexOf('_blockIntentByStructure_') < fn.indexOf('_blockPwr_'));
   ok('...and the ratio only last', /var pw=_blockPwr_\(r\)/.test(fn));

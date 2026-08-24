@@ -11,6 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -144,10 +145,10 @@ console.log('\n' + Y + '=== wired into BOTH resolvers, so tile and detail cannot
 // added so a past session is graded against the FTP in force then) is not a regression in this rule.
 '...passes the rung into the prescription', /_planSessionFromDef_\(_int, weekInPhase, _pw[,)]/.test(bp));
   ok('...and displays the progressed struct, not the week-1 table value', /rx&&rx\.progStruct/.test(bp));
-  const pr = src.slice(src.indexOf('function planResolve_('), src.indexOf('function planResolve_(') + 1800);
+  const pr = fnBody(src, 'planResolve_');
   ok('the stored-row resolver reads progWeek off the session', /s\.block&&s\.block\.progWeek/.test(pr));
   ok('...rather than recomputing it without a date', /has no date/.test(pr));
-  const mig = src.slice(src.indexOf('function migratePlanIntentsToBlock_('), src.indexOf('function migratePlanIntentsToBlock_(') + 4000);
+  const mig = fnBody(src, 'migratePlanIntentsToBlock_');
   ok('the realign migration stamps progWeek onto future rows', /x\.block\.progWeek=w\.progWeek/.test(mig));
 }
 

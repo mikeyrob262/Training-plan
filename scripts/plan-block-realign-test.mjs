@@ -13,6 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -119,7 +120,7 @@ console.log('\n' + Y + '=== a type can never be rewritten into another type ==='
 
 console.log('\n' + Y + '=== wired in the right order ===' + X);
 {
-  const afd = src.slice(src.indexOf('function applyFirebaseData('), src.indexOf('function applyFirebaseData(') + 9000);
+  const afd = fnBody(src, 'applyFirebaseData');
   ok('it runs in applyFirebaseData', /migratePlanIntentsToBlock_\(\)/.test(afd));
   // It rewrites intent; the type repair derives type FROM intent, so order is load-bearing.
   ok('...BEFORE the type repair',

@@ -19,6 +19,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -64,7 +65,7 @@ console.log('\n' + Y + '=== the placeholder is gone from the page, not merely un
   const live = src.split('\n').filter(l => /Lake CX301|Garmin Edge 840|Garmin HR Strap/.test(l))
     .filter(l => !/^\s*\/\//.test(l));
   ok('no hardcoded gear row is still rendered', live.length === 0);
-  ok('dsShowGear now reads the real store', /shoesLive_/.test(src.slice(src.indexOf('function dsShowGear('), src.indexOf('function dsShowGear(') + 14000)));
+  ok('dsShowGear now reads the real store', /shoesLive_/.test(fnBody(src, 'dsShowGear')));
 }
 
 console.log('\n' + Y + '=== identity is derived from the name, so two devices converge ===' + X);

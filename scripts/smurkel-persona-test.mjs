@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, '.persona-build');
@@ -24,18 +25,11 @@ const mod = await import(pathToFileURL(path.join(OUT, 'worker.js')).href);
 const res = await mod.default.fetch(new Request('http://localhost/'), {}, { waitUntil() {}, passThroughOnException() {} });
 const html = await res.text();
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
-// SLICE TO THE FUNCTION, NOT TO A CHARACTER COUNT. These blocks were cut with fixed windows
-// (+6000, +9000, +12000), so adding a few lines to _smurkelFacts_ pushed later assertions outside
-// the window and they failed while the code was correct — a test that reports a regression because
-// a function grew is worse than no test, since the obvious "fix" is to shrink the change.
-function fnBody(name){
-  const i = src.indexOf('function ' + name + '(');
-  if (i < 0) throw new Error('missing ' + name);
-  let j = src.indexOf('{', i), d = 0;
-  for (; j < src.length; j++){ const c = src[j];
-    if (c === '{') d++; else if (c === '}'){ d--; if (!d) return src.slice(i, j + 1); } }
-  return src.slice(i);
-}
+// Source-text windows come from lib-src-window.mjs. This file grew its own brace matcher
+// first, for the same reason the shared one exists: fixed windows (+6000, +9000, +12000) cut
+// later assertions out of scope the moment a function grew, and a test that reports a
+// regression because a function got longer is worse than no test — the obvious 'fix' is to
+// shrink the change.
 
 // Pull each prompt constant out of the SERVED html by evaluating its own declaration.
 function served(name) {
@@ -243,14 +237,14 @@ try { fs.rmSync(OUT, { recursive: true, force: true }); } catch (e) {}
 // An unknown is now STATED, which is the contract every other line in that builder follows.
 console.log('\n' + Y + '=== an unmeasurable interval session says so, instead of leaving NP to be graded ===' + X);
 {
-  const facts = fnBody('_smurkelFacts_');
+  const facts = fnBody(src, '_smurkelFacts_');
   ok('measured intervals are still stated', /WORK INTERVALS \(measured from/.test(facts));
   ok('...and an UNMEASURABLE structured session is stated too', /WORK INTERVALS: could not be measured/.test(facts));
   ok('...naming why NP cannot answer it', /recoveries are\s*'\s*\+\s*'INSIDE the whole-ride average|INSIDE the whole-ride average/.test(facts));
   ok('...and refusing the shortfall claim outright', /NEITHER IS EVIDENCE OF A SHORTFALL/.test(facts));
   ok('the branch only fires on a STRUCTURED prescription', /\} else if\(C\.structured\)\{/.test(facts));
 
-  const ctx = fnBody('_smurkelContext_');
+  const ctx = fnBody(src, '_smurkelContext_');
   ok('the context carries whether the session was structured at all', /C\.structured=_s\.struct/.test(ctx));
   ok('...decided by the real interval parser, not a guess', /_structIntervals_\(_s\.struct\)/.test(ctx));
 
@@ -269,11 +263,11 @@ console.log('\n' + Y + '=== an unmeasurable interval session says so, instead of
 // midpoint is 128, can I go to 146?" was the one moment there was no box to ask it in.
 console.log('\n' + Y + '=== the pre-ride guidance can be replied to ===' + X);
 {
-  const panel = src.slice(src.indexOf('function _coachVPanel_('), src.indexOf('function _coachVPanel_(') + 16000);
+  const panel = fnBody(src, '_coachVPanel_');
   ok('the pre-ride branch has its own reply host', /id="sm-pre"/.test(panel));
   ok('...separate from the logged-session host', /id="sm-debrief"/.test(panel));
 
-  const mount = src.slice(src.indexOf('function _smurkelMount_('), src.indexOf('function _smurkelMount_(') + 2600);
+  const mount = fnBody(src, '_smurkelMount_');
   ok('the pre-ride mount runs BEFORE the no-activity early return',
      mount.indexOf("getElementById('sm-pre')") < mount.indexOf('if(!todays.length)'));
   ok('...and mounts the same reply UI, not a second one', /pre\.innerHTML=_smurkelReplyUI_\(\)/.test(mount));
@@ -281,7 +275,7 @@ console.log('\n' + Y + '=== the pre-ride guidance can be replied to ===' + X);
   ok('...seeded with what is actually on screen', /innerText\|\|box\.textContent/.test(mount));
   ok('...and bound like the post-ride one', /_smurkelBindReply_\(\)/.test(mount));
 
-  const reply = src.slice(src.indexOf('function fetchSmurkelReply_('), src.indexOf('function fetchSmurkelReply_(') + 4000);
+  const reply = fnBody(src, 'fetchSmurkelReply_');
   ok('the reply knows pre-ride from post-ride', /var isPre=!!convo\.pre/.test(reply));
   ok('...and refuses the past tense on an unridden session', /Never speak\s*'\s*\+\s*'about it in the past tense|past tense/.test(reply));
   ok('...and refuses to grade it', /never grade it/.test(reply));
@@ -301,7 +295,7 @@ console.log('\n' + Y + '=== the pre-ride guidance can be replied to ===' + X);
 // on every line. The pre-ride coach was answering "what are my targets?" from facts with no targets.
 console.log('\n' + Y + '=== the day resolves from the DATE, with or without a ride ===' + X);
 {
-  const ctx = fnBody('_smurkelContext_');
+  const ctx = fnBody(src, '_smurkelContext_');
   ok('the day block runs BEFORE anything touches the ride',
      ctx.indexOf('_sessionRxFor_') < ctx.indexOf('_smNum_(ride.np)'));
   ok('the session comes from THE day lookup', /_sessionRxFor_\(dateKey, ride\|\|null\)/.test(ctx));
@@ -314,7 +308,7 @@ console.log('\n' + Y + '=== the day resolves from the DATE, with or without a ri
   // A ride-side miss must not wipe the day-level session.
   ok('the ride lookup only OVERRIDES on a hit', /if\(rx\) C\.rx=\{/.test(ctx) && !/C\.rx=rx\?\{/.test(ctx));
 
-  const facts = fnBody('_smurkelFacts_');
+  const facts = fnBody(src, '_smurkelFacts_');
   ok('pre-ride is framed as a session ahead, not a blank result', /THE SESSION HAS NOT BEEN RIDDEN YET/.test(facts));
   ok('...and the new day facts are rendered', /NEXT ON THE CALENDAR/.test(facts) && /WHAT HE HAS BEEN DOING/.test(facts));
 }

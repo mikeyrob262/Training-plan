@@ -11,6 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -93,7 +94,7 @@ console.log('\n' + Y + '=== numbers only — other semantics are left alone ==='
 
 console.log('\n' + Y + '=== both halves are wired: the rule AND a writer that stamps ===' + X);
 {
-  const arr = src.slice(src.indexOf('function mergeArrays_('), src.indexOf('function mergeArrays_(') + 3000);
+  const arr = fnBody(src, 'mergeArrays_');
   ok('the cluster path applies the numeric rule', /_itemLwwNumbers_\(mergeState_\(/.test(arr));
   ok('...and sessions still take their own field-aware merge', /mergeSession_\(clusters\[ci\]\.rep, item\)/.test(arr));
   // Inert without a stamp: the race editor rebuilt the object from the form with no editedAt.

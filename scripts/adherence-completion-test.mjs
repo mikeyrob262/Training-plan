@@ -13,6 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -108,7 +109,7 @@ console.log('\n' + Y + '=== the old failure: scored-as-completion ===' + X);
 
 console.log('\n' + Y + '=== the card reads done for completion and scored for execution ===' + X);
 {
-  const card = src.slice(src.indexOf('function _adhCardInner_('), src.indexOf('function _adhCardInner_(') + 5000);
+  const card = fnBody(src, '_adhCardInner_');
   ok('the Completion headline uses done', /_adhDone_\(cur\)\+'\/'\+cur\.planned/.test(card));
   ok('the bars use done', /var rate=_d\/w\.planned/.test(card));
   ok('...and the faint-bar test uses it too', /_d>0\?'0\.9':'0\.28'/.test(card));
@@ -117,7 +118,7 @@ console.log('\n' + Y + '=== the card reads done for completion and scored for ex
      /w\.done!=null\) \? w\.done : \(\(w&&w\.scored\)\|\|0\)/.test(src));
   ok('the low-n line says both numbers when they disagree', /completed, '\+totalScored\+' with a score/.test(card));
   // The series must actually carry the field.
-  const trend = src.slice(src.indexOf('function _adherenceTrend_('), src.indexOf('function _adherenceTrend_(') + 4000);
+  const trend = fnBody(src, '_adherenceTrend_');
   ok('the series exposes done', /done:b\.done/.test(trend));
   ok('...and still exposes scored separately', /scored:b\.scored/.test(trend));
 }

@@ -21,6 +21,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fnBody, section } from './lib-src-window.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
@@ -78,8 +79,9 @@ console.log('\n' + Y + '=== both renderers fall back, and neither CAN drift ==='
   ok('getPlannedWorkoutForDate is what falls back', /return _plannedFromBlock_\(dateStr\)/.test(exFn('getPlannedWorkoutForDate')));
   // Both renderers must therefore READ the shared resolver. These are the reads that used to be
   // followed by a hand-rolled fallback; the fallback is inside them now.
-  const month = src.slice(src.indexOf('// ---- month grid body + week rail ----'),
-                          src.indexOf('// ---- month grid body + week rail ----') + 6000);
+  // Bounded by the NEXT section marker, so the window is the section itself rather than 6000
+  // characters of hope.
+  const month = section(src, '// ---- month grid body + week rail ----');
   ok('DESKTOP month grid reads the shared resolver', /getPlannedWorkoutForDate\(c\.date\)/.test(month));
   ok('MOBILE week strip reads the shared resolver', /getPlannedWorkoutForDate\(dKey\)/.test(src));
   ok('NEG: DESKTOP no longer open-codes it', !/var _bpl=blockPlannedForDate_\(c\.date\)/.test(src));
