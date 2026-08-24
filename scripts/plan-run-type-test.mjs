@@ -23,11 +23,22 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// SOURCE-AGNOSTIC ON PURPOSE. With no argument this reads the local worker.js, which is what
+// preflight wants. Given a URL it reads what the Worker actually SERVES — the only thing that
+// answers "does it work in the browser", and the check that catches the served-template escape
+// trap where source \d arrives as d: valid, silent, wrong. The served text needs no unescaping,
+// so asServed is the identity on that path.
+//   node scripts/plan-run-type-test.mjs https://training-plan.mgrobinson07.workers.dev/
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const src = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
+const URL_ = (process.argv[2] || '').indexOf('http') === 0 ? process.argv[2] : null;
+const LIVE = !!URL_;
+const src = LIVE
+  ? await (await fetch(URL_, { cache: 'no-store' })).text()
+  : fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
 const BS = String.fromCharCode(92);
-const asServed = (s) => s.replace(new RegExp(BS + BS + '([' + BS + 's' + BS + 'S])', 'g'),
-  (_, c) => (c === BS ? BS : c));
+const asServed = LIVE ? (s) => s
+  : (s) => s.replace(new RegExp(BS + BS + '([' + BS + 's' + BS + 'S])', 'g'),
+    (_, c) => (c === BS ? BS : c));
 
 function matchBrace(from) {
   let i = src.indexOf('{', from), d = 0;
