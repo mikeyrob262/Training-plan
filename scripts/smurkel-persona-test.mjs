@@ -136,7 +136,16 @@ console.log('\n' + Y + '=== every surface gets voice; only the right ones get sh
      sites.filter((t) => !/_SM_FORMAT_/.test(t)).length === 2);
   // The contradiction that prompted the split: a site that bans headings must not be handed a
   // prompt demanding them.
-  const reply = src.slice(src.indexOf('function fetchSmurkelReply_('), src.indexOf('function fetchSmurkelReply_(') + 3000);
+  // THE WHOLE FUNCTION, brace-matched — not a fixed 3000-char slice. The slice was a guess about
+  // where the rule list ended, and it silently stopped covering it the moment the function grew
+  // (the image rules pushed the asserted line past the window). A test whose scope depends on the
+  // length of the thing it tests reports green for the wrong reason.
+  const reply = (function () {
+    const i = src.indexOf('function fetchSmurkelReply_(');
+    let k = src.indexOf('{', i), d = 0;
+    for (; k < src.length; k++) { const c = src[k]; if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } }
+    return src.slice(i, k + 1);
+  })();
   ok('Ask Coach no longer bans all markdown while being asked for tables',
      /No section headings and no asterisk-bolding/.test(reply) && !/Plain text, no markdown asterisks/.test(reply));
 }

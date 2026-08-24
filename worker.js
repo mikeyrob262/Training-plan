@@ -34842,9 +34842,133 @@ function _smAttachReply_(hostEl, ride){
     if(typeof _smurkelBindReply_==='function') _smurkelBindReply_();
   }catch(e){}
 }
+// ===== IMAGES IN THE CHAT ====================================================================
+//
+// The API takes an image as a content block: {type:'image', source:{type:'base64', media_type, data}}
+// where data is raw base64 with no "data:...;base64," prefix and no newlines. Four media types are
+// accepted — image/jpeg, image/png, image/gif, image/webp — and NOT image/heic, which is what an
+// iPhone shoots by default.
+//
+// EVERYTHING GOES THROUGH A CANVAS RE-ENCODE, which is the whole HEIC answer: if the browser can
+// decode the file at all, the canvas hands back a supported format regardless of what went in.
+// Safari decodes HEIC natively so it survives; desktop Chrome and Firefox generally do not, and
+// that is the one case that fails — reported by name, on that file only, with the others still
+// sent. We do not pre-reject by extension: a file that decodes is a file we can use, and guessing
+// from the name would refuse HEIC on the one browser where it works.
+//
+// PNG STAYS PNG. Re-encoding a screenshot to JPEG is the wrong default here — the first thing the
+// athlete wants to send is a race registration or a workout screen, which is TEXT, and the vision
+// docs are explicit that heavy JPEG compression makes small text hard to read. Photographs go to
+// JPEG because a photo as PNG is enormous for no gain.
+//
+// THE LONG EDGE IS CAPPED AT 1568px because that is exactly what the model does anyway: on the
+// standard resolution tier (every model before 4.7, including the claude-sonnet-4-6 this app calls)
+// an image is downscaled to a 1568px long edge and 1568 visual tokens before it is read. Sending
+// more pixels than that costs upload time and buys nothing. It also keeps each image far under the
+// 10MB-per-image and 32MB-per-request ceilings.
+var _SM_IMG_MAX_EDGE = 1568;   // the model's own standard-tier limit — larger is discarded upstream
+var _SM_IMG_MAX_B64  = 3145728; // 3MB of base64 per image, well inside the API's 10MB
+var _SM_IMG_MAX_N    = 3;       // per message
+var _SM_IMG_OK = { 'image/jpeg':1, 'image/png':1, 'image/gif':1, 'image/webp':1 };
+var _SM_TRAY = [];              // images staged for the NEXT message, never persisted
+
+// One file -> {media_type, data, w, h, name} through a canvas, or an error string.
+function _smImgPrep_(file, cb){
+  try{
+    var reader=new FileReader();
+    reader.onerror=function(){ cb('could not be read'); };
+    reader.onload=function(e){
+      var img=new Image();
+      // THE ONLY FAILURE THAT MATTERS. A decode failure here is the HEIC-on-desktop case, and it is
+      // the one thing we cannot work around in the browser.
+      img.onerror=function(){ cb('could not be decoded by this browser (HEIC photos only open in Safari — re-save it as JPEG or PNG)'); };
+      img.onload=function(){
+        try{
+          var w=img.width, h=img.height, max=_SM_IMG_MAX_EDGE;
+          if(w>=h && w>max){ h=Math.round(h*max/w); w=max; }
+          else if(h>w && h>max){ w=Math.round(w*max/h); h=max; }
+          var draw=function(ww,hh){
+            var cv=document.createElement('canvas'); cv.width=ww; cv.height=hh;
+            var cx=cv.getContext('2d');
+            // White behind a transparent PNG. Without this, transparency flattens to black on the
+            // JPEG fallback and a screenshot with a transparent margin comes out unreadable.
+            cx.fillStyle='#ffffff'; cx.fillRect(0,0,ww,hh);
+            cx.drawImage(img,0,0,ww,hh);
+            return cv;
+          };
+          var srcType=String(file.type||'').toLowerCase();
+          var keepPng=(srcType==='image/png');
+          var cv=draw(w,h);
+          var url=cv.toDataURL(keepPng?'image/png':'image/jpeg', 0.85);
+          // Ladder down only if it is genuinely too big. A screenshot never gets here; a 48MP phone
+          // photo does. PNG gives up its losslessness first, then quality, then pixels.
+          if(url.length>_SM_IMG_MAX_B64 && keepPng){ keepPng=false; url=cv.toDataURL('image/jpeg',0.85); }
+          if(url.length>_SM_IMG_MAX_B64) url=cv.toDataURL('image/jpeg',0.7);
+          if(url.length>_SM_IMG_MAX_B64){ w=Math.round(w*0.7); h=Math.round(h*0.7); url=draw(w,h).toDataURL('image/jpeg',0.7); }
+          if(url.length>_SM_IMG_MAX_B64){ cb('is too large to send even after resizing'); return; }
+          var comma=url.indexOf(',');
+          var mt=url.slice(5, url.indexOf(';'));
+          if(!_SM_IMG_OK[mt]){ cb('came back in a format the coach cannot read'); return; }
+          cb(null, { media_type:mt, data:url.slice(comma+1), w:w, h:h, name:String(file.name||'image') });
+        }catch(err){ cb('could not be processed'); }
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }catch(err){ cb('could not be opened'); }
+}
+function _smTrayNote_(msg){
+  var el=document.getElementById('sm-img-note'); if(!el) return;
+  el.textContent=msg||'';
+  el.style.display=msg?'block':'none';
+}
+function _smTrayPaint_(){
+  var tray=document.getElementById('sm-img-tray'); if(!tray) return;
+  if(!_SM_TRAY.length){ tray.style.display='none'; tray.innerHTML=''; return; }
+  tray.style.display='flex';
+  var h='';
+  _SM_TRAY.forEach(function(im, i){
+    h+='<div style="position:relative;flex-shrink:0">'
+      +'<img src="data:'+im.media_type+';base64,'+im.data+'" alt="" '
+        +'style="width:54px;height:54px;object-fit:cover;border-radius:9px;border:1px solid var(--b1,#243049);display:block">'
+      +'<div data-smrm="'+i+'" title="Remove" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;'
+        +'border-radius:50%;background:#0b0f1a;border:1px solid var(--b1,#243049);color:var(--t2,#c7d2e8);'
+        +'font-size:12px;line-height:16px;text-align:center;cursor:pointer">&times;</div></div>';
+  });
+  tray.innerHTML=h;
+  tray.querySelectorAll('[data-smrm]').forEach(function(x){
+    x.onclick=function(){ _SM_TRAY.splice(parseInt(x.getAttribute('data-smrm'),10),1); _smTrayPaint_(); _smTrayNote_(''); };
+  });
+}
+function _smTrayAdd_(files){
+  if(!files || !files.length) return;
+  var room=_SM_IMG_MAX_N-_SM_TRAY.length;
+  if(room<=0){ _smTrayNote_('Three images per message is the limit.'); return; }
+  var list=[].slice.call(files, 0, room);
+  var over=files.length-list.length;
+  var done=0, errs=[];
+  list.forEach(function(f){
+    _smImgPrep_(f, function(err, im){
+      if(err) errs.push(String(f.name||'That image')+' '+err);
+      else if(_SM_TRAY.length<_SM_IMG_MAX_N) _SM_TRAY.push(im);
+      if(++done===list.length){
+        _smTrayPaint_();
+        _smTrayNote_(errs.concat(over>0?['Only the first '+room+' were added — three per message.']:[]).join(' '));
+      }
+    });
+  });
+}
 function _smurkelReplyUI_(){
   return '<div id="sm-convo" style="margin-top:14px"></div>'
+    +'<div id="sm-img-tray" style="display:none;gap:8px;margin-top:10px;flex-wrap:wrap"></div>'
+    +'<div id="sm-img-note" style="display:none;font-size:11.5px;color:var(--c-amber,#f59e0b);line-height:1.5;margin-top:7px"></div>'
+    +'<input type="file" id="sm-img-input" accept="image/*" multiple style="display:none">'
     +'<div style="margin-top:10px;display:flex;gap:8px;align-items:flex-end">'
+    // The attach control sits at .sm-ctl geometry — 9px radius, sized to its icon. Not a pill.
+    +'<div id="sm-attach" title="Attach an image" style="flex-shrink:0;width:38px;height:38px;border-radius:9px;'
+      +'border:1px solid var(--b1,#243049);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3,#8fa0bf)">'
+      +'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+      +'<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></div>'
     +'<textarea id="sm-reply" rows="1" placeholder="Push back, add context, or ask a question…" '
       +'style="flex:1;min-width:0;resize:none;background:var(--s2,#131829);color:var(--t1,#e8eefc);'
       +'border:1px solid var(--b1,#243049);border-radius:10px;padding:9px 11px;font-size:13px;'
@@ -34859,6 +34983,27 @@ function _smurkelBindReply_(){
   // Enter sends, Shift+Enter breaks the line — the shape every chat input has.
   ta.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); _smurkelSend_(); } });
   btn.addEventListener('click', _smurkelSend_);
+  // The tray is rebuilt with the UI, and the UI is re-rendered on every debrief mount — so anything
+  // staged but unsent belongs to a conversation that no longer exists. Clear it rather than let a
+  // stale screenshot ride along with the next question.
+  _SM_TRAY=[]; _smTrayPaint_(); _smTrayNote_('');
+  var att=document.getElementById('sm-attach'), inp=document.getElementById('sm-img-input');
+  if(att && inp){
+    att.addEventListener('click', function(){ inp.click(); });
+    // The value reset matters: picking the SAME file twice in a row fires no change event otherwise,
+    // which reads to the athlete as the attach button being broken.
+    inp.addEventListener('change', function(){ _smTrayAdd_(inp.files); inp.value=''; });
+  }
+  // Paste a screenshot straight in — the shortest path from "cmd-shift-4" to a question about it.
+  ta.addEventListener('paste', function(e){
+    try{
+      var items=(e.clipboardData&&e.clipboardData.items)||[], files=[];
+      // indexOf, not a regex: a served template eats one backslash level, so /^image\// would ship
+      // as /^image// and fail to parse. See scripts/served-escape-test.mjs.
+      for(var i=0;i<items.length;i++){ if(items[i].kind==='file' && String(items[i].type||'').indexOf('image/')===0){ var f=items[i].getAsFile(); if(f) files.push(f); } }
+      if(files.length){ e.preventDefault(); _smTrayAdd_(files); }
+    }catch(err){}
+  });
 }
 function _smurkelPaint_(){
   var box=document.getElementById('sm-convo'); if(!box||!_SM_CONVO) return;
@@ -34866,10 +35011,20 @@ function _smurkelPaint_(){
   var h='';
   _SM_CONVO.turns.forEach(function(t){
     if(t.who==='you'){
+      // Thumbnails inside the athlete's own bubble, so what was sent stays visible next to what was
+      // asked about it. A bubble can be images only — the text below is then empty and omitted.
+      var thumbs='';
+      if(t.imgs && t.imgs.length){
+        thumbs='<div style="display:flex;gap:6px;flex-wrap:wrap'+(t.text?';margin-bottom:7px':'')+'">'
+          +t.imgs.map(function(im){
+            return '<img src="data:'+im.media_type+';base64,'+im.data+'" alt="" '
+              +'style="width:96px;height:96px;object-fit:cover;border-radius:9px;display:block">'; }).join('')
+          +'</div>';
+      }
       h+='<div style="margin:10px 0 0;display:flex;justify-content:flex-end">'
         +'<div style="max-width:86%;background:var(--s2,#1b2336);border:1px solid var(--b1,#243049);'
         +'border-radius:12px 12px 3px 12px;padding:8px 11px;font-size:13px;line-height:1.5;color:var(--t1,#e8eefc)">'
-        +esc(t.text)+'</div></div>';
+        +thumbs+(t.text?esc(t.text):'')+'</div></div>';
     } else {
       h+='<div style="margin:10px 0 0">'
         +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--d-dim,#64748b);margin-bottom:3px">DR. SMURKEL</div>'
@@ -34882,9 +35037,13 @@ function _smurkelPaint_(){
 function _smurkelSend_(){
   var ta=document.getElementById('sm-reply'), btn=document.getElementById('sm-send');
   if(!ta||!_SM_CONVO) return;
-  var msg=String(ta.value||'').trim(); if(!msg) return;
+  var msg=String(ta.value||'').trim();
+  // AN IMAGE ON ITS OWN IS A VALID MESSAGE. Requiring text would mean typing "look at this" to send
+  // a screenshot; the prompt below carries a default question when only pictures arrive.
+  if(!msg && !_SM_TRAY.length) return;
+  var imgs=_SM_TRAY.slice(); _SM_TRAY=[]; _smTrayPaint_(); _smTrayNote_('');
   ta.value=''; ta.style.height='auto';
-  _SM_CONVO.turns.push({who:'you', text:msg});
+  _SM_CONVO.turns.push({who:'you', text:msg, imgs:imgs.length?imgs:null});
   _SM_CONVO.turns.push({who:'coach', text:'…'});
   _smurkelPaint_();
   if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
@@ -34901,8 +35060,22 @@ function fetchSmurkelReply_(convo, cb){
   var facts='';
   try{ facts=_smurkelFacts_(_smurkelContext_(convo.dk, convo.ride)); }catch(e){}
   var NL=String.fromCharCode(10);
-  var hist=convo.turns.filter(function(t){ return t.text && t.text!=='…'; })
-    .map(function(t){ return (t.who==='you'?'ATHLETE: ':'YOU: ')+t.text; }).join(NL);
+  // EVERY IMAGE EVER ATTACHED IS RE-SENT ON EVERY TURN. This request rebuilds ONE user message from
+  // scratch each time rather than appending to a message array, so an image sent on turn 1 is simply
+  // absent from turn 2 unless it is included again. They are numbered here and referred to by the
+  // same numbers in the transcript, which is what lets "the one in the second picture" resolve.
+  var _imgs=[];
+  convo.turns.forEach(function(t){ if(t.who==='you' && t.imgs) t.imgs.forEach(function(im){ _imgs.push(im); }); });
+  var _imgIdx=0;
+  var hist=convo.turns.filter(function(t){ return (t.text && t.text!=='…') || (t.imgs && t.imgs.length); })
+    .map(function(t){
+      var line=(t.who==='you'?'ATHLETE: ':'YOU: ');
+      if(t.who==='you' && t.imgs && t.imgs.length){
+        var tags=t.imgs.map(function(){ return 'Image '+(++_imgIdx); }).join(', ');
+        line+='[attached '+tags+'] ';
+      }
+      return line+(t.text||'(no message — the picture is the question)');
+    }).join(NL);
   // PRE-RIDE IS A DIFFERENT CONVERSATION and gets a different frame. Post-ride is "here is what you
   // did"; pre-ride is "here is what you are about to do, and I am standing next to you while you
   // decide". Handing the post-ride wording to a pre-ride question produced answers in the past
@@ -34933,6 +35106,23 @@ function fetchSmurkelReply_(convo, cb){
       +'information is the job, not a climbdown.'+NL
     +'- If they are wrong, say why, with the number that makes it wrong.'+NL
     +'- Use only the figures above. Never invent one.'+NL
+    // The images are the ONE source in this prompt that is not the app's own measured data, and the
+    // rule has to say so explicitly. Without it the model happily merges a number it read off a
+    // screenshot into the same voice as a figure the app computed, and the athlete cannot tell which
+    // is which. A registration confirmation is also the likeliest thing to be uploaded, so the
+    // no-silent-write line is worth stating: he must know the calendar did not change.
+    +(_imgs.length
+      ? ('- He has attached '+_imgs.length+' image'+(_imgs.length===1?'':'s')+', labelled Image 1'
+         +(_imgs.length>1?(' through Image '+_imgs.length):'')+'. Read them and answer from what is '
+         +'actually there. Say what you can see; if something is cut off, illegible or simply not in '
+         +'the picture, say that rather than guessing at it.'+NL
+         +'- A figure you read off an image is HIS, not the app’s. Attribute it — "your screenshot '
+         +'says 8:42/mi" — and never blend it into the measured facts above as though the app had '
+         +'computed it. Where the two disagree, say so and say which is which.'+NL
+         +'- You cannot change anything from here. If the image is a race registration, an entry '
+         +'confirmation or anything else that ought to be on the calendar, tell him what you would '
+         +'add and that he still has to add it himself. Never imply it has been saved.'+NL)
+      : '')
     +'- Answer the question actually asked. If they ask what to do, tell them, in order.'+NL
     +'- No section headings and no asterisk-bolding. Two to six sentences unless they asked for '
       +'something that genuinely needs more, or unless a compact table answers it better.';
@@ -34940,7 +35130,22 @@ function fetchSmurkelReply_(convo, cb){
   var to=setTimeout(function(){ if(ac) ac.abort(); }, 30000);
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:700, messages:[{role:'user',content:prompt}] }),
+    // CONTENT BLOCKS WHEN THERE ARE IMAGES, a plain string when there are not — the string form is
+    // what every other call in this file sends and there is no reason to churn it.
+    //
+    // IMAGES COME FIRST, each behind its own "Image N:" label. Both are the documented shape: the
+    // vision guide says Claude works best with images before text, and that several images should be
+    // introduced by label so they can be referred to by name later. The labels match the [attached
+    // Image N] tags in the transcript above.
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:700, messages:[{role:'user', content:(
+      _imgs.length
+        ? _imgs.reduce(function(acc, im, i){
+            acc.push({ type:'text', text:'Image '+(i+1)+':' });
+            acc.push({ type:'image', source:{ type:'base64', media_type:im.media_type, data:im.data } });
+            return acc;
+          }, []).concat([{ type:'text', text:prompt }])
+        : prompt
+    )}] }),
     signal:ac?ac.signal:undefined
   })
   .then(function(r){ return r.json(); })

@@ -1463,6 +1463,22 @@ try {
     fail('the mobility routine lost its order, its identity, or its streak key (see above).');
   }
 
+  // STEP 91 - images in the Dr. Smurkel chat. The request carried the whole conversation as ONE flat
+  //           string, which an image cannot go into; content becomes a block array only when pictures
+  //           are attached. Pins that images are re-sent on EVERY turn (the request rebuilds one user
+  //           message from scratch, so an image from turn 1 is otherwise absent from turn 2), that
+  //           they lead each behind an "Image N:" label matching the transcript tags, that the media
+  //           types are the four the API accepts, and that HEIC is attempted rather than pre-rejected.
+  console.log(`${D}. checking chat image upload...${X}`);
+  try {
+    const so = execSync('node scripts/smurkel-image-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the chat can drop an attached image, mislabel it, or send a format the API rejects (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
