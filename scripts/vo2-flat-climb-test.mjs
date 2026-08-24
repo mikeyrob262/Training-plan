@@ -108,7 +108,16 @@ console.log('\n' + Y + '=== date-gated, like the rest of the progression ===' + 
 
 console.log('\n' + Y + '=== it rides ALONG WITH Saturday, it does not replace it ===' + X);
 {
-  const bp = src.slice(src.indexOf('function blockPlanFor_('), src.indexOf('function blockPlanFor_(') + 3500);
+  // THE WHOLE FUNCTION, brace-matched. A fixed 3500-char slice was a guess about where the derive
+  // ended, and it silently stopped covering climbMin the moment blockPlanFor_ grew (the weekday run
+  // rung pushed it past the window). A test whose scope depends on the length of the thing it tests
+  // reports green for the wrong reason — the same slice bug the persona test had.
+  const bp = (function () {
+    const i = src.indexOf('function blockPlanFor_(');
+    let k = src.indexOf('{', i), d = 0;
+    for (; k < src.length; k++) { const c = src[k]; if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } }
+    return src.slice(i, k + 1);
+  })();
   ok('only the long-form Saturday intents carry it', /_int==='group'\|\|_int==='long'/.test(bp));
   ok('...so a VO2 or threshold day never gets one', !/_int==='vo2'/.test(bp));
   ok('the existing struct is kept and appended to', /_st\+' · '/.test(bp) || /\(_st\?\(_st\+/.test(bp));

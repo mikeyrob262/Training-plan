@@ -31395,6 +31395,19 @@ function blockPlanFor_(dateKey){
     // phase's minute range alongside it would be two prescriptions for one run.
     var _rb=(typeof _runBuildFor_==='function' && _int==='easyRun' && mon===6 && via==='week')
       ? _runBuildFor_(dateKey) : null;
+    // WEEKDAY RUN RUNG. Sunday is _rb's below; every other easyRun day takes the phase table's
+    // range unless the athlete has accepted a rung, in which case it takes the NEXT PHASE'S range.
+    // Date-gated inside _runRungFor_, so a run already done keeps the prescription it was given.
+    if(typeof _runRungStruct_==='function' && _int==='easyRun' && mon!==6 && via==='week'){
+      var _rr=_runRungStruct_(dateKey, _st);
+      if(_rr){
+        _st=_rr;
+        // The duration target moves with the range or the card shows the new struct priced at the
+        // old minutes — the same trap the Sunday build had to close.
+        var _rt=_runRangeTopMin_(_rr);
+        if(rx && rx.targets && _rt) rx.targets.durationMin=_rt;
+      }
+    }
     if(_rb){
       _st=_rb.mi.toFixed(1)+' mi easy'
         +(_rb.stack?(' · stacked behind '+_rb.stack+' min of Saturday climbing - decide on the day which one gives'):'');
@@ -32410,6 +32423,10 @@ function coachV_(dateKey, now){
     // Proactive leg-protection swap. Null on every day the conditions do not hold — Dr. Smurkel is
     // supposed to catch this, not wait to be asked.
     protect:(typeof _cvProtectLegs_==='function')?_cvProtectLegs_(dateKey, now):null,
+    // The run-ahead flag reaches the coach as a FACT, not as a second opinion. He is told the
+    // pattern and told that only the athlete can accept it — otherwise he cheerfully says "I've
+    // bumped you to 27-29" and nothing has moved.
+    runAhead:(typeof _runAheadFlag_==='function')?_runAheadFlag_(now):null,
     milestone:_cvMilestone_(now),
     ftp:_cvFtp_(now),
     slide:_cvSlide_(now),
@@ -32441,6 +32458,14 @@ function _coachVPanel_(now){
     H+='<div style="font-size:14px;color:var(--d-t2);line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
   }
   if(cv.slide){ H+='<div style="font-size:13.5px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
+  // Stated, not actioned — the accept button lives on the Run Training page and only there, so
+  // there is exactly one place the block can be advanced from.
+  if(cv.runAhead){
+    H+='<div style="font-size:13.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere">'
+      +'<b style="color:'+A+'">Running &mdash; </b>your last '+cv.runAhead.streak+' weekday runs went longer than the '
+      +cv.runAhead.current+' the plan asked for. The next step up is '+cv.runAhead.next+'; it is on the Run Training page when you want it'
+      +(cv.runAhead.thin?', though that is read off a thin run library':'')+'.</div>';
+  }
   if(cv.hrv){ H+='<div style="font-size:13.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
   // today's session coaching — POST-ride once a ride is logged (pre-ride tense is stale after import)
   if(cv.done){
@@ -47302,6 +47327,57 @@ function renderRunInto_(scr, surface){
     scr.appendChild(title);
   }
 
+  // THE RUN-AHEAD FLAG, at the top because it is the only thing on this page that asks for a
+  // decision. Nothing below it is actionable in the same way. Mounted on the SHARED renderer, so
+  // desktop and mobile get it from one place and cannot drift — the recurring bug this app keeps
+  // paying for is a card that shipped on one surface only.
+  try{
+    var _ra=(typeof _runAheadFlag_==='function')?_runAheadFlag_(new Date()):null;
+    if(_ra){
+      var raCard=document.createElement('div');
+      raCard.style.cssText='margin:0 16px 16px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
+      var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
+      raCard.innerHTML=
+        // NO INTERNAL VOCABULARY IN RENDERED TEXT. "prescription" is what this codebase calls the
+        // thing; it is not what an athlete calls it, and the persona test bans it from any element
+        // body for exactly that reason. The plan asks, he runs — that is the sentence.
+        '<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">The plan is behind you</div>'
+        +'<div style="font-size:14.5px;color:var(--t1);line-height:1.6">Your last '
+          +_ra.streak+' weekday runs went longer than the plan asked for &mdash; '+days+' against a '+_ra.current+' target. '
+          +'The next step up is <b>'+_ra.next+'</b>.</div>'
+        // The sample line is not decoration. A pattern read off a thin library is still a pattern,
+        // but it is not the same claim as one read off a deep one, and the card has to say which.
+        +'<div style="font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:8px">'
+          +(_ra.thin
+            ? ('Read off '+_ra.sample+' runs in the last six weeks &mdash; a thin base. Treat this as a prompt to look, not a verdict.')
+            : ('Read off '+_ra.sample+' runs in the last six weeks.'))
+        +'</div>'
+        // THE SHIN GUARDRAIL, said out loud rather than left implicit in the fact that a button
+        // exists. Mileage cannot see a shin; the sentence exists so the decision is made on more
+        // than the number above it.
+        +'<div style="font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:6px">'
+          +'Nothing changes until you say so. This reads distance and duration only &mdash; it cannot see how the shin feels.</div>'
+        +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+          +'<button id="run-rung-yes" style="padding:8px 13px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_ra.next+'</button>'
+          +'<button id="run-rung-no" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Not yet</button>'
+        +'</div>';
+      scr.appendChild(raCard);
+      setTimeout(function(){
+        var y=document.getElementById('run-rung-yes'), n=document.getElementById('run-rung-no');
+        if(y) y.onclick=function(){
+          var done=(typeof runRungAccept_==='function')?runRungAccept_(new Date()):null;
+          if(done){ try{ toast('Weekday runs moved to '+done.next); }catch(e){} }
+          try{ renderRun(); }catch(e){}
+        };
+        // "Not yet" DISMISSES NOTHING PERMANENTLY. It hides the card for this render only: the
+        // condition that raised it is still true, and a flag that can be dismissed into silence is
+        // how a real signal gets lost. It comes back on the next visit, or stops on its own the
+        // moment a run lands inside the prescription again.
+        if(n) n.onclick=function(){ try{ raCard.remove(); }catch(e){} };
+      },0);
+    }
+  }catch(e){ try{ console.error('[run-ahead] '+((e&&e.message)||e)); }catch(_e){} }
+
   // History exhibit, above the live stats. Renders nothing when the snapshot is unprimed or run
   // cannot be ranked — the same do-not-claim contract _covFor_ returns.
   try{
@@ -48898,6 +48974,150 @@ var _RUN_BUILD={
   '2026-10-04':{mi:7.0, durationMin:74},   // peak, ~1.13x race distance
   '2026-10-11':{mi:5.0, durationMin:53}    // step down; P5 holds the race-week taper
 };
+// ===== WEEKDAY RUN PROGRESSION ===============================================================
+//
+// THE SUNDAY LONG RUN ALREADY PROGRESSES — that is _RUN_BUILD directly above, nine dated rungs
+// capped at BLOCK_RUN_RAMP_MAX and re-anchored by hand on 2026-08-17 when its opening rung was
+// judged too low. The WEEKDAY easy runs did not: they take a fixed minute range from the phase
+// table and move only when a phase boundary moves them, roughly monthly, with nothing anywhere
+// comparing them to what was actually run. 25-27 min is about 2.4 mi at 10:44/mi; a fortnight of
+// 4-mile weekday runs against that prescription is invisible to the block.
+//
+// THE RUNGS ARE NOT NEW NUMBERS. They are the phase tables' own easyRun ranges, in phase order —
+// 20-25 -> 25-27 -> 27-29 -> 29-31 — read out of the block at call time rather than copied here.
+// Advancing a rung means adopting the NEXT PHASE'S range early, so the ceiling is whatever the
+// block already builds toward and nothing can be prescribed that the athlete was not going to
+// reach anyway. It also means this table cannot drift from the phase tables, because there is no
+// table: edit a phase and the ladder follows.
+//
+// NOTHING HERE ADVANCES ANYTHING ON ITS OWN. The detector raises a flag; the athlete accepts it.
+// That is the shin guardrail and it is the whole design: the recurring tibialis issue has stopped
+// him running before and came back immediately on restart, and no amount of "the last three runs
+// were long" is evidence that the shin is ready for more. Mileage data cannot see a shin. A person
+// weighing "am I actually ready" can.
+function _RUN_RUNG_LADDER_(){
+  try{
+    var tb=(typeof _trainingBlock_==='function')?_trainingBlock_():null;
+    if(!tb || !tb.phases) return [];
+    var out=[];
+    tb.phases.forEach(function(p){
+      if(!p.week) return;                       // date-driven phases (tapers) carry no weekday ladder
+      p.week.forEach(function(slots, mon){
+        if(mon===6) return;                     // Sunday is _RUN_BUILD's, not this ladder's
+        (slots||[]).forEach(function(sl){
+          if(!sl || sl.i!=='easyRun' || !sl.s) return;
+          if(out.length && out[out.length-1]===sl.s) return;   // collapse the repeats within a phase
+          if(out.indexOf(sl.s)>=0) return;
+          out.push(sl.s);
+        });
+      });
+    });
+    return out;
+  }catch(e){ return []; }
+}
+// The high end of a "25-27 min" style range. The HIGH end is what "ahead of prescription" is
+// measured against: a 26-minute run against 25-27 is inside the prescription, not beyond it, and
+// comparing to the midpoint would call that progress.
+function _runRangeTopMin_(struct){
+  var m=String(struct||'').match(/[0-9]+/g);
+  if(!m || !m.length) return null;
+  var n=m.map(function(x){ return parseInt(x,10); }).filter(function(x){ return x>0; });
+  return n.length?Math.max.apply(null,n):null;
+}
+// Accepted rungs, newest first. Each entry is {from:<dateKey>, rung:<n>} and applies from its own
+// date FORWARD only — the same rule every other progression here follows, because a Wednesday
+// already run must not retroactively acquire a longer prescription than it was given.
+function _runRungFor_(dateKey){
+  try{
+    var log=(st && Array.isArray(st.runRungs))?st.runRungs:[];
+    var best=0;
+    log.forEach(function(e){ if(e && !e.deleted && e.from && String(dateKey)>=String(e.from) && (e.rung||0)>best) best=e.rung||0; });
+    return best;
+  }catch(e){ return 0; }
+}
+// The struct a weekday easyRun should carry on this date, or null to leave the phase table alone.
+function _runRungStruct_(dateKey, phaseStruct){
+  var n=_runRungFor_(dateKey); if(!n) return null;
+  var lad=_RUN_RUNG_LADDER_(); if(!lad.length) return null;
+  var at=lad.indexOf(phaseStruct); if(at<0) return null;
+  var to=Math.min(lad.length-1, at+n);
+  return (to===at)?null:lad[to];
+}
+var RUN_AHEAD_N       = 2;    // consecutive qualifying runs — the strength-progression precedent
+var RUN_AHEAD_MIN_LIB = 8;    // runs in the lookback before the flag speaks with any confidence
+var RUN_AHEAD_LOOKBACK_D = 42;
+// Minutes actually run. movingSecs is the number; r.duration may be a FORMATTED string ("0:44:13")
+// and digit-stripping it yields 4413 — the bug that once drove a calorie target to 34,356.
+function _runLoggedMin_(r){
+  if(!r) return null;
+  var s=(r.movingSecs!=null)?parseFloat(r.movingSecs):NaN;
+  if(isFinite(s) && s>0) return s/60;
+  if(r.duration!=null && typeof parseDurToMin==='function'){ var m=parseDurToMin(r.duration); if(m>0) return m; }
+  return null;
+}
+// THE DETECTOR. Walks back over weekday easyRun days the block prescribed, pairs each with a run
+// logged that day, and counts how many of the most recent ones ran past the TOP of the prescribed
+// range. Returns null when there is nothing to say — no flag is the normal state.
+function _runAheadFlag_(now){
+  try{
+    if(typeof blockPlanFor_!=='function' || typeof getRuns!=='function' || typeof _tbDK_!=='function') return null;
+    var today=now||new Date();
+    var runs=getRuns()||[];
+    var byDate={};
+    runs.forEach(function(r){
+      if(!r || r.deleted) return;
+      var k=(typeof normDate==='function')?normDate(r.date):String(r.date||'').slice(0,10);
+      var mn=_runLoggedMin_(r);
+      if(!k || mn==null) return;
+      if(!byDate[k] || mn>byDate[k]) byDate[k]=mn;      // two runs in a day: the longer one is the session
+    });
+    var pairs=[], lib=0;
+    for(var d=1; d<=RUN_AHEAD_LOOKBACK_D; d++){
+      var dt=new Date(today.getTime()-d*86400000);
+      var dk=_tbDK_(dt);
+      if(byDate[dk]!=null) lib++;
+      if(dt.getDay()===0) continue;                      // Sunday belongs to _RUN_BUILD
+      var bp=null; try{ bp=blockPlanFor_(dk); }catch(e){ continue; }
+      if(!bp || !bp.sessions) continue;
+      var slot=null;
+      bp.sessions.forEach(function(s){ if(!slot && s && s.intent==='easyRun') slot=s; });
+      if(!slot) continue;
+      var top=_runRangeTopMin_(slot.struct); if(top==null) continue;
+      if(byDate[dk]==null) continue;                     // not run — not evidence either way
+      pairs.push({ dk:dk, ranMin:Math.round(byDate[dk]), topMin:top, ahead:byDate[dk]>top, struct:slot.struct });
+    }
+    if(!pairs.length) return null;
+    // Consecutive from the most recent QUALIFYING day backwards. A day he did not run is skipped
+    // above rather than counted as a miss: this rule is about how far he runs when he runs, and
+    // missing a Wednesday is the adherence rule's business, not this one's.
+    var streak=0;
+    for(var i=0;i<pairs.length;i++){ if(pairs[i].ahead) streak++; else break; }
+    if(streak<RUN_AHEAD_N) return null;
+    var cur=pairs[0].struct;
+    var lad=_RUN_RUNG_LADDER_();
+    var at=lad.indexOf(cur);
+    var next=(at>=0 && at<lad.length-1)?lad[at+1]:null;
+    if(!next) return null;                               // already on the block's last rung
+    // NO FABRICATED CONFIDENCE. The run library is thin (measured: 16 runs in 12 months), and a
+    // recommendation off a thin base is a guess wearing a verdict's clothes. The flag still shows —
+    // the pattern is real — but it says what it is standing on.
+    return { current:cur, next:next, streak:streak, sample:lib, thin:(lib<RUN_AHEAD_MIN_LIB),
+             runs:pairs.slice(0,streak), rung:_runRungFor_(_tbDK_(today))+1 };
+  }catch(e){ return null; }
+}
+// The athlete's decision, recorded. Dated from TODAY forward — never backdated over runs already
+// prescribed and already done.
+function runRungAccept_(now){
+  try{
+    var f=_runAheadFlag_(now); if(!f) return null;
+    var from=_tbDK_(now||new Date());
+    if(!st.runRungs) st.runRungs=[];
+    st.runRungs.push({ id:'rr-'+from+'-'+f.rung, from:from, rung:f.rung, at:Date.now() });
+    if(typeof sv==='function') sv();
+    if(typeof fbPush==='function'){ try{ fbPush(true); }catch(e){} }
+    return f;
+  }catch(e){ return null; }
+}
 // The Saturday this Sunday sits behind, so the stacked-load weeks can be NAMED rather than silently
 // resolved. Per the owner's call: ramp both and flag the collision, decide on the day. Only reported
 // once the run is long enough for the pairing to actually matter.

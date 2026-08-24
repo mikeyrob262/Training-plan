@@ -1479,6 +1479,23 @@ try {
     fail('the chat can drop an attached image, mislabel it, or send a format the API rejects (see above).');
   }
 
+  // STEP 92 - weekday run progression. The Sunday long run already laddered (_RUN_BUILD); the
+  //           weekday easy runs took a fixed minute range from the phase table and moved only at
+  //           phase boundaries, with nothing comparing them to what was run. Pins that the rungs are
+  //           the phase tables' OWN ranges read at call time (no second table to drift), that every
+  //           step stays inside BLOCK_RUN_RAMP_MAX, that "ahead" means past the TOP of the range,
+  //           that a single long run does not fire it, that Sunday is left to _RUN_BUILD, and above
+  //           all that NOTHING advances without an explicit accept — the shin guardrail.
+  console.log(`${D}. checking weekday run progression...${X}`);
+  try {
+    const so = execSync('node scripts/run-ahead-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the run prescription can advance itself, ramp too fast, or fire off one good run (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

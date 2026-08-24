@@ -130,7 +130,15 @@ console.log('\n' + Y + '=== only the sessions that should progress do ===' + X);
 
 console.log('\n' + Y + '=== wired into BOTH resolvers, so tile and detail cannot split ===' + X);
 {
-  const bp = src.slice(src.indexOf('function blockPlanFor_('), src.indexOf('function blockPlanFor_(') + 3000);
+  // Brace-matched, not a fixed slice. A character count is a guess about where a function ends and
+  // stops covering its own assertions the moment the function grows - it has silently done exactly
+  // that twice in this suite. See the same fix in vo2-flat-climb-test and smurkel-persona-test.
+  const bp = (function () {
+    const i = src.indexOf('function blockPlanFor_(');
+    let k = src.indexOf('{', i), d = 0;
+    for (; k < src.length; k++) { const c = src[k]; if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } }
+    return src.slice(i, k + 1);
+  })();
   ok('the block resolver gates by date', /_blockProgWeekFor_\(dateKey, weekInPhase\)/.test(bp));
   ok(// Matches the rung in its THIRD position rather than the whole arg list: a fourth argument (dateKey,
 // added so a past session is graded against the FTP in force then) is not a regression in this rule.
