@@ -33414,7 +33414,19 @@ function _zwoFor_(s0, dateKey){
     // literal, so a backslash-n here becomes a REAL newline at serve time and splits the string
     // across two lines — "Invalid or unexpected token" at load. Same trap as the backtick rule.
     var NL=String.fromCharCode(10);
-    var xml=['<workout_file>',
+    // THE XML DECLARATION IS NOT REQUIRED BY ZWIFT AND IS WRITTEN ANYWAY.
+    //
+    // Measured, not assumed: four files this exporter produced WITHOUT a declaration are listed in
+    // Zwift's own index (AppData/Local/Zwift/Workouts/<id>/workouts.files, deleted:false), and one
+    // of them — 2026-08-02-vo2.zwo — has been re-saved BY Zwift in its own house style (double
+    // quotes, pace="0", a <tags> block, float-precision powers). Zwift read this format, accepted
+    // it, and wrote it back. The declaration was never what stopped a workout appearing.
+    //
+    // It goes in because every file Zwift authors has one, so its absence is the first thing anyone
+    // looking at a broken import will blame — and that cost a real debugging session. A line that
+    // removes a permanent false lead is worth a line.
+    var xml=['<?xml version="1.0" encoding="utf-8"?>',
+      '<workout_file>',
       '  <author>Athlete IQ</author>',
       '  <name>'+_zwoEsc_(nm)+'</name>',
       '  <description>'+_zwoEsc_(desc)+'</description>',

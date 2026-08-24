@@ -100,7 +100,14 @@ check('and produce byte-identical files', a.xml===b.xml, true);
 
 console.log('\n=== VO2: the reported case ===');
 const vo2=a.xml;
-check('is valid-looking XML', /^<workout_file>[\s\S]*<\/workout_file>\s*$/.test(vo2), true);
+// THE DECLARATION IS COSMETIC AND IS PINNED ANYWAY. Zwift does not require it — four files this
+// exporter produced without one are listed in Zwift's own workouts.files index with deleted:false,
+// and Zwift re-saved one of them in its own house style, which is proof it parsed and accepted the
+// format. It is written because every Zwift-authored file has one, so its absence is the first
+// thing anyone blames when an import fails, and that already cost a debugging session chasing it.
+check('opens with the XML declaration', vo2.indexOf('<?xml version="1.0" encoding="utf-8"?>'), 0);
+check('...on its own line, before the root', /^<\?xml[^>]*\?>\n<workout_file>/.test(vo2), true);
+check('is valid-looking XML', /^<\?xml[^>]*\?>\n<workout_file>[\s\S]*<\/workout_file>\s*$/.test(vo2), true);
 check('names the author', vo2.indexOf('<author>Athlete IQ</author>')>=0, true);
 check('is a bike workout', vo2.indexOf('<sportType>bike</sportType>')>=0, true);
 check('has a warm-up', /<Warmup Duration='600'/.test(vo2), true);
