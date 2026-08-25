@@ -39,6 +39,17 @@ try{
                // WHAT SETS THE TRAJECTORY CARD'S HEIGHT. Shrinking the chart saved nothing, which
                // means the chart is not the tallest thing in it - so the three columns are measured
                // separately rather than assumed.
+               // Every card in the lower section with its height and which column it landed in -
+               // a saving only counts if it comes off the TALLEST column.
+               lower:(function(){
+                 if(!body) return null;
+                 return [].slice.call(body.children).map(function(col,ci){
+                   return { col:ci+1, h:Math.round(col.getBoundingClientRect().height),
+                            cards:[].slice.call(col.children).map(function(k){
+                              return ((k.innerText||'').trim().split(String.fromCharCode(10))[0].slice(0,16)||'?')
+                                     +':'+Math.round(k.getBoundingClientRect().height); }) };
+                 });
+               })(),
                traj:(function(){
                  var c=[].slice.call(wrap.children).filter(function(e2){
                    return (e2.innerText||'').indexOf('RUNNING TRAJECTORY')===0; })[0];
@@ -60,6 +71,7 @@ try{
       '  content '+String(r.content).padStart(5)+' / box '+String(r.box).padStart(5)+
       '   '+r.cols+' cols, lower section '+r.bodyH+'px');
     console.log('             '+Y+JSON.stringify(r.parts)+X);
+    if(r.lower) console.log('             lower cards: '+JSON.stringify(r.lower));
     if(r.traj) console.log('             traj card '+r.traj.card+'px  svg '+r.traj.svgH+
       'px  bands '+JSON.stringify(r.traj.bands)+'  cols '+JSON.stringify(r.traj.cols));
   }

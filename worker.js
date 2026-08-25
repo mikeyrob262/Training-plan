@@ -48495,11 +48495,40 @@ function _runWhyCardHTML_(){
       +'<span style="color:var(--t3);flex-shrink:0">'+fmt(d.prior)+' &rarr; <b style="color:'+col+'">'+fmt(d.recent)+'</b> '+_runEsc_(d.unit)+' '
       +'<span style="color:'+col+'">'+arrow+' '+Math.abs(d.rawDelta)+'%</span></span></div>';
   }).join('');
-  return _runCard_('Why',
-    'last '+w.window+' days ('+w.recentRuns+' runs) against the '+w.window+' before ('+w.priorRuns+')',
-    '<div style="font-size:11.5px;color:var(--t3);line-height:1.5;margin-bottom:4px">'
-    +'Every row is a measured change in one input. Ordered by size, not by story.</div>'+rows);
+  // COLLAPSED BY DEFAULT. This is the page's reference panel, not one of its decisions: it says
+  // which inputs moved, which is worth having and is not worth 196px of a viewport the page is
+  // trying to fit. The header still names it and still says how much is behind the click, so it is
+  // an offer rather than a disappearance.
+  //
+  // State is a module variable, not a stored setting. Collapsed is the right DEFAULT every time the
+  // page opens, and persisting a UI preference into the synced store would be a data change for a
+  // presentation choice.
+  var open=!!_runWhyOpen;
+  return '<div style="background:var(--s2);border-radius:14px;padding:12px 14px;margin:0 16px 12px;border:1px solid var(--b1)">'
+    +'<div id="run-why-head" style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+      +'<div style="min-width:0;flex:1">'
+        +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Why</div>'
+        +'<div style="font-size:10.5px;color:var(--t3);opacity:.85;margin-top:2px">'
+        +w.drivers.length+' measured change'+(w.drivers.length===1?'':'s')+' &middot; last '+w.window+' days vs the '+w.window+' before</div>'
+      +'</div>'
+      +'<span id="run-why-chev" style="font-size:15px;color:var(--t3);flex-shrink:0;transition:transform .18s;'
+      +(open?'transform:rotate(180deg)':'')+'">&#9662;</span>'
+    +'</div>'
+    +'<div id="run-why-body" style="'+(open?'':'display:none;')+'margin-top:9px">'
+      +'<div style="font-size:11.5px;color:var(--t3);line-height:1.5;margin-bottom:4px">'
+      +'Every row is a measured change in one input. Ordered by size, not by story.</div>'+rows
+    +'</div>'
+    +'</div>';
 }
+// Session-local, so it reopens collapsed on a fresh load but survives a re-render within a visit.
+var _runWhyOpen=false;
+function runWhyToggle_(){
+  _runWhyOpen=!_runWhyOpen;
+  var b=document.getElementById('run-why-body'), c=document.getElementById('run-why-chev');
+  if(b) b.style.display=_runWhyOpen?'':'none';
+  if(c) c.style.transform=_runWhyOpen?'rotate(180deg)':'';
+}
+try{ if(typeof window!=='undefined'){ window.runWhyToggle_=runWhyToggle_; } }catch(e){}
 function _runPhase2Mount_(scr){
   // NEITHER 10k RACE PACE NOR "WHY" IS IN THIS LIST. 10k mounts under the Personal Bests board where
   // the distances it targets are already ranked; Why mounts beside HR zones as a padded pair. Listed
@@ -48617,12 +48646,23 @@ function _runBalCols_(host){
   // whole row comes out too short and the balance is computed from wrong numbers.
   cards.forEach(function(c){ cols[0].appendChild(c); });
   var hs=cards.map(function(c){ return c.getBoundingClientRect().height; });
-  cards.forEach(function(c,ix){
+  // BIGGEST FIRST. Assigning in authored order let one large card decide everything: measured at
+  // 1512x982 the columns came out 558 / 413 / 498 for a total of 1,469 - an ideal of 490 - because
+  // Personal Bests (375px) landed first and Weekly Build (159) stacked on top of it while a column
+  // sat 145px shorter. Longest-processing-time first is the standard fix and it is worth ~90px here
+  // for nothing: same cards, same columns, better packing.
+  var order=cards.map(function(c,ix){ return ix; })
+    .sort(function(a2,b2){ return hs[b2]-hs[a2]; });
+  var owner=[];
+  order.forEach(function(ix){
     var lo=0;
     for(var k=1;k<n;k++) if(heights[k]<heights[lo]) lo=k;
-    cols[lo].appendChild(c);
+    owner[ix]=lo;
     heights[lo]+=hs[ix]+_RUN_BAL_GAP;
   });
+  // ...but APPEND in authored order, so within a column the page still reads in the order it was
+  // written. Only the assignment is by size; the sequence a reader sees is untouched.
+  cards.forEach(function(c,ix){ cols[owner[ix]].appendChild(c); });
 }
 try{ if(typeof window!=='undefined'){ window._runBalCols_=_runBalCols_; } }catch(e){}
 
@@ -48924,7 +48964,11 @@ function renderRunInto_(scr, surface){
     try{
       var whyHTML=(typeof _runWhyCardHTML_==='function')?(_runWhyCardHTML_()||''):'';
       if(whyHTML){ var wd=document.createElement('div'); wd.innerHTML=whyHTML;
-        while(wd.firstChild) pair.appendChild(wd.firstChild); }
+        while(wd.firstChild) pair.appendChild(wd.firstChild);
+        // Bound after the node is in the pair. Expanding makes its column taller and the page will
+        // scroll - which is correct: the reader asked to see it.
+        setTimeout(function(){ var hh=document.getElementById('run-why-head');
+          if(hh) hh.onclick=function(){ runWhyToggle_(); }; }, 0); }
     }catch(e){ try{ console.error('[run-why]', e&&e.message); }catch(_e){} }
     scr.appendChild(pair);
   }
