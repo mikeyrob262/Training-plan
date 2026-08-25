@@ -41749,7 +41749,7 @@ function _rtCardHTML_(){
   // pure height on it; at 110 the shape - flat, then the restart climbing - reads exactly the same,
   // because what this chart says is a DIRECTION and direction survives compression. Worth ~40px.
   H+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
-    +'<div style="flex:1;min-height:0">'+_rtChart_(w.pts, 600, 110)+'</div>'
+    +'<div style="flex:1;min-height:110px">'+_rtChart_(w.pts, 600, 110)+'</div>'
     +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
       +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
     +'</div>';
