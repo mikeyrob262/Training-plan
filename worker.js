@@ -48828,6 +48828,59 @@ function _runBalCols_(host){
 }
 try{ if(typeof window!=='undefined'){ window._runBalCols_=_runBalCols_; } }catch(e){}
 
+// THE SNAPSHOT CAN LAND AFTER THIS PAGE HAS ALREADY DRAWN, AND THE PAGE NEVER LOOKED AGAIN.
+//
+// Measured, not reasoned: opening Run Training the instant the renderer exists gives getRuns() 0
+// runs, so _runAheadFlag_ returns null and the plan card correctly does not draw. Six seconds later
+// the /store_v2 snapshot arms with 2,209 runs and the SAME call returns a streak of 8 - but nothing
+// re-rendered, so the page still shows no card. That is the exact shape of the report: the console
+// says the flag is live and the page disagrees, because they were asked at different times.
+//
+// Every earlier probe of this card waited for the snapshot before opening the page, which is
+// precisely the condition under which the bug cannot occur. That is why it kept passing.
+//
+// This is the whole Run page's problem, not one card's: pre-arm the stat row, the PR board and the
+// trajectory chart are all reading a fraction of the runs. So the page redraws once, rather than
+// this card being special-cased into re-checking itself.
+//
+// RUN-PAGE-LOCAL BY CONSTRUCTION. storeV2Arm_ is shared with every other surface and is untouched;
+// this watches from the outside and only ever re-renders Run Training.
+var _RUN_ARM_MS=20000, _RUN_ARM_TICK=400, _runArmTimer=null;
+function _runArmed_(){
+  try{ return !!(typeof _storeV2Runs!=='undefined' && _storeV2Runs && _storeV2Runs.length); }
+  catch(e){ return false; }
+}
+function _runArmWatch_(surface){
+  try{
+    if(_runArmTimer){ clearInterval(_runArmTimer); _runArmTimer=null; }
+    if(_runArmed_()) return;                       // already primed: this render is the good one
+    var waited=0;
+    _runArmTimer=setInterval(function(){
+      waited+=_RUN_ARM_TICK;
+      // Bounded, and it stops the moment the athlete leaves the page - a timer that outlives its
+      // screen and then rebuilds it underneath another one is a worse bug than the one being fixed.
+      var host=document.getElementById('DS-RUN-BODY')||document.getElementById('RUN-SCREEN');
+      if(!host || waited>=_RUN_ARM_MS){ clearInterval(_runArmTimer); _runArmTimer=null; return; }
+      if(!_runArmed_()) return;
+      clearInterval(_runArmTimer); _runArmTimer=null;
+      var top=0, sc=null;
+      try{ sc=(typeof _runScrollParent_==='function')?_runScrollParent_(host):null; top=(sc&&sc.scrollTop)||0; }catch(e){}
+      try{
+        if(surface==='desktop'){ if(typeof dsShowRun==='function') dsShowRun(); }
+        else if(typeof renderRun==='function') renderRun();
+      }catch(e){ try{ console.error('[run-arm] re-render failed: '+((e&&e.message)||e)); }catch(_e){} return; }
+      // Redraws land at the top; if he had already scrolled, put him back where he was.
+      if(top>0) setTimeout(function(){
+        try{
+          var h2=document.getElementById('DS-RUN-BODY')||document.getElementById('RUN-SCREEN');
+          var s2=(h2&&typeof _runScrollParent_==='function')?_runScrollParent_(h2):null;
+          if(s2) s2.scrollTop=top;
+        }catch(e){}
+      },0);
+    }, _RUN_ARM_TICK);
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window._runArmWatch_=_runArmWatch_; window._runArmed_=_runArmed_; } }catch(e){}
 // THE run page. Every card on both surfaces is built here.
 function renderRunInto_(scr, surface){
 
@@ -49330,6 +49383,11 @@ function renderRunInto_(scr, surface){
       plugins:{legend:{display:false}},
       scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}}});
   },300);
+
+  // If this page drew before the run snapshot armed, it is showing a fraction of the runs and
+  // every number on it is wrong - including the plan card, which does not draw at all. Watch for
+  // the snapshot and redraw once. See _runArmWatch_.
+  try{ if(typeof _runArmWatch_==='function') _runArmWatch_(surface); }catch(e){}
 }
 
 // Add/edit a race. idx is the index into st.races (undefined = add new).
@@ -50785,6 +50843,15 @@ function _runLoggedMin_(r){
   var s=(r.movingSecs!=null)?parseFloat(r.movingSecs):NaN;
   if(isFinite(s) && s>0) return s/60;
   if(r.duration!=null && typeof parseDurToMin==='function'){ var m=parseDurToMin(r.duration); if(m>0) return m; }
+  // AND the field the OTHER two run shapes use. getRunsLegacy_ maps a ride's duration into a key
+  // called time, and a hand-logged run stores its time the same way - so before the snapshot
+  // arms, and after the documented STORE_V2_RUNS=false rollback, every run here reads as having
+  // no duration at all and the plan card can never fire. One field name, silently.
+  //
+  // Parsed, never coerced: these are FORMATTED strings, so 0:44:13 through parseFloat is 44213.
+  // Bounded to a day, because a bare number falls through parseDurToMin to parseFloat and raw
+  // seconds would arrive claiming to be minutes.
+  if(r.time!=null && typeof parseDurToMin==='function'){ var m2=parseDurToMin(r.time); if(m2>0 && m2<=1440) return m2; }
   return null;
 }
 // THE DETECTOR. Walks back over weekday easyRun days the block prescribed, pairs each with a run
