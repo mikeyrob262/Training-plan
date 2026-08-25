@@ -47,7 +47,11 @@ const eq = (l, got, want) => { const c = JSON.stringify(got) === JSON.stringify(
 
 const VARS = ['_TB_VERSION', '_FTP_RETEST_DATE', 'BLOCK_RUN_RAMP_MAX', 'SCHED_PROGRESSION_FROM',
   'SCHED_THU_FRI_SWAP_FROM', '_RUN_BUILD_ANCHORED_FROM', '_RUN_STACK_MIN_MI', 'PLAN_SESSION_TYPES',
-  '_STR_EPOCH_', 'STRENGTH_SLOTS_', '_BLOCK_START', 'RUN_AHEAD_N', 'RUN_AHEAD_MIN_LIB', 'RUN_AHEAD_LOOKBACK_D'];
+  '_STR_EPOCH_', 'STRENGTH_SLOTS_', '_BLOCK_START', 'RUN_AHEAD_N', 'RUN_AHEAD_MIN_LIB', 'RUN_AHEAD_LOOKBACK_D',
+  // The trend target and the injury log. A constant missing from this list is a ReferenceError
+  // that _runAheadFlag_'s own try/catch swallows, so the flag comes back null and every assertion
+  // below reads as a broken detector rather than a broken harness.
+  'RUN_STEP_MAX_PCT', 'RUN_STEP_INJ_PCT', 'RUN_TREND_MIN_N', 'RUN_BAND_WIDTH', 'INJ_ACTIVE_DAYS'];
 const OBJS = [['_BLOCK_MILESTONES', '[', ']'], ['_RUN_BUILD', '{', '}'], ['_CLIMB_REHEARSAL', '{', '}'],
   ['_BLOCK_PROG', '{', '}'], ['STRENGTH_POOL_', '[', ']'], ['MOBILITY_POOL_', '[', ']'],
   ['SESSION_DEFS', '{', '}'], ['EX_LIBRARY', '[', ']']];
@@ -58,14 +62,16 @@ const FNS = ['_trainingBlock_', '_tbDK_', '_blockDay_', '_blockDaysBetween_', '_
   'settingsArrLive_', '_arrIsDead_', '_strTopSets_', '_ctlRamp_', '_planZoneFromPct_', '_planExercises_',
   '_planTssFromStruct_', '_planSessionFromDef_', 'normDate', 'planSessionsForDate_',
   '_RUN_RUNG_LADDER_', '_runRangeTopMin_', '_runRungFor_', '_runRungStruct_', 'parseDurToMin',
-  '_runLoggedMin_', '_runAheadFlag_', 'runRungAccept_', 'blockPlanFor_'];
+  '_runLoggedMin_', '_runAheadFlag_', 'runRungAccept_', 'blockPlanFor_',
+  '_runMedian_', '_runAheadTarget_', '_injAll_', '_injActive_', 'injSave_', 'injSetStatus_',
+  'injDelete_', 'runSetWeekdayTarget_'];
 
 function load(state) {
-  const st = Object.assign({ plan: {}, ftp: 183, ftpHistory: [], strength: { log: [] }, runs: [] }, state || {});
+  const st = Object.assign({ plan: {}, ftp: 183, ftpHistory: [], strength: { log: [] }, runs: [], injuries: [] }, state || {});
   const body = 'var _TB_CACHE=null;\nvar st=arguments[0];\nvar console=arguments[2];\n' +
     'function getRuns(){ return st.runs||[]; }\nfunction sv(){}\nfunction fbPush(){}\n' +
     VARS.map(exVar).join('') + OBJS.map(a => exObj(a[0], a[1], a[2])).join('') + FNS.map(exFn).join('') +
-    'return {st:st,' + FNS.concat(['getRuns']).join(',') + ',RUN_AHEAD_N:RUN_AHEAD_N,RUN_AHEAD_MIN_LIB:RUN_AHEAD_MIN_LIB,BLOCK_RUN_RAMP_MAX:BLOCK_RUN_RAMP_MAX};';
+    'return {st:st,' + FNS.concat(['getRuns']).join(',') + ',RUN_AHEAD_N:RUN_AHEAD_N,RUN_AHEAD_MIN_LIB:RUN_AHEAD_MIN_LIB,BLOCK_RUN_RAMP_MAX:BLOCK_RUN_RAMP_MAX,RUN_STEP_MAX_PCT:RUN_STEP_MAX_PCT,RUN_STEP_INJ_PCT:RUN_STEP_INJ_PCT,RUN_TREND_MIN_N:RUN_TREND_MIN_N,RUN_BAND_WIDTH:RUN_BAND_WIDTH};';
   return new Function(asServed(body))(st, null, { warn() {}, log() {}, error() {} });
 }
 const M0 = load();
@@ -114,7 +120,13 @@ console.log('\n' + Y + '=== the detector fires on a PATTERN, not a good day ==='
   const f = M._runAheadFlag_(NOW);
   ok('a flag is raised', !!f);
   eq('...naming the current prescription', f.current, '25-27 min');
-  eq('...and the next rung, which is the next phase’s range', f.next, '27-29 min');
+  // The proposal is now COMPUTED, not the next ladder rung. Median of 38 and 41 is 39.5; the step
+  // ceiling is 27 x 1.10 = 29, so 29 governs and the band is 27-29. It coincides with the old
+  // ladder rung here, which is exactly why a bigger sample is asserted below - that is where the
+  // two designs stop agreeing.
+  eq('...and a computed target, capped by the ramp rate', f.next, '27-29 min');
+  eq('...whose trend figure is the median of the two runs', f.target.trendTop, 39);
+  ok('...and it says it was capped', f.target.capped === true);
   eq('...off two consecutive runs', f.streak, 2);
 }
 {
@@ -168,10 +180,10 @@ console.log('\n' + Y + '=== accepting advances the block, FORWARD ONLY ===' + X)
 {
   const M = load({ runs: runsOn([['2026-08-31', 38], ['2026-09-02', 41]]) });
   const done = M.runRungAccept_(NOW);
-  ok('it returns what it acted on', !!done && done.next === '27-29 min');
+  ok('it returns what it acted on', !!done && done.struct === '27-29 min');
   eq('one rung recorded', M.st.runRungs.length, 1);
   eq('dated today, not backdated', M.st.runRungs[0].from, '2026-09-07');
-  ok('the id is content-derived, so two devices converge', M.st.runRungs[0].id === 'rr-2026-09-07-1');
+  ok('the id is content-derived, so two devices converge', M.st.runRungs[0].id === 'rr-2026-09-07-29');
 
   eq('a future weekday takes the new range',
     M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['27-29 min']);
@@ -183,13 +195,74 @@ console.log('\n' + Y + '=== accepting advances the block, FORWARD ONLY ===' + X)
     M.blockPlanFor_('2026-09-13').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['5.5 mi easy']);
 }
 
-console.log('\n' + Y + '=== the ceiling is the block’s own last rung ===' + X);
+console.log('\n' + Y + '=== the ceiling is now what he ACTUALLY RUNS, not the last rung ===' + X);
 {
+  // THE OLD CEILING WAS THE BUG. The ladder's rungs are the phase tables' own ranges and its top is
+  // 29-31 min; measured live, the last eight weekday runs were 57/54/44/44/44/36/36/36. Accepting
+  // every rung that exists landed at 31 - below the SHORTEST of those. The flag used to go silent
+  // there, so the card's answer to "I am running 44" was permanently "move to 27-29, then stop".
   const M = load({ runs: runsOn([['2026-08-31', 38], ['2026-09-02', 41]]) });
   M.st.runRungs = [{ id: 'x', from: '2026-01-01', rung: 9 }];   // absurd, on purpose
-  eq('a rung beyond the ladder clamps to the last one',
+  eq('a legacy rung beyond the ladder still clamps to the last one',
     M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['29-31 min']);
-  ok('and no flag is offered once there is nowhere left to go', M._runAheadFlag_(NOW) === null);
+  const f9 = M._runAheadFlag_(NOW);
+  ok('NEG: the flag is NOT silenced by the ladder running out', !!f9);
+  ok('...it proposes past the ladder ceiling of 31', !!f9 && f9.target.proposedTop > 31);
+}
+{
+  // G1: RATIFY, NEVER EXTRAPOLATE. The proposal can never exceed the median of the qualifying runs,
+  // however many steps are accepted - the plan follows the athlete, it never leads him somewhere new.
+  const M = load({ runs: runsOn([['2026-08-24', 60], ['2026-08-26', 40], ['2026-08-31', 40], ['2026-09-02', 40]]) });
+  const f = M._runAheadFlag_(NOW);
+  eq('the trend is the MEDIAN, so one 60-minute day cannot set it', f.target.trendTop, 40);
+  ok('NEG: and it is not the mean or the max', f.target.trendTop !== 45 && f.target.trendTop !== 60);
+  let guard = 0, top = f.target.proposedTop;
+  while (guard++ < 40) {
+    M.runSetWeekdayTarget_(top, NOW, 't');
+    const g = M._runAheadFlag_(NOW);
+    if (!g || !g.target || !g.target.proposedTop || g.target.proposedTop <= top) break;
+    top = g.target.proposedTop;
+  }
+  ok('accepting repeatedly converges to the trend and stops (' + top + ' min)', top === 40);
+  ok('NEG: it never overshoots what he actually ran', top <= 40);
+}
+{
+  // G2: the step ceiling is the block's OWN ramp cap, not a second number invented for the same leg.
+  const M = load({ runs: runsOn([['2026-08-31', 90], ['2026-09-02', 90]]) });
+  const f = M._runAheadFlag_(NOW);
+  eq('one step moves the top by at most the block ramp cap',
+    f.target.proposedTop, Math.floor(27 * (1 + M.RUN_STEP_MAX_PCT)));
+  ok('...and the card is told it was capped, so it can say so', f.target.capped === true);
+  ok('the cap IS BLOCK_RUN_RAMP_MAX, not a private copy',
+    Math.abs(M.RUN_STEP_MAX_PCT - M.BLOCK_RUN_RAMP_MAX) < 1e-9);
+}
+{
+  // G3: a logged injury is a real input, not a disclaimer.
+  const M = load({ runs: runsOn([['2026-08-31', 60], ['2026-09-02', 60]]) });
+  M.injSave_({ from: '2026-09-05', area: 'Shin', severity: 6, status: 'active', note: 'sore' });
+  const f = M._runAheadFlag_(NOW);
+  ok('the flag still shows - the pattern is real either way', !!f);
+  ok('...but nothing is proposed while it is active', f.target.blocked === true && !f.target.proposedTop);
+  ok('...and it names the reason', /shin report on file/.test(f.target.why));
+  M.injSetStatus_(M.st.injuries[0].id, 'easing');
+  const g = M._runAheadFlag_(NOW);
+  ok('easing lets a step through', !!g.target.proposedTop);
+  ok('...at half the rate', Math.abs(g.target.stepPct - M.RUN_STEP_MAX_PCT / 2) < 1e-9);
+  M.injSetStatus_(M.st.injuries[0].id, 'resolved');
+  const h = M._runAheadFlag_(NOW);
+  ok('resolved stops governing immediately', Math.abs(h.target.stepPct - M.RUN_STEP_MAX_PCT) < 1e-9);
+  M.st.injuries = [];
+  M.injSave_({ from: '2026-05-01', area: 'Shin', severity: 6, status: 'active' });
+  const k = M._runAheadFlag_(NOW);
+  ok('NEG: a stale report does not block', !k.target.blocked);
+  ok('...and is reported AS stale rather than ignored', !!k.injury && k.injury.stale === true);
+}
+{
+  // NOTHING AUTO-ADVANCES. The one rule that did not change, asserted on the code: the only writers
+  // are the accept button and the manual sheet, both through one function.
+  ok('the accept path delegates to the one writer', /runRungAccept_[\s\S]{0,500}runSetWeekdayTarget_/.test(src));
+  ok('NEG: nothing else pushes a rung record',
+    (src.match(/st\.runRungs\.push/g) || []).length === 1);
 }
 
 console.log('\n' + Y + '=== both surfaces, from one renderer ===' + X);
@@ -203,7 +276,16 @@ console.log('\n' + Y + '=== both surfaces, from one renderer ===' + X);
   })()));
   ok('the coach is told about it too', src.indexOf('runAhead:(typeof _runAheadFlag_') >= 0);
   ok('the coach panel states it without offering to act', src.indexOf('it is on the Run Training page when you want it') >= 0);
-  ok('the card says out loud that it cannot see the shin', src.indexOf('it cannot see how the shin feels') >= 0);
+  // The blindness sentence is CONDITIONAL now, and that is the point of the injury log: with nothing
+  // on file it still says it cannot feel the leg; with a report on file it says what it read instead
+  // of repeating a disclaimer at him.
+  ok('with nothing on file the card still states its blindness',
+     src.indexOf('it cannot feel your leg, and nothing about an injury is on file') >= 0);
+  ok('with a report on file it says what it read', src.indexOf('You reported a ') >= 0);
+  ok('...and what that does to the proposal',
+     src.indexOf('Nothing will be proposed until you mark it easing or resolved') >= 0);
+  ok('nothing changes without the athlete saying so, still',
+     src.indexOf('Nothing changes until you say so') >= 0);
 }
 
 console.log(fails ? '\n' + R + fails + ' FAILED' + X + '\n' : '\n' + G + 'run ahead: all checks passed' + X + '\n');

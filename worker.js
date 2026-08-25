@@ -48512,38 +48512,76 @@ function renderRunInto_(scr, surface){
       raCard.setAttribute('data-runfull','1');
       raCard.style.cssText='margin:0 16px 16px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
       var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
+      var _t=_ra.target||{};
+      var _inj=_ra.injury;
+      // THE PROPOSAL LINE, and it says what it is standing on. Three states, because there are
+      // genuinely three: a number to accept, a number the step ceiling trimmed, and no number at all
+      // because something on file says not now. A card that only ever shows the first is the one
+      // that got replaced.
+      var propose='';
+      if(_t.blocked){
+        propose='<b>No increase is proposed</b> while that is on file.';
+      } else if(_t.proposedTop){
+        propose='Your recent runs sit around <b>'+_t.trendTop+' min</b>. '
+          + (_t.capped
+              ? ('This step proposes <b>'+_t.band+'</b> &mdash; one move changes the plan by at most '
+                 +Math.round(_t.stepPct*100)+'%, so it takes a few to get there.')
+              : ('That makes the target <b>'+_t.band+'</b>.'));
+      } else {
+        propose='There is no target to propose yet &mdash; '+(_t.why||'not enough to read a trend')+'.';
+      }
       raCard.innerHTML=
         // NO INTERNAL VOCABULARY IN RENDERED TEXT. "prescription" is what this codebase calls the
         // thing; it is not what an athlete calls it, and the persona test bans it from any element
-        // body for exactly that reason. The plan asks, he runs — that is the sentence.
+        // body for exactly that reason. The plan asks, he runs - that is the sentence.
         '<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">The plan is behind you</div>'
         +'<div style="font-size:14.5px;color:var(--t1);line-height:1.6">Your last '
           +_ra.streak+' weekday runs went longer than the plan asked for &mdash; '+days+' against a '+_ra.current+' target. '
-          +'The next step up is <b>'+_ra.next+'</b>.</div>'
+          +propose+'</div>'
         // The sample line is not decoration. A pattern read off a thin library is still a pattern,
         // but it is not the same claim as one read off a deep one, and the card has to say which.
         +'<div style="font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:8px">'
           +(_ra.thin
             ? ('Read off '+_ra.sample+' runs in the last six weeks &mdash; a thin base. Treat this as a prompt to look, not a verdict.')
-            : ('Read off '+_ra.sample+' runs in the last six weeks.'))
+            : ('Read off '+_ra.sample+' runs in the last six weeks. The figure is the middle of those runs, never the longest.'))
         +'</div>'
-        // THE SHIN GUARDRAIL, said out loud rather than left implicit in the fact that a button
-        // exists. Mileage cannot see a shin; the sentence exists so the decision is made on more
-        // than the number above it.
-        +'<div style="font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:6px">'
-          +'Nothing changes until you say so. This reads distance and duration only &mdash; it cannot see how the shin feels.</div>'
+        // WHAT IT CAN AND CANNOT SEE, and now those are two different sentences. It still cannot
+        // feel the leg. It CAN read what he told it about the leg, and when he has told it
+        // something the card says so instead of repeating a disclaimer at him.
+        +'<div style="font-size:11.5px;color:'+(_inj&&_inj.rec&&!_inj.stale?'#f59e0b':'var(--t3)')+';line-height:1.55;margin-top:6px">'
+          +(_inj&&_inj.rec
+             ? (_inj.stale
+                 ? ('Your '+_runEsc_(String(_inj.rec.area).toLowerCase())+' report is '+_inj.age+' days old and has not been updated, so it is no longer holding this back. Update it if it is still going.')
+                 : ('You reported a '+_runEsc_(String(_inj.rec.area).toLowerCase())+' issue '+_inj.age+' day'+(_inj.age===1?'':'s')+' ago'
+                    +(_inj.rec.severity?(' at '+_inj.rec.severity+'/10'):'')+', marked '+_runEsc_(_inj.rec.status)+'. '
+                    +(_inj.rec.status==='active'
+                        ? 'Nothing will be proposed until you mark it easing or resolved.'
+                        : 'Steps are held to '+Math.round(RUN_STEP_INJ_PCT*100)+'% while it is easing.')))
+             : 'Nothing changes until you say so. This reads distance and duration only &mdash; it cannot feel your leg, and nothing about an injury is on file.')
+        +'</div>'
         +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
-          +'<button id="run-rung-yes" style="padding:8px 13px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_ra.next+'</button>'
+          +((_t.proposedTop && !_t.blocked)
+            ? ('<button id="run-rung-yes" style="padding:8px 13px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_t.band+'</button>')
+            : '')
           +'<button id="run-rung-no" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Not yet</button>'
+          +'<button id="run-set-manual" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Set it myself</button>'
+          +'<button id="run-report-issue" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Report an issue</button>'
         +'</div>';
       scr.appendChild(raCard);
       setTimeout(function(){
         var y=document.getElementById('run-rung-yes'), n=document.getElementById('run-rung-no');
+        var mset=document.getElementById('run-set-manual'), rep=document.getElementById('run-report-issue');
         if(y) y.onclick=function(){
           var done=(typeof runRungAccept_==='function')?runRungAccept_(new Date()):null;
-          if(done){ try{ toast('Weekday runs moved to '+done.next); }catch(e){} }
+          if(done){ try{ toast('Weekday runs moved to '+done.struct); }catch(e){} }
           try{ renderRun(); }catch(e){}
         };
+        // SET IT MYSELF. The athlete does not need a proposal to change the plan, and sometimes the
+        // move is DOWN - which this card, by design, will never propose: it only ever fires when the
+        // runs are ahead. Backing off has to be reachable without a conversation, so it is a control
+        // and not a consequence.
+        if(mset) mset.onclick=function(){ if(typeof runOpenTargetSheet_==='function') runOpenTargetSheet_(); };
+        if(rep) rep.onclick=function(){ if(typeof runOpenIssueSheet_==='function') runOpenIssueSheet_(); };
         // "Not yet" DISMISSES NOTHING PERMANENTLY. It hides the card for this render only: the
         // condition that raised it is still true, and a flag that can be dismissed into silence is
         // how a real signal gets lost. It comes back on the next visit, or stops on its own the
@@ -50138,12 +50176,218 @@ function _runRungFor_(dateKey){
 }
 // The struct a weekday easyRun should carry on this date, or null to leave the phase table alone.
 function _runRungStruct_(dateKey, phaseStruct){
+  // EXPLICIT STRUCT FIRST. Records written since the trend rework carry the range itself, because
+  // the target is computed from what was run and is no longer an index into a four-rung ladder that
+  // tops out at 31 min. A record's own struct always wins.
+  try{
+    var log=(st && Array.isArray(st.runRungs))?st.runRungs:[];
+    var best=null, bestFrom='';
+    log.forEach(function(e){
+      if(!e || e.deleted || !e.from || !e.struct) return;
+      if(String(dateKey) < String(e.from)) return;           // date-gated, forward only
+      if(String(e.from) >= bestFrom){ bestFrom=String(e.from); best=e; }
+    });
+    if(best) return best.struct;
+  }catch(e){}
+  // LEGACY {rung:n} ENTRIES still resolve against the ladder, so a device that has not synced the
+  // new shape yet keeps the prescription it was already showing rather than silently reverting.
   var n=_runRungFor_(dateKey); if(!n) return null;
   var lad=_RUN_RUNG_LADDER_(); if(!lad.length) return null;
   var at=lad.indexOf(phaseStruct); if(at<0) return null;
   var to=Math.min(lad.length-1, at+n);
   return (to===at)?null:lad[to];
 }
+// ==================== INJURY LOG (Run Training) ====================
+//
+// UNTIL NOW, NOTHING ABOUT AN INJURY WAS RECORDED ANYWHERE. The Easy-Run Drift card had to say so
+// out loud - "nothing about the shin is recorded anywhere in the app, so this cannot tell you
+// whether any of it is reaching your leg" - and the run-ahead card's entire safety argument was a
+// disclaimer: mileage cannot see a shin, so a person has to. That disclaimer stays true, but it
+// stops being the ONLY thing the app can say the moment there is a record to read.
+//
+// This is the record. It is deliberately small: an area, a severity, when it started, whether it is
+// still going, and whatever the athlete wrote. No inference, no scoring, no diagnosis.
+//
+// SYNC SHAPE, because this store has to survive the merge like every other array here:
+//   - entries carry a STABLE id, so two devices cannot create twins of the same report
+//   - a removal is a TOMBSTONE (deleted:true), never a splice - mergeState_ unions arrays and a
+//     spliced entry comes straight back on the next pull
+//   - editedAt on every write, so a correction wins over an older copy instead of merging field by
+//     field into something neither device said
+var INJ_AREAS=['Shin','Knee','Calf','Achilles','Foot','Hip','Hamstring','Quad','Ankle','Back','Other'];
+// An unresolved report older than this stops governing on its own. Not because it healed - nobody
+// told the app it healed - but because a report nobody has touched in three weeks is stale evidence,
+// and a permanent brake nobody can see is worse than no brake. The card says when this happens and
+// asks rather than deciding.
+var INJ_ACTIVE_DAYS=21;
+function _injAll_(){
+  try{
+    var a=(typeof st!=='undefined' && st && Array.isArray(st.injuries))?st.injuries:[];
+    return a.filter(function(x){ return x && !x.deleted && x.at; })
+            .slice().sort(function(x,y){ return (y.at||0)-(x.at||0); });
+  }catch(e){ return []; }
+}
+// The record that GOVERNS today, or null. Newest unresolved report inside the window. Anything the
+// athlete marked resolved stops governing immediately - that is the whole point of being able to say
+// so - and anything older than INJ_ACTIVE_DAYS is reported as STALE rather than silently ignored,
+// because "we stopped believing your report" is a thing the athlete is entitled to be told.
+function _injActive_(now){
+  try{
+    var t=(now?new Date(now):new Date()); t.setHours(0,0,0,0);
+    var list=_injAll_(), stale=null;
+    for(var i=0;i<list.length;i++){
+      var r=list[i];
+      if(r.status==='resolved') continue;
+      var d=new Date(String(r.from||'').slice(0,10)+'T00:00:00');
+      var age=isFinite(d)?Math.round((t-d)/86400000):null;
+      if(age==null) continue;
+      if(age<=INJ_ACTIVE_DAYS) return { rec:r, age:age, stale:false };
+      if(!stale) stale={ rec:r, age:age, stale:true };
+    }
+    return stale;
+  }catch(e){ return null; }
+}
+function injSave_(rec){
+  try{
+    if(typeof st==='undefined' || !st) return null;
+    if(!Array.isArray(st.injuries)) st.injuries=[];
+    var now=Date.now();
+    // A STABLE id, content-derived like the nutrition ids, so the same report logged twice offline
+    // does not become two rows on the next merge.
+    var id=rec.id || ('inj-'+String(rec.from||'')+'-'+String(rec.area||'').toLowerCase().replace(/[^a-z]/g,'')+'-'+String(now).slice(-6));
+    var at=rec.at||now;
+    var out={ id:id, at:at, from:String(rec.from||'').slice(0,10), area:String(rec.area||'Other'),
+              severity:Math.max(1,Math.min(10, parseInt(rec.severity,10)||1)),
+              status:(rec.status==='resolved'?'resolved':(rec.status==='easing'?'easing':'active')),
+              note:String(rec.note||'').slice(0,600), editedAt:now };
+    var at_=-1;
+    st.injuries.forEach(function(x,i){ if(x && x.id===out.id) at_=i; });
+    if(at_>=0) st.injuries[at_]=out; else st.injuries.push(out);
+    if(typeof sv==='function') sv();
+    return out;
+  }catch(e){ return null; }
+}
+function injSetStatus_(id, status){
+  try{
+    var list=(st&&Array.isArray(st.injuries))?st.injuries:[];
+    for(var i=0;i<list.length;i++){
+      if(list[i] && list[i].id===id){
+        list[i].status=(status==='resolved'?'resolved':(status==='easing'?'easing':'active'));
+        list[i].editedAt=Date.now();
+        if(typeof sv==='function') sv();
+        return list[i];
+      }
+    }
+  }catch(e){}
+  return null;
+}
+// A TOMBSTONE, never a splice. mergeState_ unions arrays that are not in _LWW_ARRAYS, so a removed
+// entry returns on the next pull unless the removal itself is a value that merges.
+function injDelete_(id){
+  try{
+    var list=(st&&Array.isArray(st.injuries))?st.injuries:[];
+    for(var i=0;i<list.length;i++){
+      if(list[i] && list[i].id===id){ list[i].deleted=true; list[i].editedAt=Date.now();
+        if(typeof sv==='function') sv(); return true; }
+    }
+  }catch(e){}
+  return false;
+}
+try{ if(typeof window!=='undefined'){ window._injAll_=_injAll_; window._injActive_=_injActive_;
+  window.injSave_=injSave_; window.injSetStatus_=injSetStatus_; window.injDelete_=injDelete_; } }catch(e){}
+
+// ==================== THE TREND TARGET, AND WHAT BOUNDS IT ====================
+//
+// THE LADDER COULD NEVER HAVE CAUGHT UP. Its rungs are the phase tables' own easyRun ranges -
+// 20-25, 25-27, 27-29, 29-31 - so its CEILING is 31 minutes. Measured on the live library the last
+// eight weekday runs were 57, 54, 44, 44, 44, 36, 36, 36 against a 25-27 prescription. Accepting
+// every rung that exists lands at 31 min: still below the SHORTEST of those eight and about 30%
+// under the median. The card was not proposing a small step, it was proposing the only step it had,
+// forever, and it would still have been wrong after four acceptances.
+//
+// So the target is computed from what was actually run. That loses the ladder's one safety property
+// - "nothing can be prescribed that the athlete was not going to reach anyway" - and something has
+// to replace it. Three things do:
+//
+//   G1 RATIFY, NEVER EXTRAPOLATE. The proposal can never exceed the MEDIAN of the qualifying runs.
+//      Median, not mean, so one 57-minute day cannot drag the prescription up; and never the max,
+//      because the best day is not the plan. A target at the median describes what he already does
+//      at least half the time. The plan follows the athlete; it never leads him somewhere new.
+//
+//   G2 A CEILING ON ONE STEP. Even ratifying, moving the prescription 27 -> 44 in a single accept is
+//      +63%. The risk is not the minutes he runs - he already runs them - it is the rate the PLAN
+//      changes, because the plan is the floor he drops back to on a bad day and the base the block
+//      progresses FROM. So one acceptance moves the top by at most RUN_STEP_MAX_PCT, and it takes
+//      three of them to converge. Each is a separate decision on a different day with a fresh look
+//      at the leg. The card SHOWS both numbers - what the trend says and what this step proposes -
+//      so the clamp is visible rather than a silent haircut.
+//
+//   G3 A LOGGED INJURY IS A REAL INPUT. With an active report on file the card proposes NOTHING and
+//      says why. With one the athlete has marked easing, the step is cut to RUN_STEP_INJ_PCT. This
+//      is what replaces "it cannot see your shin" as a permanent disclaimer: it still cannot see the
+//      shin, but it can read what he told it about the shin.
+//
+// NOTHING HERE AUTO-ADVANCES, and that is unchanged and not negotiable. Every path above ends in a
+// proposal the athlete accepts by hand. A better-computed number does not earn the right to move
+// anything on its own.
+// THE STEP CEILING IS THE BLOCK'S OWN RAMP CAP, NOT A NEW NUMBER. BLOCK_RUN_RAMP_MAX is 0.10 and
+// it already governs the Sunday long-run build, capped there for exactly this shin. Inventing a
+// second, looser figure for the same athlete and the same leg would be one fact with two values -
+// the split this codebase keeps being repaired for - so this reads the existing one.
+//
+// THE TENSION, STATED, because it is a real one and the athlete asked for it to be flagged rather
+// than silently resolved. The 10% rule is about ramping into load that is NEW. Here the runs are
+// already being done - 44 min against a 25-27 target - so moving the plan to 44 asks for nothing he
+// is not already doing, and a 10% cap makes the plan take about six acceptances to describe what is
+// already true. A case can be made for a faster ratification rate. It is not a case this code
+// should make on its own, so the conservative existing number governs what is PROPOSED, and the
+// athlete can set any target he wants by hand in one move - which is what "Set it myself" is for.
+var RUN_STEP_MAX_PCT = (typeof BLOCK_RUN_RAMP_MAX==='number' && BLOCK_RUN_RAMP_MAX>0) ? BLOCK_RUN_RAMP_MAX : 0.10;
+var RUN_STEP_INJ_PCT = RUN_STEP_MAX_PCT/2;   // halved again when an issue is on file and easing
+// The trend needs no more runs than the flag itself does, and that is safe BECAUSE OF THE CAP: at
+// small samples the step ceiling is what decides the proposal, not the median, so noise in a
+// two-run median cannot reach the number on screen. Requiring more would leave the card firing with
+// nothing to accept - visible, useless, and exactly the complaint it was rebuilt to answer.
+var RUN_TREND_MIN_N  = (typeof RUN_AHEAD_N==='number'?RUN_AHEAD_N:2);
+var RUN_BAND_WIDTH   = 2;      // the prescribed range is this many minutes wide, as the phases are
+function _runMedian_(a){
+  if(!a || !a.length) return null;
+  var v=a.slice().sort(function(x,y){ return x-y; });
+  var m=Math.floor(v.length/2);
+  return (v.length%2) ? v[m] : (v[m-1]+v[m])/2;
+}
+// mins = the minutes actually run on the qualifying days, newest first. curTop = the top of the
+// prescription in force. Returns the proposal and, always, WHY it is what it is.
+function _runAheadTarget_(curTop, mins, inj){
+  var out={ trendTop:null, proposedTop:null, band:'', capped:false, blocked:false,
+            stepPct:RUN_STEP_MAX_PCT, why:'', n:(mins||[]).length };
+  if(!(curTop>0) || !mins || mins.length<RUN_TREND_MIN_N){
+    out.why='not enough qualifying runs to read a trend';
+    return out;
+  }
+  // G1 - the trend is the MEDIAN, rounded down to the minute. Never the mean, never the max.
+  var med=_runMedian_(mins);
+  out.trendTop=Math.floor(med);
+  if(!(out.trendTop>curTop)){ out.why='the trend is not above the prescription'; return out; }
+  // G3 - an active report stops the proposal entirely; an easing one narrows the step.
+  if(inj && inj.rec && !inj.stale && inj.rec.status==='active'){
+    out.blocked=true;
+    out.why='there is an active '+String(inj.rec.area||'issue').toLowerCase()+' report on file';
+    return out;
+  }
+  if(inj && inj.rec && !inj.stale && inj.rec.status==='easing') out.stepPct=RUN_STEP_INJ_PCT;
+  // G2 - the step ceiling. Round DOWN, so the cap can never be rounded away.
+  var capTop=Math.floor(curTop*(1+out.stepPct));
+  if(capTop<=curTop) capTop=curTop+1;                 // always at least a whole minute of movement
+  out.proposedTop=Math.min(out.trendTop, capTop);
+  out.capped=(out.proposedTop<out.trendTop);
+  out.band=(out.proposedTop-RUN_BAND_WIDTH)+'-'+out.proposedTop+' min';
+  out.why=out.capped
+    ? ('your trend is '+out.trendTop+' min; one step moves the plan by at most '+Math.round(out.stepPct*100)+'%')
+    : ('this matches your trend of '+out.trendTop+' min');
+  return out;
+}
+
 var RUN_AHEAD_N       = 2;    // consecutive qualifying runs — the strength-progression precedent
 var RUN_AHEAD_MIN_LIB = 8;    // runs in the lookback before the flag speaks with any confidence
 var RUN_AHEAD_LOOKBACK_D = 42;
@@ -50195,30 +50439,243 @@ function _runAheadFlag_(now){
     for(var i=0;i<pairs.length;i++){ if(pairs[i].ahead) streak++; else break; }
     if(streak<RUN_AHEAD_N) return null;
     var cur=pairs[0].struct;
-    var lad=_RUN_RUNG_LADDER_();
-    var at=lad.indexOf(cur);
-    var next=(at>=0 && at<lad.length-1)?lad[at+1]:null;
-    if(!next) return null;                               // already on the block's last rung
-    // NO FABRICATED CONFIDENCE. The run library is thin (measured: 16 runs in 12 months), and a
-    // recommendation off a thin base is a guess wearing a verdict's clothes. The flag still shows —
-    // the pattern is real — but it says what it is standing on.
-    return { current:cur, next:next, streak:streak, sample:lib, thin:(lib<RUN_AHEAD_MIN_LIB),
-             runs:pairs.slice(0,streak), rung:_runRungFor_(_tbDK_(today))+1 };
+    // THE STEP BASE IS TODAY'S TARGET, NOT THE LAST RUN'S. Every accepted change is dated FORWARD
+    // only - a Wednesday already run keeps the target it was given - so the pairs above, which all
+    // look backwards, still carry the OLD prescription after an acceptance. Stepping from those
+    // would propose the same number for ever: accept 27-29, and tomorrow the card reads a past day
+    // still on 25-27 and proposes 27-29 again. Caught by the convergence test, which walked the
+    // acceptances and never got past the first.
+    //
+    // "Ahead" is still judged day by day against the target THAT day carried, which is the honest
+    // comparison. Only the base the step moves from is read from today.
+    var curTop=null;
+    try{
+      var todayPlan=blockPlanFor_(_tbDK_(today));
+      (todayPlan&&todayPlan.sessions||[]).forEach(function(sx){
+        if(curTop==null && sx && sx.intent==='easyRun') curTop=_runRangeTopMin_(sx.struct);
+      });
+    }catch(e){}
+    if(curTop==null) curTop=_runRangeTopMin_(cur);
+    // THE TARGET COMES FROM THE RUNS, NOT FROM THE LADDER. See _runAheadTarget_ for why the ladder
+    // could never have caught up: its ceiling is 31 min against a median of 44. The minutes handed
+    // over are the QUALIFYING ones - the runs that actually beat the prescription - newest first,
+    // because those are the behaviour the proposal is meant to ratify.
+    var mins=pairs.slice(0,streak).map(function(p){ return p.ranMin; });
+    var inj=(typeof _injActive_==='function')?_injActive_(today):null;
+    var tgt=_runAheadTarget_(curTop, mins, inj);
+    // A blocked or unmovable proposal STILL RAISES THE FLAG. The pattern is real either way, and a
+    // card that goes silent because there is an injury on file is exactly the app deciding something
+    // on its own. It shows, and it says why there is no number to accept.
+    return { current:cur, curTop:curTop, next:tgt.band||null, target:tgt, injury:inj,
+             streak:streak, sample:lib, thin:(lib<RUN_AHEAD_MIN_LIB),
+             runs:pairs.slice(0,streak) };
   }catch(e){ return null; }
 }
 // The athlete's decision, recorded. Dated from TODAY forward — never backdated over runs already
 // prescribed and already done.
 function runRungAccept_(now){
   try{
-    var f=_runAheadFlag_(now); if(!f) return null;
-    var from=_tbDK_(now||new Date());
-    if(!st.runRungs) st.runRungs=[];
-    st.runRungs.push({ id:'rr-'+from+'-'+f.rung, from:from, rung:f.rung, at:Date.now() });
-    if(typeof sv==='function') sv();
-    if(typeof fbPush==='function'){ try{ fbPush(true); }catch(e){} }
-    return f;
+    var f=_runAheadFlag_(now); if(!f || !f.target || !f.target.proposedTop) return null;
+    return runSetWeekdayTarget_(f.target.proposedTop, now, 'accepted the trend proposal');
   }catch(e){ return null; }
 }
+// THE ONE WRITER for the weekday easy-run target, whether it came from accepting a proposal or from
+// the athlete setting it by hand. Both paths produce the same record so nothing downstream has to
+// know which it was, and a manual back-off is not a second mechanism to keep in step.
+//
+// The record now carries an explicit STRUCT rather than a ladder index. Old {rung:n} entries still
+// resolve - _runRungStruct_ reads either - so a device that has not synced yet keeps working.
+// Dated from TODAY FORWARD only: a Wednesday already run must never retroactively acquire a
+// different prescription than the one it was given.
+function runSetWeekdayTarget_(top, now, why){
+  try{
+    top=Math.round(parseFloat(top)||0);
+    if(!(top>0)) return null;
+    var from=_tbDK_(now||new Date());
+    if(!st.runRungs) st.runRungs=[];
+    var rec={ id:'rr-'+from+'-'+top, from:from, top:top,
+              struct:(top-RUN_BAND_WIDTH)+'-'+top+' min', why:String(why||''),
+              at:Date.now(), editedAt:Date.now() };
+    // Same id for the same day and target, so accepting twice on one day is idempotent rather than
+    // two records the merge has to reconcile.
+    var at_=-1;
+    st.runRungs.forEach(function(x,i){ if(x && x.id===rec.id) at_=i; });
+    if(at_>=0) st.runRungs[at_]=rec; else st.runRungs.push(rec);
+    if(typeof sv==='function') sv();
+    if(typeof fbPush==='function'){ try{ fbPush(true); }catch(e){} }
+    return rec;
+  }catch(e){ return null; }
+}
+try{ if(typeof window!=='undefined'){ window.runSetWeekdayTarget_=runSetWeekdayTarget_; } }catch(e){}
+// ---- SET IT MYSELF ------------------------------------------------------------------------------
+// The proposal path only ever moves UP - it fires when the runs are ahead of the plan and never
+// otherwise - so backing off had no route at all. This is that route, and it is the same writer, so
+// a hand-set target and an accepted one produce one kind of record rather than two mechanisms that
+// have to be kept in step.
+function runOpenTargetSheet_(){
+  var cur=null;
+  try{
+    var f=(typeof _runAheadFlag_==='function')?_runAheadFlag_(new Date()):null;
+    cur=f?f.curTop:null;
+    if(cur==null && typeof _tbDK_==='function' && typeof blockPlanFor_==='function'){
+      var bp=blockPlanFor_(_tbDK_(new Date()));
+      (bp&&bp.sessions||[]).forEach(function(sx){ if(cur==null && sx && sx.intent==='easyRun') cur=_runRangeTopMin_(sx.struct); });
+    }
+  }catch(e){}
+  var modal=document.createElement('div');
+  modal.id='run-target-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:320;display:flex;align-items:flex-end;justify-content:center';
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px 32px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto';
+  sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 14px"></div>'
+    +'<div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:4px">Weekday easy-run target</div>'
+    +'<div style="font-size:12px;color:var(--t3);line-height:1.55;margin-bottom:14px">'
+    +'Applies from today forward only &mdash; runs already done keep the target they were given. '
+    +'Set it lower any time you need to back off; nothing here asks you to justify it.</div>'
+    +'<label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Target, in minutes</label>'
+    +'<input id="run-tgt-in" type="number" min="5" max="180" step="1" value="'+(cur||'')+'" '
+    +'style="width:100%;margin-top:6px;padding:11px 12px;border-radius:10px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:16px;font-family:inherit">'
+    +'<div id="run-tgt-preview" style="font-size:11.5px;color:var(--t3);margin-top:7px"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
+    +'<button id="run-tgt-save" style="flex:1;min-width:130px;padding:11px;border-radius:10px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Set target</button>'
+    +'<button id="run-tgt-cancel" style="flex:1;min-width:110px;padding:11px;border-radius:10px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'</div>';
+  modal.appendChild(sheet);
+  modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
+  document.body.appendChild(modal);
+  var inp=document.getElementById('run-tgt-in'), pv=document.getElementById('run-tgt-preview');
+  var draw=function(){
+    var v=Math.round(parseFloat(inp.value)||0);
+    if(!(v>0)){ pv.textContent=''; return; }
+    var band=(v-RUN_BAND_WIDTH)+'-'+v+' min';
+    pv.innerHTML='Weekday easy runs become <b style="color:var(--t1)">'+band+'</b>'
+      +((cur&&v<cur)?' &mdash; a step down from '+cur+' min.':(cur&&v>cur?' &mdash; up from '+cur+' min.':'.'));
+  };
+  if(inp){ inp.oninput=draw; draw(); }
+  var cancel=document.getElementById('run-tgt-cancel'); if(cancel) cancel.onclick=function(){ modal.remove(); };
+  var save=document.getElementById('run-tgt-save');
+  if(save) save.onclick=function(){
+    var v=Math.round(parseFloat(inp.value)||0);
+    if(!(v>0)) return;
+    var rec=(typeof runSetWeekdayTarget_==='function')?runSetWeekdayTarget_(v, new Date(), 'set by hand'):null;
+    modal.remove();
+    if(rec){ try{ toast('Weekday runs set to '+rec.struct); }catch(e){} }
+    try{ renderRun(); }catch(e){}
+  };
+}
+// ---- REPORT AN ISSUE ---------------------------------------------------------------------------
+// PHASE ONE OF THE INJURY WORK: the RECORD. Nothing about an injury was stored anywhere before this,
+// which is why the drift card had to say it could not speak to the shin and the run-ahead card had
+// to treat "it cannot see your leg" as a permanent condition. A structured report - area, severity,
+// when it started, what he wants to say about it - is enough to change both of those, and it is
+// enough on its own without any conversation being involved.
+//
+// Deliberately NOT a diagnosis and not a score. It records what he said.
+function runOpenIssueSheet_(){
+  // LOCAL parts, never toISOString. It reads a local-midnight Date in UTC and lands on the previous
+  // day for anyone west of Greenwich - the exact bug the cross-surface guard exists to catch, and
+  // an injury dated a day early would silently age out of the active window a day early too.
+  var today=(typeof getTodayKey==='function')?getTodayKey()
+    :(typeof _tbDK_==='function'?_tbDK_(new Date())
+      :(function(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })(new Date()));
+  var existing=(typeof _injActive_==='function')?_injActive_(new Date()):null;
+  var log=(typeof _injAll_==='function')?_injAll_():[];
+  var modal=document.createElement('div');
+  modal.id='run-issue-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:320;display:flex;align-items:flex-end;justify-content:center';
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px 32px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto';
+  var areaOpts=INJ_AREAS.map(function(a){ return '<option value="'+a+'">'+a+'</option>'; }).join('');
+  var histHTML='';
+  if(log.length){
+    histHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin:18px 0 6px">On file</div>';
+    log.slice(0,6).forEach(function(r){
+      histHTML+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--b1)">'
+        +'<div style="min-width:0"><div style="font-size:12.5px;font-weight:700;color:var(--t1)">'+_runEsc_(r.area)+' &middot; '+r.severity+'/10</div>'
+        +'<div style="font-size:10.5px;color:var(--t3);margin-top:1px">from '+_runEsc_(r.from)+' &middot; '+_runEsc_(r.status)
+        +(r.note?(' &middot; '+_runEsc_(String(r.note).slice(0,60))):'')+'</div></div>'
+        +'<div style="display:flex;gap:6px;flex-shrink:0">'
+        +(r.status!=='resolved'?('<button data-inj-res="'+_runEsc_(r.id)+'" style="padding:5px 9px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Resolved</button>'):'')
+        +'<button data-inj-del="'+_runEsc_(r.id)+'" style="padding:5px 9px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--c-red);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Remove</button>'
+        +'</div></div>';
+    });
+  }
+  sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 14px"></div>'
+    +'<div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:4px">Report an issue</div>'
+    +'<div style="font-size:12px;color:var(--t3);line-height:1.55;margin-bottom:14px">'
+    +'This is recorded, not just noted. While something is marked <b>active</b> the plan will not '
+    +'propose any increase; while it is <b>easing</b>, proposed steps are held to '
+    +Math.round(RUN_STEP_INJ_PCT*100)+'%. You can still set any target you want by hand.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div style="flex:1;min-width:130px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Where</label>'
+    +'<select id="inj-area" style="width:100%;margin-top:6px;padding:11px 10px;border-radius:10px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:15px;font-family:inherit">'+areaOpts+'</select></div>'
+    +'<div style="flex:1;min-width:130px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Since</label>'
+    +'<input id="inj-from" type="date" value="'+today+'" style="width:100%;margin-top:6px;padding:11px 10px;border-radius:10px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:15px;font-family:inherit"></div>'
+    +'</div>'
+    +'<label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:12px">How bad, 1&ndash;10</label>'
+    +'<input id="inj-sev" type="range" min="1" max="10" step="1" value="3" style="width:100%;margin-top:8px">'
+    +'<div id="inj-sev-lbl" style="font-size:12px;color:var(--t3);margin-top:2px"></div>'
+    +'<label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:12px">Status</label>'
+    +'<select id="inj-status" style="width:100%;margin-top:6px;padding:11px 10px;border-radius:10px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:15px;font-family:inherit">'
+    +'<option value="active">Active &mdash; hold everything</option><option value="easing">Easing &mdash; small steps only</option></select>'
+    +'<label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:12px">What is going on</label>'
+    +'<textarea id="inj-note" rows="3" placeholder="When it flares, what it feels like, anything you have changed."'
+    +' style="width:100%;margin-top:6px;padding:11px 12px;border-radius:10px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;resize:vertical"></textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
+    +'<button id="inj-save" style="flex:1;min-width:130px;padding:11px;border-radius:10px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Log it</button>'
+    +'<button id="inj-cancel" style="flex:1;min-width:110px;padding:11px;border-radius:10px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'</div>'
+    // WHAT THIS DOES NOT DO YET, said here rather than discovered. Talking it through with Dr.
+    // Smurkel, and having him propose the adjustment, needs the shared chat engine to understand an
+    // injury context - and that engine also serves the ride debrief and the pre-ride surfaces, which
+    // are not this page. That is a change to ask about before making.
+    +'<div style="font-size:10.5px;color:var(--t3);line-height:1.5;margin-top:14px;padding-top:12px;border-top:1px solid var(--b1)">'
+    +'This logs the report and lets it govern what the plan proposes. Talking it through with Dr. '
+    +'Smurkel, and having him suggest the adjustment, is not built yet.</div>'
+    +histHTML;
+  modal.appendChild(sheet);
+  modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
+  document.body.appendChild(modal);
+  if(existing && existing.rec){
+    try{
+      document.getElementById('inj-area').value=existing.rec.area;
+      document.getElementById('inj-sev').value=existing.rec.severity;
+      document.getElementById('inj-status').value=(existing.rec.status==='resolved')?'easing':existing.rec.status;
+      document.getElementById('inj-note').value=existing.rec.note||'';
+    }catch(e){}
+  }
+  var sev=document.getElementById('inj-sev'), sl=document.getElementById('inj-sev-lbl');
+  var word=function(v){ return v<=2?'barely there':(v<=4?'noticeable':(v<=6?'sore':(v<=8?'painful':'stop running'))); };
+  var drawSev=function(){ if(sl) sl.textContent=sev.value+' / 10 · '+word(+sev.value); };
+  if(sev){ sev.oninput=drawSev; drawSev(); }
+  var c=document.getElementById('inj-cancel'); if(c) c.onclick=function(){ modal.remove(); };
+  var sv2=document.getElementById('inj-save');
+  if(sv2) sv2.onclick=function(){
+    var rec=injSave_({
+      from:document.getElementById('inj-from').value||today,
+      area:document.getElementById('inj-area').value,
+      severity:document.getElementById('inj-sev').value,
+      status:document.getElementById('inj-status').value,
+      note:document.getElementById('inj-note').value
+    });
+    modal.remove();
+    if(rec){ try{ toast(rec.area+' issue logged'); }catch(e){} }
+    try{ renderRun(); }catch(e){}
+  };
+  sheet.querySelectorAll('[data-inj-res]').forEach(function(b){
+    b.onclick=function(){ injSetStatus_(b.getAttribute('data-inj-res'),'resolved'); modal.remove();
+      try{ toast('Marked resolved'); }catch(e){} try{ renderRun(); }catch(e){} };
+  });
+  sheet.querySelectorAll('[data-inj-del]').forEach(function(b){
+    b.onclick=async function(){
+      if(typeof uiConfirm==='function' && !(await uiConfirm('Remove this report?',{danger:true}))) return;
+      injDelete_(b.getAttribute('data-inj-del')); modal.remove();
+      try{ renderRun(); }catch(e){}
+    };
+  });
+}
+try{ if(typeof window!=='undefined'){ window.runOpenTargetSheet_=runOpenTargetSheet_; window.runOpenIssueSheet_=runOpenIssueSheet_; } }catch(e){}
+
 // The Saturday this Sunday sits behind, so the stacked-load weeks can be NAMED rather than silently
 // resolved. Per the owner's call: ramp both and flag the collision, decide on the day. Only reported
 // once the run is long enough for the pairing to actually matter.
