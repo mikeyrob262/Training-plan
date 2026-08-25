@@ -41794,7 +41794,7 @@ function _rtMount_(scr){
     // The card's own chrome. _rtCardHTML_ returns the card's CONTENT, so the panel background,
     // border and padding are applied here. The values match what the Dashboard's cards use because
     // this page uses the same design tokens - not because any code is shared with it.
-    card.style.cssText='margin:0 16px 16px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
+    card.style.cssText='margin:0 16px 11px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
       +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
@@ -47969,11 +47969,16 @@ function dsShowRun(){
   // overlay and nothing replaced it, so 1,493px of content sat clipped inside a 950px box.
   // min-height:0 is required - without it a flex child will not shrink below its content.
   wrap.className='aiq-vscroll';
-  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:4px 2px 40px';
+  // 10px at the foot, not 40. That much trailing space is right for a page that scrolls - it stops
+  // the last card sitting flush against the edge - and is pure waste on one that is trying to fit a
+  // viewport. Worth 30px, which was most of what was still missing at 982.
+  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:4px 2px 10px';
   var hdr=document.createElement('div');
-  hdr.style.cssText='margin-bottom:16px';
-  hdr.innerHTML='<div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
-    +'<div style="font-size:12.5px;color:var(--d-t3,var(--t3));margin-top:3px">Coach Parry &middot; Zone 2 base build</div>';
+  // The title and its subtitle on ONE line. Two stacked lines plus a 16px gap cost 47px for six
+  // words; side by side they cost 30 and read the same.
+  hdr.style.cssText='margin-bottom:10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap';
+  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
+    +'<div style="font-size:12px;color:var(--d-t3,var(--t3))">Coach Parry &middot; Zone 2 base build</div>';
   wrap.appendChild(hdr);
   var host=document.createElement('div');
   host.id='DS-RUN-BODY';
@@ -48700,7 +48705,7 @@ function renderRunInto_(scr, surface){
       // two buttons should not be sharing a row. Lifted out of the balanced host by dsShowRun -
       // a Run-Training-only mechanism, so no shared layout code is involved.
       raCard.setAttribute('data-runfull','1');
-      raCard.style.cssText='margin:0 16px 16px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
+      raCard.style.cssText='margin:0 16px 11px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
       var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
       var _t=_ra.target||{};
       var _inj=_ra.injury;
