@@ -292,12 +292,17 @@ try {
   const runD = await evalJS(`(function(){
     var body=document.getElementById('DS-RUN-BODY');
     var txt=document.body.innerText;
-    // innerText, NOT textContent: the labels are uppercased by text-transform, which is a RENDERING
-    // property. textContent returns the source string ("Miles YTD") and the uppercase match finds
-    // nothing - a probe bug that reads exactly like a missing element.
-    var strips=[].slice.call(document.querySelectorAll('#DS-RUN-BODY > div')).filter(function(d){
-      var t=(d.innerText||'').toUpperCase();
-      return t.indexOf('MILES YTD')>=0 || t.indexOf('LONGEST RUN')>=0; });
+    // STRUCTURAL, the same rule the mobile section uses. A text filter keeps ancestors as well as
+    // strips (and innerText, not textContent - the labels are uppercased by text-transform, which is
+    // a RENDERING property, so a source-string match finds nothing). A strip has an exact shape:
+    // four element children, each one a label from the known set.
+    var LABELS=['MILES YTD','THIS MONTH','YTD RUNS','STREAK','LONGEST RUN','BEST PACE','AVG PACE','ELEV YTD'];
+    var strips=[].slice.call(document.querySelectorAll('#DS-RUN-BODY div')).filter(function(d){
+      var kids=[].slice.call(d.children);
+      if(kids.length!==4) return false;
+      return kids.every(function(k){ var t=(k.innerText||'').toUpperCase();
+        return LABELS.some(function(L){ return t.indexOf(L)>=0; }); });
+    });
     var toggles=document.querySelectorAll('[data-rtrange]');
     var svg=document.querySelector('#DS-RUN-BODY svg[viewBox="0 0 600 150"]');
     return { page:__PAGEWIDE(),
@@ -305,7 +310,9 @@ try {
              nToggles:toggles.length,
              ridge:svg?__M(svg):null,
              nStrips:strips.length,
-             stripBoxes:strips.map(function(s){ var m=__M(s); return { w:m.w, h:m.h, overX:m.overX }; }),
+             stripBoxes:strips.map(function(s){ var m=__M(s);
+               var tops={}; [].slice.call(s.children).forEach(function(c){ tops[Math.round(c.getBoundingClientRect().top)]=1; });
+               return { w:m.w, h:m.h, rows:Object.keys(tops).length, overX:m.overX }; }),
              stripClips:__CLIP(body,'#DS-RUN-BODY div[style*="white-space:nowrap"]').filter(function(c){ return c.clipped; }),
              // The four cleanup outcomes, read off the rendered page.
              noMap:(document.querySelectorAll('#DS-RUN-BODY .leaflet-container').length===0),

@@ -31219,18 +31219,41 @@ function _balCols_(host){
     cards.forEach(function(c){ host.appendChild(c); });
     return;
   }
-  host.setAttribute('style','display:flex;gap:'+_BAL_GAP+'px;align-items:flex-start');
+  // FULL-WIDTH OPT-OUT, IN AUTHORED ORDER. Some cards are a ROW, not a column item: the trajectory
+  // card lays out three columns of its own, and squeezed into half the width its third column wraps
+  // underneath and the whole thing reads as broken. The Dashboard already treats its copy this way
+  // - "its own full-width row, above the card strip, because it IS the row" - so the run page needs
+  // the same escape hatch rather than a second layout rule.
+  //
+  // Order is PRESERVED rather than hoisting the full-width cards to the top: the page is authored in
+  // priority order, and a layout pass that reorders it is deciding something the author already did.
+  // So the list is walked, and each RUN of ordinary cards is balanced into its own two-column row
+  // between the full-width ones.
+  host.setAttribute('style','display:flex;flex-direction:column;gap:'+_BAL_GAP+'px');
   var mk=function(){ var d=document.createElement('div');
     d.setAttribute('style','flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:'+_BAL_GAP+'px');
     return d; };
-  var A=mk(), B=mk();
-  host.appendChild(A); host.appendChild(B);
-  cards.forEach(function(c){ A.appendChild(c); });          // measure at COLUMN width
-  var hs=cards.map(function(c){ return c.getBoundingClientRect().height; });
-  var ha=0, hb=0;
-  cards.forEach(function(c,i){
-    if(ha<=hb){ A.appendChild(c); ha+=hs[i]+_BAL_GAP; }
-    else      { B.appendChild(c); hb+=hs[i]+_BAL_GAP; }
+  var isFull=function(c){ try{ return !!(c.getAttribute && c.getAttribute('data-bal')==='full'); }catch(e){ return false; } };
+  var groups=[], cur=null;
+  cards.forEach(function(c){
+    if(isFull(c)){ groups.push({full:c}); cur=null; return; }
+    if(!cur){ cur={list:[]}; groups.push(cur); }
+    cur.list.push(c);
+  });
+  groups.forEach(function(g){
+    if(g.full){ host.appendChild(g.full); return; }
+    var row=document.createElement('div');
+    row.setAttribute('style','display:flex;gap:'+_BAL_GAP+'px;align-items:flex-start');
+    host.appendChild(row);
+    var A=mk(), B=mk();
+    row.appendChild(A); row.appendChild(B);
+    g.list.forEach(function(c){ A.appendChild(c); });        // measure at COLUMN width
+    var hs=g.list.map(function(c){ return c.getBoundingClientRect().height; });
+    var ha=0, hb=0;
+    g.list.forEach(function(c,i){
+      if(ha<=hb){ A.appendChild(c); ha+=hs[i]+_BAL_GAP; }
+      else      { B.appendChild(c); hb+=hs[i]+_BAL_GAP; }
+    });
   });
 }
 // Re-run only when the one-column/two-column threshold is actually crossed. Rebalancing on every
@@ -41722,6 +41745,10 @@ function _rtMount_(scr){
       return;
     }
     var card=document.createElement('div');
+    // FULL WIDTH, for the same reason the Dashboard gives its copy a row of its own: this card lays
+    // out three columns internally, and in half the page width the third one wraps underneath and
+    // the whole thing reads as broken. Measured at 1600px before the opt-out existed.
+    card.setAttribute('data-bal','full');
     card.style.cssText='margin:0 16px 16px';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
@@ -48435,6 +48462,9 @@ function renderRunInto_(scr, surface){
     var _ra=(typeof _runAheadFlag_==='function')?_runAheadFlag_(new Date()):null;
     if(_ra){
       var raCard=document.createElement('div');
+      // FULL WIDTH: it is the one card on this page that asks for a decision, and a decision with
+      // two buttons should not be sharing a row. See the data-bal opt-out in _balCols_.
+      raCard.setAttribute('data-bal','full');
       raCard.style.cssText='margin:0 16px 16px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
       var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
       raCard.innerHTML=
