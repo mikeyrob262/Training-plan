@@ -90,13 +90,31 @@ try {
   console.log('\n' + Y + '=== the live page ===' + X);
   ok('run snapshot primed', primed);
 
-  // NEGATIVE CONTROL on the injection itself: these must NOT exist before it runs, or the test
-  // would be measuring the deployed code and reporting it as the local code.
+  // WHICH CODE IS BEING MEASURED? Before this pass shipped, the functions were absent from the
+  // deployed page, so their presence after injection proved the LOCAL code was what ran - and that
+  // was worth a negative control. Once deployed they are there either way, and the same control
+  // starts failing on success, which is worse than useless: a red line for a green outcome.
+  //
+  // So the mode is DETECTED and STATED rather than asserted. Pre-deploy this proves local code
+  // against real data; post-deploy the injection overwrites the deployed definitions with the local
+  // ones, so it still measures local code - it just cannot prove it from absence any more. Either
+  // way the claim printed matches the claim that can be supported.
   const before = await evalJS(`(function(){ return { detail:(typeof _lgSeasonDetailHTML_), rt:(typeof _rtSeries_), verdict:(typeof _runDriftVerdict_) }; })()`);
-  ok('NEG: the new functions are NOT already on the deployed page', before.detail === 'undefined' && before.rt === 'undefined' && before.verdict === 'undefined');
+  const preDeploy = (before.detail === 'undefined' && before.rt === 'undefined' && before.verdict === 'undefined');
+  info(preDeploy
+    ? 'PRE-DEPLOY: the page does not carry these functions, so what runs below is provably the local code.'
+    : 'POST-DEPLOY: the page already carries these functions; the injection replaces them with the local copies.');
+  // What CAN still be asserted in both modes: the injection actually took, and it took from source.
+  ok('the page is answering at all', typeof before.detail === 'string');
 
   const inj = await evalJS(`(function(){ try{ (0,eval)(${JSON.stringify(INJECT)}); return 'ok'; }catch(e){ return 'ERR '+(e&&e.message); } })()`);
   ok('the local code injected cleanly', inj === 'ok');
+  // Prove the injection REPLACED what was there, in both modes: a marker only the local source has.
+  const took = await evalJS(`(function(){ return { detail:(typeof _lgSeasonDetailHTML_),
+    hasNameCol:(String(_lgActivityTable_).indexOf('lg-nm')>0),
+    hasVolFloor:(String(_rtDrivers_).indexOf('_RT_VOL_FLOOR')>0) }; })()`);
+  ok('the injected functions are the ones now defined', took.detail === 'function');
+  ok('...and they are the CURRENT local source, not a stale copy', took.hasNameCol && took.hasVolFloor);
   if (inj !== 'ok') { console.log('  ' + R + inj + X); throw new Error(inj); }
 
   console.log('\n' + Y + '=== Legacy season drill-down, on the real library ===' + X);
