@@ -309,6 +309,11 @@ try {
              hasTrajectory:(txt.indexOf('RUNNING TRAJECTORY')>=0 || txt.indexOf('Running Trajectory')>=0),
              nToggles:toggles.length,
              ridge:svg?__M(svg):null,
+             trajChrome:(function(){
+               var t=[].slice.call(document.querySelectorAll('#DS-RUN-BODY div'))
+                 .filter(function(d){ return (d.innerText||'').indexOf('RUNNING TRAJECTORY')===0; })[0];
+               if(!t) return null; var c=getComputedStyle(t), b=t.getBoundingClientRect();
+               return { bg:c.backgroundColor, borderW:c.borderTopWidth, w:Math.round(b.width) }; })(),
              nStrips:strips.length,
              stripBoxes:strips.map(function(s){ var m=__M(s);
                var tops={}; [].slice.call(s.children).forEach(function(c){ tops[Math.round(c.getBoundingClientRect().top)]=1; });
@@ -327,6 +332,12 @@ try {
   ok('the Running Trajectory card is on the page', runD.hasTrajectory);
   ok('the range toggle has all five ranges', runD.nToggles === 5);
   ok('the ridge SVG actually drew', !!runD.ridge && runD.ridge.h > 100);
+  // The card must have chrome. Mounted raw it sat on the page background with no border while every
+  // card around it had one - the shell returns bare CONTENT because the Dashboard wraps it in that
+  // page's own card() helper, and the run mount has to do the same.
+  ok('the trajectory card has a panel background', runD.trajChrome && runD.trajChrome.bg !== 'rgba(0, 0, 0, 0)');
+  ok('...and a border', runD.trajChrome && parseFloat(runD.trajChrome.borderW) > 0);
+  ok('...and it is the full width of the page column', runD.trajChrome && runD.trajChrome.w > 1200);
   ok('both stat strips rendered', runD.nStrips === 2);
   ok('neither strip overflows its box', runD.stripBoxes.every(s => !s.overX));
   ok('no stat value is silently clipped', runD.stripClips.length === 0);

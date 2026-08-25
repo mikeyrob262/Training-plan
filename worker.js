@@ -41749,7 +41749,12 @@ function _rtMount_(scr){
     // out three columns internally, and in half the page width the third one wraps underneath and
     // the whole thing reads as broken. Measured at 1600px before the opt-out existed.
     card.setAttribute('data-bal','full');
-    card.style.cssText='margin:0 16px 16px';
+    // THE PANEL CHROME BELONGS HERE, not in the shell. _ptTrajShell_ returns bare CONTENT because
+    // the Dashboard wraps it in that page's own card() helper; mounting it raw left the run card
+    // with no background, border or padding, sitting directly on the page while every card around
+    // it had chrome. Same values as the Dashboard's card(), so the family holds on the outside too.
+    card.style.cssText='margin:0 16px 16px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
+      +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
     card.querySelectorAll('[data-rtrange]').forEach(function(el){
