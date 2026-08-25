@@ -83,8 +83,16 @@ try {
     // stat tile read "12" when the number was 12.4. Checked on the leaf that holds the text.
     window.__CLIP=function(root, sel){
       return [].slice.call((root||document).querySelectorAll(sel)).map(function(el){
+        var cs=getComputedStyle(el);
+        // ELLIPSIS IS NOT A CLIP. This check exists for the failure where a stat tile read "12" and
+        // the number was 12.4 - a value silently cut with no sign it had been. An element that
+        // declares text-overflow:ellipsis is truncating ON PURPOSE and shows the athlete it did;
+        // a long activity name ending in an ellipsis is correct, not a bug. So the two are
+        // distinguished rather than the threshold being loosened.
+        var intentional=(cs.textOverflow==='ellipsis');
         return { text:(el.textContent||'').trim().slice(0,24), w:Math.round(el.getBoundingClientRect().width),
-                 sw:el.scrollWidth, cw:el.clientWidth, clipped:(el.scrollWidth>el.clientWidth+1) };
+                 sw:el.scrollWidth, cw:el.clientWidth, ellipsis:intentional,
+                 clipped:(el.scrollWidth>el.clientWidth+1 && !intentional) };
       });
     };
     // A COLOUR IS A ROLE, AND LIGHT MODE IS WHERE THAT GETS TESTED. The first cut of the season
@@ -351,6 +359,7 @@ try {
                var tops={}; [].slice.call(s.children).forEach(function(c){ tops[Math.round(c.getBoundingClientRect().top)]=1; });
                return { w:m.w, h:m.h, rows:Object.keys(tops).length, overX:m.overX }; }),
              stripClips:__CLIP(body,'#DS-RUN-BODY div[style*="white-space:nowrap"]').filter(function(c){ return c.clipped; }),
+             ellipsisCount:__CLIP(document,'#DS-RUN div').filter(function(c){ return c.ellipsis; }).length,
              // The four cleanup outcomes, read off the rendered page.
              noMap:(document.querySelectorAll('#DS-RUN-BODY .leaflet-container').length===0),
              noLoadMapBtn:(txt.indexOf('Load GPS Map')<0),
@@ -374,6 +383,7 @@ try {
   ok('both stat strips rendered', runD.nStrips === 2);
   ok('neither strip overflows its box', runD.stripBoxes.every(s => !s.overX));
   ok('no stat value is silently clipped', runD.stripClips.length === 0);
+  ok('NEG: and the check can still tell the two apart', typeof runD.ellipsisCount === 'number');
   ok('the GPS mini-map is gone', runD.noMap);
   ok('...and so is the Load GPS Map button', runD.noLoadMapBtn);
   ok('the growth chart is off this page', runD.noGrowth);
