@@ -312,6 +312,30 @@ try {
              hasTrajectory:(txt.indexOf('RUNNING TRAJECTORY')>=0 || txt.indexOf('Running Trajectory')>=0),
              nToggles:toggles.length,
              ridge:svg?__M(svg):null,
+             // A rail is measured by its CHILDREN: how many fit across its own client width tells
+             // you what "at a time" really is, whatever the CSS says it should be.
+             rails:(function(){
+               var out={};
+               ['rn-pb','rn-recent','rn-drift'].forEach(function(id){
+                 var el=document.getElementById(id); if(!el) return;
+                 var kids=[].slice.call(el.children); if(!kids.length) return;
+                 var cw=Math.round(kids[0].getBoundingClientRect().width);
+                 var gap=parseFloat(getComputedStyle(el).gap)||0;
+                 out[id]={ n:kids.length, cardW:cw,
+                           per:(cw>0?Math.round((el.clientWidth+gap)/(cw+gap)):0),
+                           overX:(el.scrollWidth>el.clientWidth+1),
+                           snaps:(getComputedStyle(el).scrollSnapType||'').indexOf('x')>=0 };
+               });
+               return out; })(),
+             pair:(function(){
+               var el=document.querySelector('.rn-pair'); if(!el) return null;
+               var kids=[].slice.call(el.children);
+               var tops={}; kids.forEach(function(k){ tops[Math.round(k.getBoundingClientRect().top)]=1; });
+               return { w:Math.round(el.getBoundingClientRect().width), n:kids.length,
+                        cols:(Object.keys(tops).length===1?kids.length:1),
+                        childW:kids.map(function(k){ return Math.round(k.getBoundingClientRect().width); }),
+                        maxChildW:Math.max.apply(null, kids.map(function(k){ return k.getBoundingClientRect().width; })) };
+             })(),
              trajOutsideBody:(function(){
                var body=document.getElementById('DS-RUN-BODY');
                var t=[].slice.call(document.querySelectorAll('#DS-RUN div'))
@@ -355,6 +379,23 @@ try {
   ok('the growth chart is off this page', runD.noGrowth);
   ok('10k race pace sits after Personal Bests', runD.tenkAfterPB);
   ok('the drift card carries its verdict', runD.driftVerdict);
+  // THE FOUR LAYOUTS, measured rather than assumed. A rail that does not actually overflow is not a
+  // rail, and a "3 at a time" whose cards are any other width is a number in a comment.
+  ok('Personal Bests is a rail', !!runD.rails['rn-pb']);
+  ok('...showing ONE card at a time', runD.rails['rn-pb'] && runD.rails['rn-pb'].per === 1);
+  ok('...and it actually scrolls', runD.rails['rn-pb'] && runD.rails['rn-pb'].overX);
+  ok('Recent runs is a rail', !!runD.rails['rn-recent']);
+  ok('...showing THREE at a time', runD.rails['rn-recent'] && runD.rails['rn-recent'].per === 3);
+  ok('...and it actually scrolls', runD.rails['rn-recent'] && runD.rails['rn-recent'].overX);
+  ok('Easy-run drift is a rail', !!runD.rails['rn-drift']);
+  ok('...and it actually scrolls', runD.rails['rn-drift'] && runD.rails['rn-drift'].overX);
+  ok('every rail snaps, so a flick lands on a card', Object.keys(runD.rails).every(k => runD.rails[k].snaps));
+  ok('NEG: no rail card is narrower than its floor', Object.keys(runD.rails).every(k => runD.rails[k].cardW >= 170));
+  ok('HR zones and Why sit side by side', runD.pair && runD.pair.cols === 2);
+  ok('...neither running the full width', runD.pair && runD.pair.maxChildW < runD.pair.w * 0.6);
+  Object.keys(runD.rails).forEach(k => info(k + ': ' + runD.rails[k].n + ' cards, ' +
+    runD.rails[k].cardW + 'px each, ' + runD.rails[k].per + ' visible'));
+  if (runD.pair) info('zones/why pair: ' + runD.pair.w + 'px, children ' + JSON.stringify(runD.pair.childW));
   info('ridge ' + JSON.stringify(runD.ridge) + ' · strips ' + JSON.stringify(runD.stripBoxes));
   if (runD.stripClips.length) console.log('    ' + R + JSON.stringify(runD.stripClips) + X);
 

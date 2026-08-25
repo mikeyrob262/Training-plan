@@ -48193,7 +48193,13 @@ function _runWhy_(days){
 var _RN_GAP=10;
 function _runRail_(id, per, cardsHTML, opts){
   opts=opts||{};
-  var w='calc((100% - '+((per-1)*_RN_GAP)+'px) / '+per+')';
+  // A CARD FLOOR, because "three at a time" is a statement about a desktop column and a phone is
+  // not one. Measured at 390px: three across a 358px rail gives 77px cards, and "Gaines - PHT Trail
+  // Run" needs 129px - every name and every date clipped. CSS max() keeps three-up wherever there is
+  // room and quietly shows fewer where there is not, which is what the request actually wants. The
+  // count is still exact on the surface it was asked about; it just stops lying on the small one.
+  var minW=opts.minW||170;
+  var w='max('+minW+'px, calc((100% - '+((per-1)*_RN_GAP)+'px) / '+per+'))';
   var h='';
   if(opts.title){
     h+='<div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px">'
