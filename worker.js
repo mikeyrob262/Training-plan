@@ -315,9 +315,12 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .rn-nudge{background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:26px;height:26px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .rn-nudge[disabled]{opacity:.3;cursor:default}
 /* Two panels that belong beside each other rather than wherever the balancer would drop them.
-   Wraps to stacked below 560px, which is where two columns stop being readable on a phone. */
+   THE BASIS IS 190px, NOT 280. At 280 each they need 560px to sit side by side, and a third of the
+   page is about 440 - so inside the three-column layout they were stacking, costing 213px where
+   side by side costs 149. Measured, and it is worth 64px, which is most of what was still missing
+   at 982. Still wraps to stacked on a phone, where two columns stop being readable. */
 .rn-pair{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin:0 16px 12px}
-.rn-pair > *{flex:1 1 280px;min-width:0;margin:0 !important}
+.rn-pair > *{flex:1 1 190px;min-width:0;margin:0 !important}
 .lg-nudge{background:var(--d-raise);border:1px solid var(--d-line2);color:var(--d-t2);width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
 .lg-nudge[disabled]{opacity:.28;cursor:default}
 /* A season card is a BUTTON now, so it says so with the cursor and a hover lift. The rail is a
@@ -48617,7 +48620,11 @@ try{ if(typeof window!=='undefined'){ window._runRemoveKeepScroll_=_runRemoveKee
 // It steps DOWN rather than snapping: three columns need real width or the cards inside them start
 // clipping, so 1180px buys three, _RUN_BAL_MIN2 buys two, and anything narrower is one column in
 // authored order - which is what a phone gets.
-var _RUN_BAL_MIN3=1180, _RUN_BAL_MIN2=860, _RUN_BAL_GAP=10;
+// 1040, not 1180: a 1280-wide laptop leaves about 1,100px of content area once the sidebar is off,
+// and three columns of ~360px still hold every card on this page - the rails floor their cards at
+// 110-170px and take two across rather than three, which is a smaller loss than a whole extra
+// column of height.
+var _RUN_BAL_MIN3=1040, _RUN_BAL_MIN2=860, _RUN_BAL_GAP=10;
 function _runBalCols_(host){
   if(!host) return;
   // The authored order is captured ONCE. After the first pass the cards live inside column elements,
