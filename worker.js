@@ -305,32 +305,35 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
    as the rail's hook and as the record of that decision. */
 .lg-hs{scrollbar-width:none}
 .lg-hs::-webkit-scrollbar{display:none}
-.lg-nudge{background:rgba(20,24,34,.86);border:1px solid rgba(255,255,255,.16);color:#e2e8f0;width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
+.lg-nudge{background:var(--d-raise);border:1px solid var(--d-line2);color:var(--d-t2);width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
 .lg-nudge[disabled]{opacity:.28;cursor:default}
 /* A season card is a BUTTON now, so it says so with the cursor and a hover lift. The rail is a
    horizontal scroller, and a drag across it must not be read as a click — the card's own handler
    checks how far the pointer travelled before opening (see _lgCardDown_). */
 .lg-scard{cursor:pointer;transition:border-color .15s,background .15s,transform .15s;text-align:left}
-.lg-scard:hover{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.06);transform:translateY(-1px)}
-.lg-scard:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+.lg-scard:hover{border-color:var(--d-line2);background:var(--d-hover);transform:translateY(-1px)}
+.lg-scard:focus-visible{outline:2px solid var(--c-blue);outline-offset:2px}
 /* House shape, 9px, per the standing no-pill-buttons rule. */
-.lg-back{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#cbd5e1;font-family:inherit;cursor:pointer}
-.lg-back:hover{color:#f1f5f9;border-color:rgba(255,255,255,.22)}
-/* Season detail tables. Wide content scrolls inside its own box; the page never scrolls sideways. */
+.lg-back{display:inline-flex;align-items:center;gap:7px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:var(--d-t3);font-family:inherit;cursor:pointer}
+.lg-back:hover{color:var(--d-head);border-color:var(--d-line2)}
+/* Season detail tables. Wide content scrolls inside its own box; the page never scrolls sideways.
+   EVERY colour here is a token, not a literal. The first cut hardcoded the dark palette (#f1f5f9
+   headings, #e2e8f0 cells) and the whole drill-down rendered as white-on-white in light mode -
+   structurally perfect and completely unreadable. A colour is a ROLE. */
 .lg-tw{overflow-x:auto;margin-top:11px}
 .lg-t{border-collapse:collapse;width:100%;font-size:12px;min-width:430px}
-.lg-t th{text-align:right;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;padding:0 0 7px;border-bottom:1px solid rgba(255,255,255,.09);white-space:nowrap}
+.lg-t th{text-align:right;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--d-t4);padding:0 0 7px;border-bottom:1px solid var(--d-edge);white-space:nowrap}
 .lg-t th:first-child,.lg-t td:first-child{text-align:left}
-.lg-t td{text-align:right;padding:7px 0;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,.045);white-space:nowrap}
+.lg-t td{text-align:right;padding:7px 0;color:var(--d-t2);border-bottom:1px solid var(--d-edge3);white-space:nowrap}
 .lg-t th+th,.lg-t td+td{padding-left:14px}
 .lg-t tr:last-child td{border-bottom:none}
-.lg-t tfoot td{border-top:1px solid rgba(255,255,255,.14);border-bottom:none;font-weight:800;color:#f1f5f9;padding-top:9px}
-.lg-t td.lg-dim{color:#8b93a7}
+.lg-t tfoot td{border-top:1px solid var(--d-line2);border-bottom:none;font-weight:800;color:var(--d-head);padding-top:9px}
+.lg-t td.lg-dim{color:var(--d-dim)}
 .lg-t td.lg-nm{white-space:normal;min-width:150px}
-/* A row is a link ONLY when its activity actually resolves. An unresolvable row stays plain text —
-   the same do-not-claim contract the Personal Bests board uses — so a click never dead-ends. */
+/* A row is a link ONLY when its activity actually resolves. An unresolvable row stays plain text -
+   the same do-not-claim contract the Personal Bests board uses - so a click never dead-ends. */
 .lg-arow{cursor:pointer}
-.lg-arow:hover td{background:rgba(255,255,255,.05);color:#fff}
+.lg-arow:hover td{background:var(--d-hover);color:var(--d-head)}
 .lg-arow td:first-child{border-left:2px solid transparent}
 .lg-arow:hover td:first-child{border-left-color:currentColor}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
@@ -14311,16 +14314,16 @@ function _lgSeasonCard_(s, col, showHours, rows, sport){
     +'<div style="margin-top:9px;flex:1 1 auto">';
   rowsOut.forEach(function(r){
     H+='<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-top:6px">'
-      +'<span style="color:#8b93a7">'+r[0]+'</span>'
-      +'<span style="color:#f1f5f9;font-weight:700">'+r[1]+'</span></div>';
+      +'<span style="color:var(--d-dim,#8b93a7)">'+r[0]+'</span>'
+      +'<span style="color:var(--d-head,#f1f5f9);font-weight:700">'+r[1]+'</span></div>';
   });
   H+='</div>';
   var pts=_lgMonthlyPts_(rows, s.year);
   var spark=(typeof _gcSpark_==='function')?_gcSpark_(pts, col, { H:38, fill:true, aria:s.year+' monthly miles' }):'';
   H+=spark
-    ? ('<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07)">'+spark
-       +'<div style="font-size:9px;color:#6b7280;margin-top:2px">Miles by month</div></div>')
-    : '<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);font-size:9px;color:#6b7280">Too few months to plot</div>';
+    ? ('<div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--d-edge3)">'+spark
+       +'<div style="font-size:9px;color:var(--d-t4,#6b7280);margin-top:2px">Miles by month</div></div>')
+    : '<div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--d-edge3);font-size:9px;color:var(--d-t4,#6b7280)">Too few months to plot</div>';
   return H+(clickable?'</button>':'</div>');
 }
 // FLAT SUMMARY PANEL. Same surface treatment as every other panel in the app — solid --d-panel,
@@ -14386,23 +14389,23 @@ function _lgSeasonsPanel_(title, col, seasons, scopeLine, showHours, rows, key){
   if(!seasons || !seasons.length) return '';
   // Count is stated in words as well as drawn. The scrollbar and fades say "there is more"; only
   // the count says HOW MUCH more, which is what stops a reader assuming they have seen it all.
-  var H='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
+  var H='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
     +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
-    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">'+title+' &mdash; Greatest Seasons</div>'
+    +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#f1f5f9)">'+title+' &mdash; Greatest Seasons</div>'
     +'<div style="font-size:11px;color:'+col+';font-weight:700">'+seasons.length+' season'+(seasons.length===1?'':'s')+'</div>'
     +'<div style="flex:1"></div>'
     +'<div style="display:flex;gap:6px">'
     +'<button id="lg-bp-'+key+'" class="lg-nudge" aria-label="Scroll to earlier seasons" onclick="_lgHsNudge_(&#39;'+key+'&#39;,-1)">&#8249;</button>'
     +'<button id="lg-bn-'+key+'" class="lg-nudge" aria-label="Scroll to more seasons" onclick="_lgHsNudge_(&#39;'+key+'&#39;,1)">&#8250;</button>'
     +'</div></div>'
-    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">'+scopeLine
+    +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.5">'+scopeLine
     +' <span style="color:'+col+';font-weight:700">Open a season</span> for its month-by-month figures and every activity in it.</div>'
     +'<div style="position:relative;margin-top:13px">'
     +'<div id="lg-hs-'+key+'" class="lg-hs" onscroll="_lgHsUpdate_(&#39;'+key+'&#39;)" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:9px">';
   seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours,rows,key); });
   H+='</div>'
-    +'<div id="lg-fl-'+key+'" style="position:absolute;left:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(90deg,rgba(5,7,13,.92),rgba(5,7,13,0))"></div>'
-    +'<div id="lg-fr-'+key+'" style="position:absolute;right:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(270deg,rgba(5,7,13,.92),rgba(5,7,13,0))"></div>'
+    +'<div id="lg-fl-'+key+'" style="position:absolute;left:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(90deg,var(--d-shell),transparent)"></div>'
+    +'<div id="lg-fr-'+key+'" style="position:absolute;right:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(270deg,var(--d-shell),transparent)"></div>'
     +'</div></div>';
   return H;
 }
@@ -14449,7 +14452,7 @@ function _lgMonthTable_(rows, year, cfg){
     +(cfg.showHours?('<td>'+one(tSec/3600)+'</td>'):'')
     +'<td>'+one(tMax)+' mi</td></tr></tfoot></table></div>';
   if(partial){
-    H+='<div style="font-size:10.5px;color:#6b7280;margin-top:7px;line-height:1.5">'
+    H+='<div style="font-size:10.5px;color:var(--d-t4,#6b7280);margin-top:7px;line-height:1.5">'
       +'Through '+_LG_MON[end-1]+' only &mdash; '+year+' is still running. The remaining months are left out rather than '
       +'printed as zero, because a zero for a month that has not happened reads as a month you did nothing.</div>';
   }
@@ -14474,7 +14477,7 @@ function _lgActivityTable_(list, cfg){
     var ref=_lgRefFor_(r, cfg.key), ok=(typeof rideRefOk_==='function') && rideRefOk_(ref);
     if(ok) linkable++;
     var cells='<td class="lg-dim">'+_lgEsc_(String(r.date).slice(0,10))+'</td>'
-      +'<td class="lg-nm"'+(ni.isFallback?' style="color:#8b93a7"':'')+'>'+_lgEsc_(ni.text)+'</td>'
+      +'<td class="lg-nm"'+(ni.isFallback?' style="color:var(--d-dim,#8b93a7)"':'')+'>'+_lgEsc_(ni.text)+'</td>'
       +'<td>'+(Math.round(mi*10)/10)+'</td>'
       +'<td>'+(sec>0?((typeof fmtHM_==='function')?fmtHM_(sec):Math.round(sec/60)+'m'):'&mdash;')+'</td>';
     if(isRun){
@@ -14497,12 +14500,12 @@ function _lgActivityTable_(list, cfg){
   // The link rate is STATED, never discovered by clicking. A run that only exists in the snapshot
   // has no st.rides record for the detail modal to index, and that is most of the older seasons.
   var pct=Math.round(linkable/list.length*100);
-  H+='<div style="font-size:10.5px;color:#6b7280;margin-top:9px;line-height:1.55">'
+  H+='<div style="font-size:10.5px;color:var(--d-t4,#6b7280);margin-top:9px;line-height:1.55">'
     + (linkable===list.length
         ? ('Every '+cfg.noun+' here opens &mdash; click a row for the full activity.')
         : (linkable===0
             ? ('None of these '+cfg.noun+'s can be opened in full. ')
-            : ('<b style="color:#8b93a7">'+linkable+'</b> of '+list.length+' ('+pct+'%) open in full &mdash; those rows are coloured and clickable. '))
+            : ('<b style="color:var(--d-dim,#8b93a7)">'+linkable+'</b> of '+list.length+' ('+pct+'%) open in full &mdash; those rows are coloured and clickable. '))
           + 'The rest are listed from the history snapshot, which holds the figures above but has no record in the '
           + 'live activity library for the detail view to index. Nothing is missing from the numbers; only the click is.')
     +'</div>';
@@ -14553,29 +14556,29 @@ function _lgSeasonDetailHTML_(){
   H+='</div>';
   var pts=_lgMonthlyPts_(rows, s.year);
   var spark=(typeof _gcSpark_==='function')?_gcSpark_(pts, cfg.col, { H:64, fill:true, aria:s.year+' monthly miles' }):'';
-  if(spark) H+='<div style="margin-top:15px">'+spark+'<div style="font-size:10px;color:#6b7280;margin-top:3px">Miles by month</div></div>';
+  if(spark) H+='<div style="margin-top:15px">'+spark+'<div style="font-size:10px;color:var(--d-t4,#6b7280);margin-top:3px">Miles by month</div></div>';
   H+='</div>';
 
-  H+='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:14px">'
-    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">Month by month</div>'
-    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">The numbers behind the line above &mdash; the same '
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:18px;padding:16px 18px;margin-bottom:14px">'
+    +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#f1f5f9)">Month by month</div>'
+    +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.5">The numbers behind the line above &mdash; the same '
     +s.n+' '+cfg.noun+(s.n===1?'':'s')+' the card counts, split by month.</div>'
-    +(_lgMonthTable_(rows, s.year, cfg) || '<div style="font-size:11.5px;color:#8b93a7;margin-top:10px">No dated activities in this season.</div>')
+    +(_lgMonthTable_(rows, s.year, cfg) || '<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:10px">No dated activities in this season.</div>')
     +'</div>';
 
-  H+='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
     +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
-    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">Every '+cfg.noun+' in '+s.year+'</div>'
+    +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#f1f5f9)">Every '+cfg.noun+' in '+s.year+'</div>'
     +'<div style="font-size:11px;color:'+cfg.col+';font-weight:700">'+list.length+'</div></div>'
-    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">Newest first. Nothing is trimmed &mdash; this is the whole season.</div>'
-    +(_lgActivityTable_(list, cfg) || '<div style="font-size:11.5px;color:#8b93a7;margin-top:10px">No dated activities in this season.</div>')
+    +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.5">Newest first. Nothing is trimmed &mdash; this is the whole season.</div>'
+    +(_lgActivityTable_(list, cfg) || '<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:10px">No dated activities in this season.</div>')
     +'</div>';
   return H;
 }
 function _lgBackBar_(cfg){
   return '<div id="lg-detail" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
     +'<button type="button" class="lg-back" onclick="lgCloseSeason_()">&#8249;&nbsp; All seasons</button>'
-    +'<div style="font-size:11.5px;color:#8b93a7">'+cfg.label+' season</div></div>';
+    +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7)">'+cfg.label+' season</div></div>';
 }
 // ONE builder, both surfaces. Desktop renders it into ds-content beside the sidebar; mobile puts
 // the same string in a full-screen sheet. Two renderers reading one function is the only way the
@@ -14669,8 +14672,8 @@ function dsShowLegacy(){
   // error anywhere. Measured in the browser, not reasoned about.
   wrap.id='LEGACY-DS';
   wrap.style.cssText='padding:22px 24px 40px;overflow-y:auto;height:100%;box-sizing:border-box';
-  wrap.innerHTML='<div style="font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Legacy</div>'
-    +'<div style="font-size:13px;color:#8b93a7;margin:3px 0 18px">Your journey. Your story.</div>'
+  wrap.innerHTML='<div style="font-size:27px;font-weight:800;color:var(--d-head,#f1f5f9);letter-spacing:-.02em">Legacy</div>'
+    +'<div style="font-size:13px;color:var(--d-dim,#8b93a7);margin:3px 0 18px">Your journey. Your story.</div>'
     +_lgHTML_();
   mc.appendChild(wrap);
   _lgPrimeRails_();
@@ -14680,14 +14683,17 @@ function showLegacy(){
   var old=document.getElementById('LEGACY'); if(old) old.remove();
   var ov=document.createElement('div');
   ov.id='LEGACY';
-  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#05070d;display:flex;flex-direction:column;overflow:hidden;color:#e6e9ef;font-family:-apple-system,sans-serif';
+  // The sheet paints the SHELL tone, not a literal near-black. A hardcoded #05070d made the whole
+  // mobile Legacy page a dark slab inside a light app - and the text tokens on top of it then
+  // resolved to their LIGHT values, so it was dark-on-dark as well as wrong.
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:var(--d-shell,#05070d);display:flex;flex-direction:column;overflow:hidden;color:var(--d-t1,#e6e9ef);font-family:-apple-system,sans-serif';
   var hdr=document.createElement('div');
-  hdr.style.cssText='flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.08)';
-  hdr.innerHTML='<div style="flex:1"><div style="font-size:19px;font-weight:800;color:#f1f5f9">Legacy</div>'
-    +'<div style="font-size:12px;color:#8b93a7;margin-top:1px">Your journey. Your story.</div></div>';
+  hdr.style.cssText='flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--d-edge)';
+  hdr.innerHTML='<div style="flex:1"><div style="font-size:19px;font-weight:800;color:var(--d-head,#f1f5f9)">Legacy</div>'
+    +'<div style="font-size:12px;color:var(--d-dim,#8b93a7);margin-top:1px">Your journey. Your story.</div></div>';
   var x=document.createElement('button');
   x.textContent='Close';
-  x.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.16);color:#cbd5e1;border-radius:9px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+  x.style.cssText='background:transparent;border:1px solid var(--d-line2);color:var(--d-soft,#cbd5e1);border-radius:9px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
   x.onclick=function(){ ov.remove(); };
   hdr.appendChild(x);
   ov.appendChild(hdr);

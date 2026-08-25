@@ -87,6 +87,45 @@ try {
                  sw:el.scrollWidth, cw:el.clientWidth, clipped:(el.scrollWidth>el.clientWidth+1) };
       });
     };
+    // A COLOUR IS A ROLE, AND LIGHT MODE IS WHERE THAT GETS TESTED. The first cut of the season
+    // detail hardcoded the dark palette - #f1f5f9 headings, #e2e8f0 cells - and rendered as
+    // white-on-white in light mode: structurally perfect, completely unreadable, and every
+    // geometry assertion still passed. So contrast is measured, not eyeballed.
+    //
+    // WCAG relative luminance and the standard contrast ratio. Background is resolved by walking UP
+    // until an element actually paints one, because a transparent parent chain is the normal case.
+    window.__LUM=function(c){
+      var m=String(c).match(/rgba?\(([^)]+)\)/); if(!m) return null;
+      var p=m[1].split(',').map(parseFloat);
+      if(p.length>3 && p[3]===0) return null;
+      var f=function(v){ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); };
+      return 0.2126*f(p[0])+0.7152*f(p[1])+0.0722*f(p[2]);
+    };
+    window.__BG=function(el){
+      for(var n=el; n; n=n.parentElement){
+        var c=getComputedStyle(n).backgroundColor;
+        var m=String(c).match(/rgba?\(([^)]+)\)/);
+        if(m){ var p=m[1].split(',').map(parseFloat); if(!(p.length>3 && p[3]<0.5)) return c; }
+      }
+      return 'rgb(255,255,255)';
+    };
+    window.__CONTRAST=function(sel, minRatio){
+      return [].slice.call(document.querySelectorAll(sel)).filter(function(el){
+        var t=(el.textContent||'').trim(); if(!t) return false;
+        // LEAF text only - a container's colour is not what the reader sees.
+        var own=''; [].slice.call(el.childNodes).forEach(function(n){ if(n.nodeType===3) own+=n.nodeValue; });
+        if(!/[A-Za-z0-9]/.test(own)) return false;
+        var b=el.getBoundingClientRect(); if(b.width<2||b.height<2) return false;
+        return true;
+      }).map(function(el){
+        var fg=__LUM(getComputedStyle(el).color), bg=__LUM(__BG(el));
+        if(fg==null||bg==null) return null;
+        var hi=Math.max(fg,bg), lo=Math.min(fg,bg);
+        var ratio=(hi+0.05)/(lo+0.05);
+        return { text:(el.textContent||'').trim().slice(0,30), ratio:Math.round(ratio*100)/100,
+                 color:getComputedStyle(el).color, bg:__BG(el), fails:(ratio<(minRatio||3)) };
+      }).filter(Boolean).filter(function(x){ return x.fails; });
+    };
     window.__PAGEWIDE=function(){
       var de=document.documentElement, b=document.body;
       return { docOverX:(de.scrollWidth>de.clientWidth+1), bodyOverX:(b.scrollWidth>b.clientWidth+1),
@@ -177,6 +216,42 @@ try {
   ok('no table cell is silently clipped', detD.cellClips === 0);
   ok('the activity rows are clickable', detD.clickable > 0);
   info('wrappers: ' + JSON.stringify(detD.wrapperBoxes) + '  clickable rows: ' + detD.clickable);
+
+  console.log('\n' + Y + '=== desktop LIGHT MODE - is any of it actually readable? ===' + X);
+  {
+    // The app's own switch is document.body.classList 'dark' (see syncThemeToggle_), so this
+    // exercises the real state rather than a hand-built one.
+    const lightBg = await evalJS(`(function(){ document.body.classList.remove('dark');
+      return getComputedStyle(document.body).backgroundColor; })()`);
+    await wait(400);
+    // Re-render, because a colour decided at build time has to be rebuilt under the light palette.
+    await evalJS(`(function(){ dsShowLegacy(); return 1; })()`);
+    await wait(1500);
+    await evalJS(`(function(){ lgOpenSeason_('cyc', 2025); return 1; })()`);
+    await wait(1800);
+    await shot('desktop-legacy-season-2025-LIGHT');
+    const lite = await evalJS(`(function(){
+      return { bodyBg:getComputedStyle(document.body).backgroundColor,
+               detail:__CONTRAST('#LEGACY-DS div', 3),
+               cells:__CONTRAST('.lg-t td', 3),
+               heads:__CONTRAST('.lg-t th', 3),
+               back:__CONTRAST('.lg-back', 3) }; })()`);
+    info('light body background: ' + lite.bodyBg);
+    ok('no season-detail text is unreadable on light', lite.detail.length === 0);
+    ok('no table cell is unreadable on light', lite.cells.length === 0);
+    ok('no table header is unreadable on light', lite.heads.length === 0);
+    ok('the back control is readable on light', lite.back.length === 0);
+    [['detail', lite.detail], ['cells', lite.cells], ['heads', lite.heads], ['back', lite.back]]
+      .forEach(function(pair){ if (pair[1].length) console.log('    ' + R + pair[0] + ': ' +
+        JSON.stringify(pair[1].slice(0, 6)) + (pair[1].length > 6 ? (' +' + (pair[1].length - 6) + ' more') : '') + X); });
+    const darkBg = await evalJS(`(function(){ document.body.classList.add('dark');
+      return getComputedStyle(document.body).backgroundColor; })()`);
+    await wait(400);
+    // NEGATIVE CONTROL: if the toggle did nothing, every check above measured the same theme twice.
+    ok('NEG: the light/dark switch really repaints the page', darkBg !== lightBg);
+    await evalJS(`(function(){ lgCloseSeason_(); dsShowLegacy(); return 1; })()`);
+    await wait(1500);
+  }
 
   console.log('\n' + Y + '=== desktop · a season detail (2019 running, 220 activities) ===' + X);
   await evalJS(`(function(){ lgCloseSeason_(); return 1; })()`);
@@ -301,17 +376,19 @@ try {
     var txt=scr?scr.innerText:'';
     // Same innerText rule as desktop, and the style attribute is matched loosely because cssText
     // normalises "flex-wrap:wrap" to "flex-wrap: wrap" with a space when the browser reserialises it.
-    // OUTERMOST match only. A text filter over every div matches the strip, its cells and their
-    // label spans alike, and reports eight "strips" that are mostly each other's children.
+    // STRUCTURAL, not textual. A text filter over every div keeps ancestors and descendants alike,
+    // and the "outermost wins" refinement still let a wrapper through. A stat strip has an exact
+    // shape: four element children, each of which is a single label from the known set. Nothing
+    // else on the page looks like that, and it cannot match a container that merely CONTAINS one.
+    var LABELS=['MILES YTD','THIS MONTH','YTD RUNS','STREAK','LONGEST RUN','BEST PACE','AVG PACE','ELEV YTD'];
     var strips=[].slice.call(scr.querySelectorAll('div')).filter(function(d){
-      var t=(d.innerText||'').toUpperCase();
-      if(!(t.indexOf('MILES YTD')>=0 || t.indexOf('LONGEST RUN')>=0) || t.length>=120) return false;
-      // Keep it only if no ANCESTOR also matched - that ancestor is the real strip.
-      for(var p=d.parentElement; p && p!==scr; p=p.parentElement){
-        var pt=(p.innerText||'').toUpperCase();
-        if((pt.indexOf('MILES YTD')>=0 || pt.indexOf('LONGEST RUN')>=0) && pt.length<120) return false;
-      }
-      return true; });
+      var kids=[].slice.call(d.children);
+      if(kids.length!==4) return false;
+      return kids.every(function(k){
+        var t=(k.innerText||'').toUpperCase();
+        return LABELS.some(function(L){ return t.indexOf(L)>=0; });
+      });
+    });
     return { screen:!!scr, page:__PAGEWIDE(),
              scrOverX:scr?(scr.scrollWidth>scr.clientWidth+1):null,
              hasTrajectory:(txt.indexOf('RUNNING TRAJECTORY')>=0 || txt.indexOf('Running Trajectory')>=0),
