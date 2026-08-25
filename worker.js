@@ -41645,7 +41645,10 @@ function _rtChart_(pts, w, h){
   // its id from point count and peak alone - two ridges with the same shape in one document would
   // otherwise share a defs block and one would be drawn in the other's colours.
   var uid='rtg'+String(n)+String(Math.round(hi));
-  return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
+  // height:100%, not a fixed pixel count. The viewBox still describes the drawing and
+  // preserveAspectRatio="none" means the box can be any height, so the ridge fills whatever the card
+  // gives it. With no slack it is simply the wrapper's min-height and nothing moves.
+  return '<svg width="100%" height="100%" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;height:100%">'
     +'<defs>'
     +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdba74" stop-opacity=".55"/><stop offset="1" stop-color="#fdba74" stop-opacity=".04"/></linearGradient>'
     +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa" stop-opacity=".45"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".03"/></linearGradient>'
@@ -41794,8 +41797,14 @@ function _rtMount_(scr){
     // The card's own chrome. _rtCardHTML_ returns the card's CONTENT, so the panel background,
     // border and padding are applied here. The values match what the Dashboard's cards use because
     // this page uses the same design tokens - not because any code is shared with it.
+    // THE ABSORBER. flex-grow lets this card take whatever height the page does not otherwise use,
+    // and its ridge is the one thing here that reads better larger - the chart is
+    // preserveAspectRatio="none", so it stretches to any box without distorting what it says.
+    // Capped at 460px so a very tall screen gets a better chart rather than one enormous card, and
+    // it keeps its natural size on a laptop, where there is no slack at all.
     card.style.cssText='margin:0 16px 11px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
-      +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
+      +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'
+      +'flex:1 1 auto;max-height:460px';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
     card.querySelectorAll('[data-rtrange]').forEach(function(el){
@@ -47972,7 +47981,17 @@ function dsShowRun(){
   // 10px at the foot, not 40. That much trailing space is right for a page that scrolls - it stops
   // the last card sitting flush against the edge - and is pure waste on one that is trying to fit a
   // viewport. Worth 30px, which was most of what was still missing at 982.
-  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:4px 2px 10px';
+  // A FLEX COLUMN, so leftover height has somewhere to go.
+  //
+  // THE DEAD SPACE, ROOT CAUSE. The chain above this is sound - #app-shell, #desktop-shell,
+  // .ds-main and #ds-content all fill the viewport correctly, measured at 1366px on an iPad Pro
+  // portrait. What does NOT fill is #DS-RUN-BODY: it is the balanced-columns host, it is
+  // flex:0 1 auto, and its height is whatever its tallest column happens to be. Measured 686px of
+  // body inside a 1366px scroller, so everything under the last card was empty scroller. It never
+  // showed on a laptop because there the content is TALLER than the viewport - no slack, nothing to
+  // reveal. An iPad is tall relative to its width, three columns make the content short, and the
+  // slack becomes a black band.
+  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:4px 2px 10px;display:flex;flex-direction:column';
   var hdr=document.createElement('div');
   // The title and its subtitle on ONE line. Two stacked lines plus a 16px gap cost 47px for six
   // words; side by side they cost 30 and read the same.
