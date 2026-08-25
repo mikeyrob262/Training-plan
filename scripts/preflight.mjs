@@ -1636,6 +1636,21 @@ try {
     fail('a sheet would open behind the desktop shell - invisible and unclickable (see above).');
   }
 
+  // STEP 102 - max HR is DERIVED from history, and the history contains lies. The single highest
+  //           reading in this library is 251 bpm from a 2014 chest strap; deriving the ceiling from
+  //           it would make every run read as recovery, which is worse than the stale field it
+  //           replaced and just as silent. Pins the ceiling, the recency window and the step-down,
+  //           each with a negative control, plus the ONE-max-HR claim that already recurred once.
+  console.log(`${D}. checking max HR is derived, and the guards on it...${X}`);
+  try {
+    const so = execSync('node scripts/maxhr-derive-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('max HR derivation regressed - a strap spike or a stale maximum can reach the zones (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

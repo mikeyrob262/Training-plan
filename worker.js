@@ -584,8 +584,17 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 // Standard 5-zone split as a percentage of max HR. Against the 11 runs that still carry an HR
 // stream, the old bands read z4 36% / z5 12%; these read z4 15% / z5 4%.
 var RUN_HR_PCTS = [0.65, 0.75, 0.85, 0.92];
-var RUN_HR_MAX_DEFAULT = 180;   // p95 of this athlete's observed run maxima is 182
+// ONE MAX HR, NOT TWO. This used to read st.maxHR itself and fall back to 180, while maxHR_ read the
+// same field and fell back to 172 - so with nothing on file the run zones on this page and the hrTSS
+// behind every CTL number were built on numbers 8 bpm apart. maxHR_ carries a comment describing
+// that exact bug being found and fixed; the fix reached the Settings input and never reached here.
+//
+// It now delegates, so there is one answer and it comes from history. The guarded typeof is because
+// this block is served ahead of the one maxHR_ lives in; the old behaviour is the fallback and never
+// the normal path.
+var RUN_HR_MAX_DEFAULT = 180;   // only reachable if maxHR_ is not loaded yet
 function runHrMax_(){
+  try{ if(typeof maxHR_==='function'){ var m=maxHR_(); if(m>120 && m<230) return m; } }catch(e){}
   var v = 0;
   try{ v = parseInt((typeof st!=='undefined' && st && st.maxHR) || 0, 10); }catch(e){ v = 0; }
   return (v > 120 && v < 230) ? v : RUN_HR_MAX_DEFAULT;
@@ -6413,7 +6422,9 @@ function arrayToIndexObject_(arr){
 // The fields below are resolved by whichever SIDE was written last instead. Everything
 // not listed keeps max-merge, which is why this is an allowlist and not a rewrite of
 // mergeState_ - that function also merges ride items, where max is load-bearing.
-var _LWW_TOP = ['ftp','weight','maxHR','restingHR','vo2max','calBaseline','protBaseline',
+// maxHROverride joins the list for the same reason maxHR is on it: it is a scalar the athlete sets,
+// so two devices must resolve it by clock rather than by whoever synced last.
+var _LWW_TOP = ['ftp','weight','maxHR','maxHROverride','restingHR','vo2max','calBaseline','protBaseline',
                 'yearlyMileageGoal','stravaAthleteId','wxTempF'];
 // Nested settings-style scalars, by container.
 var _LWW_SUB = { goalTargets:['annualMi','ctl','ftpW','weeklyMi','weightLb','wkg'],
@@ -10681,7 +10692,22 @@ function showSet(){
     // the effective value makes an unset field look set, which is how the old 180-vs-172 split hid:
     // the athlete read a number in the box and had no way to know it was not the one being used.
     // A placeholder says "this is what will be assumed", which is the true statement.
-    +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+((st.maxHR>0)?st.maxHR:'')+'" placeholder="'+_MAXHR_DEFAULT+' (assumed)" id="set-maxhr"></div>'
+    // MAX HR IS DERIVED NOW, and this box is an OVERRIDE rather than the source. The placeholder is
+    // the live derived figure, so an empty box reads as "this is what is being used" - the same rule
+    // that already applied here, now pointing at a measurement instead of a constant.
+    +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'
+      +(((st.maxHROverride>0)?st.maxHROverride:'') || '')+'" placeholder="'
+      +(function(){
+         var obs=(typeof maxHRObserved_==='function')?maxHRObserved_():null;
+         return (obs&&obs.bpm)?(obs.bpm+' (from your history)'):(_MAXHR_DEFAULT+' (assumed)');
+       })()+'" id="set-maxhr">'
+      +'<div style="font-size:9.5px;color:var(--t3);margin-top:3px;line-height:1.4">'
+      +(function(){
+         var obs=(typeof maxHRObserved_==='function')?maxHRObserved_():null;
+         if(!obs || !obs.bpm) return 'No heart-rate history to read yet. Leave blank to use the assumed default.';
+         return 'Read from your highest recorded heart rate since '+obs.since+' ('+obs.n+' activities). '
+           +'Leave blank to keep it updating on its own.';
+       })()+'</div></div>'
     // LTHR sits at the same tier as FTP because it does the same job: FTP scores rides, LTHR scores
     // runs. Every run TSS in the app is computed off this field and nothing hardcodes it.
     +'<div><div class="ci-lbl">LTHR (run, bpm)</div><input class="ci-in" type="number" value="'+(st.lthr||'')+'" placeholder="170" id="set-lthr"></div>'
@@ -10857,7 +10883,17 @@ function saveProfile(){
   if(n)st.profileName=n.value;
   if(w&&w.value)st.weight=w.value;
   if(f&&f.value){ st.ftp=parseInt(f.value); if(typeof ftpRecord_==='function') ftpRecord_(st.ftp,null); }
-  if(mh&&mh.value)st.maxHR=parseInt(mh.value);
+  // Writes the OVERRIDE, and CLEARING the box removes it rather than leaving the last value stuck -
+  // which is how the old field went stale in the first place. st.maxHR is left alone: it is legacy,
+  // _maxHROverride_ still honours it when it differs from the default, and overwriting it here would
+  // destroy the one piece of evidence about whether it was ever deliberately set.
+  if(mh){
+    var _mhv=parseInt(mh.value,10)||0;
+    // Cleared as 0, never deleted. An absent key has nothing for the merge to resolve, so a delete
+    // would be silently undone by the other device's copy - the removal has to be a VALUE that
+    // travels. 0 reads as unset everywhere it is consumed.
+    st.maxHROverride = (_mhv>0) ? _mhv : 0;
+  }
   // A changed LTHR reprices every run's TSS, exactly as a changed FTP reprices ride targets, so the
   // backfill is re-run rather than left until the next boot.
   if(lt&&lt.value){
@@ -38130,8 +38166,108 @@ var _FTP_DEFAULT=186;   // _FTP_RETEST_DATE is declared up with the block consta
 // "a figure computed from a guessed weight would look exactly like a measured one" - and HR zones
 // were the place it was not held.
 var _MAXHR_DEFAULT=172;
-function maxHR_(){ var v=(typeof st!=='undefined'&&st)?parseInt(st.maxHR,10):0; return (v>0)?v:_MAXHR_DEFAULT; }
-function maxHRSrc_(){ var v=(typeof st!=='undefined'&&st)?parseInt(st.maxHR,10):0; return (v>0)?'set':'default'; }
+
+// ==================== MAX HR IS DERIVED FROM HISTORY, NOT REMEMBERED BY HAND ==================
+//
+// It was a Settings field, and the field held 172 - which is _MAXHR_DEFAULT exactly. The default had
+// leaked into the stored value, so the number every HR zone on this app is built from was one nobody
+// had ever chosen, and it fell further behind every time a harder effort was recorded. 540 activities
+// have gone at or above it and 161 at or above 180.
+//
+// THE OBVIOUS RULE IS WRONG ON THIS DATA, and the data says so loudly. The single highest heart rate
+// ever recorded here is 251 bpm, on a run in November 2014, and behind it sit 245, 241, 240, 238 and
+// 230 - every one of them a lone reading from a chest strap in 2012-2014. Deriving 'my max HR' as
+// 'the highest value ever logged' would set the ceiling to 251, put the Z2 top at 188, and make every
+// run on the page look like recovery. That is worse than the stale 172, and it would be just as
+// silent. So three guards, each doing a different job:
+//
+//   A PHYSIOLOGICAL CEILING throws out the strap spikes. Nothing above _MAXHR_CEILING is a heart
+//   rate. It removes all six of the 2012-2014 readings and nothing else - the highest plausible
+//   value in the whole library is 206.
+//
+//   A RECENCY WINDOW, because a max HR from eleven years ago is not this athlete's max HR now. The
+//   decline is visible in his own data: 240s in 2012-14, 191-199 through 2016-2022, 188 in 2024,
+//   186 in 2025. Reading the last 24 months answers the question actually being asked.
+//
+//   A SPIKE STEP-DOWN inside the window, for the one a fresh strap could produce tomorrow. If the
+//   top reading stands more than _MAXHR_SPIKE_GAP above the next one down, it is not corroborated by
+//   anything and the next one is used instead. Today the top two are 188 and 186, so nothing steps.
+//
+// The window widens rather than failing when there is not enough recent data, and the whole thing
+// falls back to _MAXHR_DEFAULT only when there is nothing to read at all.
+var _MAXHR_CEILING=220;      // above this it is a strap artefact, not a heart rate
+var _MAXHR_WINDOW_M=24;      // months - the question is what your max is NOW
+var _MAXHR_WIDEN_M=60;       // widen before giving up
+var _MAXHR_MIN_N=5;          // fewer than this in the window is not a reading
+var _MAXHR_SPIKE_GAP=6;      // bpm clear of the runner-up = uncorroborated
+var _mxObsCache=null;
+function _maxHRRows_(){
+  var out=[];
+  var add=function(r){
+    if(!r || r.deleted) return;
+    var v=parseInt(r.maxHR,10);
+    if(!(v>80 && v<=_MAXHR_CEILING)) return;
+    var d=String(r.date||'').slice(0,10);
+    if(d.length!==10) return;
+    out.push({v:v,d:d});
+  };
+  // BOTH LIBRARIES. st.rides carries the recent tail and getRuns serves the snapshot; reading
+  // either alone under-reports, and this is a MAXIMUM - one missed activity changes the answer.
+  try{ ((typeof st!=='undefined'&&st&&st.rides)||[]).forEach(add); }catch(e){}
+  try{ if(typeof getRuns==='function') (getRuns()||[]).forEach(add); }catch(e){}
+  return out;
+}
+function _maxHRPick_(rows, months){
+  var cut=new Date(); cut.setMonth(cut.getMonth()-months);
+  var ck=cut.getFullYear()+'-'+('0'+(cut.getMonth()+1)).slice(-2)+'-'+('0'+cut.getDate()).slice(-2);
+  var vs=rows.filter(function(x){ return x.d>=ck; }).map(function(x){ return x.v; })
+             .sort(function(a,b){ return b-a; });
+  if(vs.length<_MAXHR_MIN_N) return null;
+  var i=0;
+  while(i+1<vs.length && (vs[i]-vs[i+1])>_MAXHR_SPIKE_GAP) i++;
+  return { bpm:vs[i], n:vs.length, dropped:i, since:ck, months:months };
+}
+// What the history says, or null when it does not say anything.
+function maxHRObserved_(){
+  var rows=_maxHRRows_();
+  // Keyed on the row count so the answer recomputes when the snapshot arms - at boot both libraries
+  // are empty and a cached null would outlive the data arriving.
+  if(_mxObsCache && _mxObsCache.key===rows.length) return _mxObsCache.val;
+  var val=_maxHRPick_(rows,_MAXHR_WINDOW_M) || _maxHRPick_(rows,_MAXHR_WIDEN_M);
+  _mxObsCache={ key:rows.length, val:val };
+  return val;
+}
+// An explicit override, for the athlete who wants a ceiling his history has not reached. Kept
+// because a deliberate choice must still be possible - but it is no longer the DEFAULT, and it is
+// its own field so that setting it is a decision rather than a value that leaked in.
+//
+// MIGRATION: the legacy st.maxHR is adopted as an override ONLY when it differs from the default. A
+// stored value identical to _MAXHR_DEFAULT cannot be told apart from never having been set, and on
+// this athlete's data that is exactly what it was.
+function _maxHROverride_(){
+  var v=0;
+  try{ v=parseInt((typeof st!=='undefined'&&st)?st.maxHROverride:0,10)||0; }catch(e){ v=0; }
+  if(v>0) return (v>80 && v<=_MAXHR_CEILING)?v:0;
+  var legacy=0;
+  try{ legacy=parseInt((typeof st!=='undefined'&&st)?st.maxHR:0,10)||0; }catch(e){ legacy=0; }
+  if(legacy>80 && legacy<=_MAXHR_CEILING && legacy!==_MAXHR_DEFAULT) return legacy;
+  return 0;
+}
+function maxHR_(){
+  var ov=_maxHROverride_(); if(ov>0) return ov;
+  var obs=maxHRObserved_(); if(obs && obs.bpm>0) return obs.bpm;
+  return _MAXHR_DEFAULT;
+}
+// Which of the three it was. A surface that prints the number can say where it came from, which is
+// the whole point - the old card said 'from your max HR in Settings' about a number Settings had
+// never been told.
+function maxHRSrc_(){
+  if(_maxHROverride_()>0) return 'override';
+  var obs=maxHRObserved_();
+  return (obs && obs.bpm>0) ? 'observed' : 'default';
+}
+try{ if(typeof window!=='undefined'){ window.maxHRObserved_=maxHRObserved_; window.maxHR_=maxHR_;
+  window.maxHRSrc_=maxHRSrc_; window._maxHROverride_=_maxHROverride_; } }catch(e){}
 function _ftpToday_(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 // RAW - callers that MUTATE the log (ftpRecord_) need the real array, tombstones included.
 function _ftpHist_(){ if(typeof st==='undefined'||!st) return []; if(!Array.isArray(st.ftpHistory)) st.ftpHistory=[]; return st.ftpHistory; }
@@ -49244,10 +49380,26 @@ function renderRunInto_(scr, surface){
     var zh=_runRail_('rn-zones', 3, zcards, { title:'HR zones', sub:'running &middot; max '+_mx+' bpm', minW:110 });
     // Where the number comes from, in one line, because a max HR of 180 is the DEFAULT and a reader
     // has no way to tell an assumed figure from a measured one otherwise.
+    // IT NO LONGER COMES FROM SETTINGS, so it no longer says that. The old line was true of a field
+    // holding 172 - the default, which had leaked into storage and then fallen behind 540 activities
+    // that went above it. The number is read from the history now, and this says which history.
     zh+='<div style="font-size:9.5px;color:var(--t3);margin-top:8px;line-height:1.45">'
-      +(( _mx===((typeof RUN_HR_MAX_DEFAULT!=='undefined')?RUN_HR_MAX_DEFAULT:180))
-          ? 'Max HR is the assumed default &mdash; set yours in Settings and these move with it.'
-          : 'From your max HR in Settings.')
+      +(function(){
+         var src=(typeof maxHRSrc_==='function')?maxHRSrc_():'default';
+         var obs=(typeof maxHRObserved_==='function')?maxHRObserved_():null;
+         if(src==='observed' && obs){
+           return 'Your highest recorded heart rate since '+obs.since+', across '+obs.n+' activities'
+             +(obs.dropped?(' &mdash; '+obs.dropped+' higher reading'+(obs.dropped>1?'s':'')
+                 +' ignored as uncorroborated'):'')
+             +'. It moves on its own the next time you go harder.';
+         }
+         if(src==='override'){
+           return 'Set by hand in Settings'
+             +((obs&&obs.bpm)?(', overriding the '+obs.bpm+' bpm your history since '+obs.since+' shows'):'')
+             +'.';
+         }
+         return 'Max HR is the assumed default &mdash; no heart-rate history to read it from yet.';
+       })()
       +'</div>';
     zoneCard.innerHTML=zh;
     // PAIRED WITH "WHY", side by side and padded rather than each running the full width. They are

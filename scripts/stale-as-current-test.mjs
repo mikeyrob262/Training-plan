@@ -39,8 +39,17 @@ ok('NEG: and nothing still uses the rival 180', !/st\.maxHR\|\|180/.test(SRC));
   const uses = (SRC.match(/maxHR_\(\)/g) || []).length;
   ok('every computation site routes through the accessor (' + uses + ')', uses >= 4);
 }
-ok('Settings shows EMPTY when unset, not a phantom value', /value="'\+\(\(st\.maxHR>0\)\?st\.maxHR:''\)\+'"/.test(SRC));
-ok('...with the fallback as a placeholder that says it is assumed', /placeholder="'\+_MAXHR_DEFAULT\+' \(assumed\)"/.test(SRC));
+// THE FIELD IS AN OVERRIDE NOW, not the source - max HR is derived from recorded history, because
+// this field held 172, which is _MAXHR_DEFAULT exactly: the default had leaked into storage and then
+// fallen behind 540 activities that went above it. The property this pins is unchanged and is the
+// whole point of the file: the box is EMPTY when nothing has been chosen, and the placeholder states
+// the value that will actually be used. Only the field it reads and the source of the fallback moved.
+ok('Settings shows EMPTY when nothing is overridden, not a phantom value',
+   /value="'\s*\+\(\(\(st\.maxHROverride>0\)\?st\.maxHROverride:''\)\s*\|\|\s*''\)\+'"/.test(SRC));
+ok('...with the effective value as the placeholder, and it says where that came from',
+   /obs&&obs\.bpm\)\?\(obs\.bpm\+' \(from your history\)'\):\(_MAXHR_DEFAULT\+' \(assumed\)'\)/.test(SRC));
+ok('...and the derived figure is never written into the box as though it were a choice',
+   !/value="'\+\(\(st\.maxHR>0\)/.test(SRC));
 ok('the zone card discloses an assumed max HR', /Zones assume a max HR of '\+_MAXHR_DEFAULT/.test(SRC));
 ok('...gated on the value actually being defaulted', /maxHRSrc_\(\)==='default'/.test(SRC));
 
