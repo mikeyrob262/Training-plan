@@ -296,16 +296,34 @@ console.log('\n' + Y + '=== both surfaces, from one renderer ===' + X);
   })()));
   ok('the coach is told about it too', src.indexOf('runAhead:(typeof _runAheadFlag_') >= 0);
   ok('the coach panel states it without offering to act', src.indexOf('it is on the Run Training page when you want it') >= 0);
-  // The blindness sentence is CONDITIONAL now, and that is the point of the injury log: with nothing
-  // on file it still says it cannot feel the leg; with a report on file it says what it read instead
-  // of repeating a disclaimer at him.
-  ok('with nothing on file the card still states its blindness',
-     src.indexOf('it cannot feel your leg, and nothing about an injury is on file') >= 0);
-  ok('with a report on file it says what it read', src.indexOf('You reported a ') >= 0);
+  // THE CARD WAS DELIBERATELY CUT DOWN. It used to make one point in four sentences - the runs, the
+  // median, that nothing moves on its own, and that it cannot feel the leg - and the athlete asked
+  // for the re-justification to go: the four buttons already say nothing happens automatically.
+  //
+  // What must SURVIVE is the one input the reader cannot check by looking: whether an injury is on
+  // file, and what it does to the proposal. That is asserted below.
+  //
+  // The "nothing changes until you say so" PROSE is gone on purpose. The guarantee it described is
+  // not - it is asserted on the CODE further up this file (one writer, reachable only from the
+  // accept button and the manual sheet, and nothing else pushing a rung record), which is a stronger
+  // check than a sentence being present.
+  ok('with nothing on file the card says so', src.indexOf('No injury on file') >= 0);
+  ok('with a report on file it says what it read', src.indexOf("_runEsc_(String(_inj.rec.area))+' issue '") >= 0);
   ok('...and what that does to the proposal',
-     src.indexOf('Nothing will be proposed until you mark it easing or resolved') >= 0);
-  ok('nothing changes without the athlete saying so, still',
-     src.indexOf('Nothing changes until you say so') >= 0);
+     src.indexOf('Nothing proposed until you mark it easing') >= 0);
+  ok('...and when a stale report has stopped holding it back',
+     src.indexOf('no longer holding this back') >= 0);
+  // The card must still be short. A regression here is the whole complaint coming back.
+  {
+    const rn = exFn('renderRunInto_');
+    const card = rn.slice(rn.indexOf('raCard.innerHTML='), rn.indexOf('scr.appendChild(raCard)'));
+    const sentences = (card.match(/[a-z]\. /g) || []).length;
+    ok('the card body stays terse (' + sentences + ' sentence breaks in the emitted copy)', sentences <= 6);
+    ok('NEG: the cut explanatory lines have not crept back',
+       card.indexOf('Nothing changes until you say so') < 0
+       && card.indexOf('it cannot feel your leg') < 0
+       && card.indexOf('The figure is the middle of those runs') < 0);
+  }
 }
 
 console.log(fails ? '\n' + R + fails + ' FAILED' + X + '\n' : '\n' + G + 'run ahead: all checks passed' + X + '\n');

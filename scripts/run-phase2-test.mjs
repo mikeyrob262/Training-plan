@@ -183,16 +183,18 @@ console.log('\n' + Y + '=== both surfaces get all three ===' + X);
   ok('exactly one why call site in the file',
      (src.match(/(?<!function )_runWhyCardHTML_\(\)/g) || []).length === 1);
   ok('NEG: 10k is no longer in the phase-2 list', !/_run10kCardHTML_/.test(mount));
-  ok('10k mounts from the shared renderer instead', /_run10kCardHTML_/.test(rn));
-  ok('...immediately after the PR board', rn.indexOf('_prSection_') < rn.indexOf('_run10kCardHTML_'));
-  // Anchored on the CALL, not the bare name: the 10k mount's own comment mentions
-  // _runPhase2Mount_, and an indexOf on the name alone finds that comment first and reports the
-  // wrong order.
-  ok('...and before the phase-2 block', rn.indexOf('_run10kCardHTML_') < rn.indexOf('_runPhase2Mount_(scr)'));
+  // 10k now renders INSIDE the Personal Bests card as a section of it - "under Personal Bests"
+  // meaning part of that card rather than a separate card that happens to land nearby. So it is
+  // called by _prSection_, not mounted by the page, and it is called with asSection=true.
+  const pr = exFn('_prSection_');
+  ok('10k renders inside the Personal Bests card', /_run10kCardHTML_\(true\)/.test(pr));
+  ok('...as a section below the board', pr.indexOf('_runRail_') < pr.indexOf('_run10kCardHTML_'));
+  ok('NEG: and the page no longer mounts it separately', !/_run10kCardHTML_/.test(rn));
+  ok('the section form draws its own heading', /10k race pace<\/span>/.test(exFn('_run10kCardHTML_')));
   // Exactly one CALL site across the whole file, so the move cannot have left a second one behind.
-  // The definition also reads _run10kCardHTML_(), so it is excluded rather than counted.
+  // The definition also reads _run10kCardHTML_( , so it is excluded rather than counted.
   ok('exactly one 10k call site in the file',
-     (src.match(/(?<!function )_run10kCardHTML_\(\)/g) || []).length === 1);
+     (src.match(/(?<!function )_run10kCardHTML_\(/g) || []).length === 1);
   ok('one card throwing cannot take the page down', /catch\(e\)\{ try\{ console\.error\('\[run-p2\]'/.test(mount));
   ok('an empty card renders nothing at all', /if\(!html\) return;/.test(mount));
   // The union source, not getRuns alone - the snapshot under-reports the recent runs these read.

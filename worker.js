@@ -47920,6 +47920,12 @@ function _prSection_(){
     +'Events with no result since '+_PR_BAND_LABEL+' are left off.';
   return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:12px 14px;margin:0 16px 12px">'
     +_runRail_('rn-pb', 1, cards, { title:'Personal Bests', sub:'running &middot; '+cards.length+' events' })
+    // ONE UNIT. Race pace lives INSIDE this card, below the board, because it is a target read
+    // against the very distances the board ranks.
+    +(function(){
+       try{ return (typeof _run10kCardHTML_==='function')?(_run10kCardHTML_(true)||''):''; }
+       catch(e){ try{ console.error('[run-10k]', e&&e.message); }catch(_e){} return ''; }
+     })()
     +'<div style="font-size:9.5px;color:var(--d-dim);line-height:1.5;margin-top:9px;padding-top:8px;border-top:1px solid var(--d-edge)">'+foot
       // THE TRADE, STATED WHERE IT APPLIES. This board ranks the live library so every row links;
       // the price is that a best living only in the uploaded snapshot drops off. Prints nothing
@@ -48388,11 +48394,22 @@ function _runShinCardHTML_(){
   // THE VERDICT LEADS. The count is still here, but as evidence UNDER a reading rather than as the
   // whole card - a bare "7 of 8 crept into tempo" is a number the reader has to interpret alone,
   // and the interpretation they reach for is "something is wrong", which is not what the data says.
-  var head='<div style="font-size:13.5px;font-weight:800;color:'+tone+';margin-bottom:6px">'+_runEsc_(v.head)+'</div>'
-    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.55;margin-bottom:9px">'
-    +v.body.map(function(t){ return _runEsc_(t); }).join(' ')+'</div>'
-    +'<div style="font-size:11.5px;font-weight:700;color:var(--t3);margin-bottom:2px">'
-    +w.drifted+' of the last '+w.sample+' easy runs went over '+w.driftPct+'% above the conversational band</div>';
+  // TWO LINES, NOT FOUR SENTENCES. The verdict is the finding; the cards below already show every
+  // run and its HRV. The prose used to spend three sentences saying the HRV check found NOTHING -
+  // a null result stated at the length of a discovery reads as though something was found - and
+  // repeated the can't-feel-your-leg point that the card above already makes. A null finding gets
+  // a clause; the shin line goes entirely, because it is said once on the page and once is right.
+  var hrvClause='';
+  if(v.hrv.have && v.hrv.rated){
+    hrvClause=v.hrv.thin
+      ? (' Too few to read against recovery.')
+      : ((v.tone==='watch')
+          ? (' '+v.hrv.below+' of '+v.hrv.rated+' on a below-median HRV day.')
+          : (' No HRV link ('+v.hrv.below+' of '+v.hrv.rated+' below median).'));
+  }
+  var head='<div style="font-size:13.5px;font-weight:800;color:'+tone+';margin-bottom:5px">'+_runEsc_(v.head)+'</div>'
+    +'<div style="font-size:12px;color:var(--t3);line-height:1.5;margin-bottom:9px">'
+    +w.drifted+' of the last '+w.sample+' went over '+w.driftPct+'% above easy.'+hrvClause+'</div>';
   // THE EVIDENCE IS A RAIL, not a stack. These rows are per-run detail under a verdict that already
   // states the finding, so they are something to flick through when the verdict is questioned rather
   // than a list to read. Each card still carries that day's HRV, so the summary above stays
@@ -48413,7 +48430,7 @@ function _runShinCardHTML_(){
     head+rows);
 }
 // 2. 10K PACING
-function _run10kCardHTML_(){
+function _run10kCardHTML_(asSection){
   var pl=_run10kPlan_();
   if(!pl.refs.length && !pl.current) return '';
   var line=function(label, prov, secPerMi, total, ref){
@@ -48446,6 +48463,17 @@ function _run10kCardHTML_(){
                pl.current.secPerMi, pl.current.sec, pl.current.ref);
   }
   var sub='Oct 18 2026'+(pl.daysOut!=null?(' &middot; '+pl.daysOut+' days out'):'');
+  // INNER FORM, for the Personal Bests card to absorb. Race pace is read against the same distances
+  // that board ranks - separated, the reader had to hold a 10k best from one card in their head to
+  // make sense of a target on another - so it is a SECTION of that card, not a neighbour of it. The
+  // standalone card form is kept for any caller that still wants it; today there is none.
+  if(asSection){
+    return '<div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--d-edge)">'
+      +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:2px">'
+      +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">10k race pace</span>'
+      +'<span style="font-size:10.5px;color:var(--d-dim)">'+sub+'</span></div>'
+      +body+'</div>';
+  }
   return _runCard_('10k race pace', sub, body);
 }
 // 3. WHY
@@ -48587,35 +48615,37 @@ function renderRunInto_(scr, surface){
         propose='There is no target to propose yet &mdash; '+(_t.why||'not enough to read a trend')+'.';
       }
       raCard.innerHTML=
-        // NO INTERNAL VOCABULARY IN RENDERED TEXT. "prescription" is what this codebase calls the
-        // thing; it is not what an athlete calls it, and the persona test bans it from any element
-        // body for exactly that reason. The plan asks, he runs - that is the sentence.
+        // SAY IT ONCE. This card had four sentences making one point: the runs, the median, that
+        // nothing moves on its own, and that it cannot feel the leg. The four buttons already say
+        // nothing happens automatically - a card that re-justifies itself every time it is read
+        // stops being read. What survives is the number, the proposal, and the one thing the reader
+        // cannot see for himself: whether an injury is on file.
+        //
+        // NO INTERNAL VOCABULARY. "prescription" is what this codebase calls the thing; the plan
+        // asks and he runs, which is the sentence.
         '<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">The plan is behind you</div>'
-        +'<div style="font-size:14.5px;color:var(--t1);line-height:1.6">Your last '
-          +_ra.streak+' weekday runs went longer than the plan asked for &mdash; '+days+' against a '+_ra.current+' target. '
-          +propose+'</div>'
-        // The sample line is not decoration. A pattern read off a thin library is still a pattern,
-        // but it is not the same claim as one read off a deep one, and the card has to say which.
-        +'<div style="font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:8px">'
-          +(_ra.thin
-            ? ('Read off '+_ra.sample+' runs in the last six weeks &mdash; a thin base. Treat this as a prompt to look, not a verdict.')
-            : ('Read off '+_ra.sample+' runs in the last six weeks. The figure is the middle of those runs, never the longest.'))
+        +'<div style="font-size:14.5px;color:var(--t1);line-height:1.55">'
+          +'Last '+_ra.streak+' weekday runs: <b>'+days+'</b> against a '+_ra.current+' target.'
+          +(_t.blocked
+              ? ' <b>No increase proposed</b> while that is on file.'
+              : (_t.proposedTop
+                  ? (' You sit around <b>'+_t.trendTop+' min</b>'
+                     + (_t.capped ? (' &mdash; this step proposes <b>'+_t.band+'</b>, capped at '+Math.round(_t.stepPct*100)+'% a move.')
+                                  : (' &mdash; target <b>'+_t.band+'</b>.')))
+                  : ' '+(_t.why||'Not enough yet to read a trend')+'.'))
         +'</div>'
-        // WHAT IT CAN AND CANNOT SEE, and now those are two different sentences. It still cannot
-        // feel the leg. It CAN read what he told it about the leg, and when he has told it
-        // something the card says so instead of repeating a disclaimer at him.
-        +'<div style="font-size:11.5px;color:'+(_inj&&_inj.rec&&!_inj.stale?'#f59e0b':'var(--t3)')+';line-height:1.55;margin-top:6px">'
+        // The one line that is not restating the numbers above: what it knows about the leg, which
+        // is the only input the reader cannot check at a glance.
+        +'<div style="font-size:11.5px;color:'+(_inj&&_inj.rec&&!_inj.stale?'#f59e0b':'var(--t3)')+';line-height:1.5;margin-top:7px">'
           +(_inj&&_inj.rec
              ? (_inj.stale
-                 ? ('Your '+_runEsc_(String(_inj.rec.area).toLowerCase())+' report is '+_inj.age+' days old and has not been updated, so it is no longer holding this back. Update it if it is still going.')
-                 : ('You reported a '+_runEsc_(String(_inj.rec.area).toLowerCase())+' issue '+_inj.age+' day'+(_inj.age===1?'':'s')+' ago'
-                    +(_inj.rec.severity?(' at '+_inj.rec.severity+'/10'):'')+', marked '+_runEsc_(_inj.rec.status)+'. '
-                    +(_inj.rec.status==='active'
-                        ? 'Nothing will be proposed until you mark it easing or resolved.'
-                        : 'Steps are held to '+Math.round(RUN_STEP_INJ_PCT*100)+'% while it is easing.')))
-             : 'Nothing changes until you say so. This reads distance and duration only &mdash; it cannot feel your leg, and nothing about an injury is on file.')
+                 ? ('Your '+_runEsc_(String(_inj.rec.area).toLowerCase())+' report is '+_inj.age+' days old and no longer holding this back.')
+                 : (_runEsc_(String(_inj.rec.area))+' issue '+_inj.age+'d ago, '+_inj.rec.severity+'/10, '+_runEsc_(_inj.rec.status)+'.'
+                    +(_inj.rec.status==='active' ? ' Nothing proposed until you mark it easing.'
+                                                 : ' Steps held to '+Math.round(RUN_STEP_INJ_PCT*100)+'%.')))
+             : 'Read off '+_ra.sample+' runs'+(_ra.thin?' &mdash; a thin base':'')+'. No injury on file.')
         +'</div>'
-        +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+        +'<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">'
           +((_t.proposedTop && !_t.blocked)
             ? ('<button id="run-rung-yes" style="padding:8px 13px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_t.band+'</button>')
             : '')
@@ -48669,15 +48699,9 @@ function renderRunInto_(scr, surface){
     if(_pr){ var _prw=document.createElement('div'); _prw.innerHTML=_pr; scr.appendChild(_prw); }
   }catch(e){ try{ console.error('[run-pr] ' + ((e&&e.message)||e)); }catch(_e){} }
 
-  // 10k RACE PACE, DIRECTLY UNDER THE PR BOARD rather than as its own block further down. It is a
-  // target time read against the same distances the board ranks, so the two belong to one thought:
-  // separated, the reader had to hold a 10k best from one card in their head to make sense of a
-  // target on another. Mounted here and removed from _runPhase2Mount_, so it still renders exactly
-  // once and both surfaces get it from this one call.
-  try{
-    var _10k=(typeof _run10kCardHTML_==='function')?(_run10kCardHTML_()||''):'';
-    if(_10k){ var _kw=document.createElement('div'); _kw.innerHTML=_10k; while(_kw.firstChild) scr.appendChild(_kw.firstChild); }
-  }catch(e){ try{ console.error('[run-10k] ' + ((e&&e.message)||e)); }catch(_e){} }
+  // 10k RACE PACE IS NOT MOUNTED HERE. It is rendered INSIDE the Personal Bests card by _prSection_
+  // as a section of it - "under Personal Bests" meaning part of that card, not a separate card that
+  // happens to land nearby. Mounting it here as well would draw it twice.
 
   var runs=getRuns();
   var now=new Date();
@@ -48802,18 +48826,18 @@ function renderRunInto_(scr, surface){
       {n:'Z4 Threshold',  lo:_bands[2]+1,hi:_bands[3],   c:'var(--c-amber)'},
       {n:'Z5 Hard',       lo:_bands[3]+1,hi:0,           c:'var(--c-red)'}
     ];
-    var zh='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
-      +'<span style="font-size:11px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.05em">HR zones</span>'
-      +'<span style="font-size:10.5px;color:var(--t3)">running &middot; max '+_mx+' bpm</span></div>';
-    // One line per zone: name left, range right. Nothing else.
-    Z.forEach(function(z,i){
+    // A RAIL, like everything else on this page. Five zones stacked is five rows of two numbers;
+    // as cards they are one flick and the band each one covers is the whole card rather than a
+    // value hanging off the right edge.
+    var zcards=Z.map(function(z){
       var range=(z.lo===0)?('under '+(z.hi+1)) : (z.hi===0 ? (z.lo+'+') : (z.lo+'&ndash;'+z.hi));
-      zh+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;'
-        +'padding:5px 0'+(i?';border-top:1px solid var(--b1)':'')+'">'
-        +'<span style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t2)">'
-        +'<span style="width:6px;height:6px;border-radius:50%;background:'+z.c+';flex-shrink:0"></span>'+z.n+'</span>'
-        +'<span style="font-size:12.5px;font-weight:700;color:var(--t1);white-space:nowrap">'+range+' bpm</span></div>';
+      return '<div style="background:var(--s2);border:1px solid var(--b1);border-radius:11px;padding:9px 11px;height:100%;box-sizing:border-box;border-left:3px solid '+z.c+'">'
+        +'<div style="font-size:10.5px;font-weight:700;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+z.n+'</div>'
+        +'<div style="font-size:13px;font-weight:800;color:var(--t1);margin-top:4px;white-space:nowrap">'+range+'</div>'
+        +'<div style="font-size:9px;color:var(--t3);margin-top:1px">bpm</div>'
+        +'</div>';
     });
+    var zh=_runRail_('rn-zones', 3, zcards, { title:'HR zones', sub:'running &middot; max '+_mx+' bpm', minW:110 });
     // Where the number comes from, in one line, because a max HR of 180 is the DEFAULT and a reader
     // has no way to tell an assumed figure from a measured one otherwise.
     zh+='<div style="font-size:9.5px;color:var(--t3);margin-top:8px;line-height:1.45">'
@@ -48842,12 +48866,9 @@ function renderRunInto_(scr, surface){
   try{ _runPhase2Mount_(scr); }catch(e){ try{ console.error('[run-p2] mount', e && e.message); }catch(_e){} }
 
 
-  // Recent runs
-  var histLbl=document.createElement('div');
-  histLbl.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin:0 16px 8px';
-  histLbl.textContent='Recent Runs';
-  scr.appendChild(histLbl);
-
+  // Recent runs. NO SEPARATE HEADING: the rail draws its own, and a second one appended as its own
+  // element is both a duplicate AND an orphan - _balCols_ balances direct children by height, so a
+  // free-standing label can be assigned to the other column from the thing it names.
   if(!runs.length){
     var empty=document.createElement('div');
     empty.style.cssText='margin:0 16px;background:var(--s2);border-radius:14px;padding:24px;text-align:center';
@@ -48925,14 +48946,15 @@ function renderRunInto_(scr, surface){
   }
   }
 
-  // Weekly chart
-  var chartLbl=document.createElement('div');
-  chartLbl.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin:4px 16px 8px';
-  chartLbl.textContent='Weekly Build';
-  scr.appendChild(chartLbl);
+  // Weekly chart. THE HEADING LIVES INSIDE THE CARD. It used to be appended as its own child, and
+  // _balCols_ assigns children to columns by measured height - so the label and the chart it names
+  // were routinely sorted into different columns and "WEEKLY BUILD" ended up sitting above the Races
+  // card with its own chart further down the page. A label that can be separated from its content
+  // will be; the fix is that it cannot be a separate element.
   var chartCard=document.createElement('div');
   chartCard.style.cssText='margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:14px';
-  chartCard.innerHTML='<div style="position:relative;height:90px;margin-bottom:8px"><canvas id="run-miles-chart" role="img" aria-label="Weekly run mileage chart">Weekly run miles</canvas></div>'
+  chartCard.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:9px">Weekly build</div>'
+    +'<div style="position:relative;height:90px;margin-bottom:8px"><canvas id="run-miles-chart" role="img" aria-label="Weekly run mileage chart">Weekly run miles</canvas></div>'
     +'<div style="display:flex;gap:12px;font-size:11px;color:var(--t3)">'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0F6E56;display:inline-block"></span>Actual</span>'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;border-top:1.5px dashed #0F6E56;display:inline-block"></span>Target</span>'
