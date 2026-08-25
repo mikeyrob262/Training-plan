@@ -171,7 +171,17 @@ console.log('\n' + Y + '=== both surfaces get all three ===' + X);
   // where the distances it targets are already ranked. The requirement changed, so the assertion
   // does - but it gets STRICTER, not looser: the card must still render, still render exactly once,
   // and must no longer be in the list it left, or it would draw twice.
-  ok('the phase-2 list still mounts drift and why', /_runShinCardHTML_/.test(mount) && /_runWhyCardHTML_/.test(mount));
+  // "Why" has left the phase-2 list too - it now mounts beside HR zones as a padded pair, so that
+  // the two reference panels sit side by side instead of each running the full width. Same shape as
+  // the 10k move below: the requirement changed, so the assertion gets STRICTER rather than looser -
+  // it must still render, still render exactly once, and no longer be in the list it left.
+  ok('the phase-2 list still mounts the drift card', /_runShinCardHTML_/.test(mount));
+  ok('NEG: why is no longer in the phase-2 list', !/_runWhyCardHTML_/.test(mount));
+  ok('why mounts from the shared renderer instead', /_runWhyCardHTML_/.test(rn));
+  ok('...paired with the HR zones panel', /pair\.appendChild\(zoneCard\)/.test(rn));
+  ok('...in a padded, wrapping pair rather than full width', /className='rn-pair'/.test(rn));
+  ok('exactly one why call site in the file',
+     (src.match(/(?<!function )_runWhyCardHTML_\(\)/g) || []).length === 1);
   ok('NEG: 10k is no longer in the phase-2 list', !/_run10kCardHTML_/.test(mount));
   ok('10k mounts from the shared renderer instead', /_run10kCardHTML_/.test(rn));
   ok('...immediately after the PR board', rn.indexOf('_prSection_') < rn.indexOf('_run10kCardHTML_'));

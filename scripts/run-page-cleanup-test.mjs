@@ -200,7 +200,13 @@ console.log('\n' + Y + '=== 6. the page cleanup ===' + X);
   // been replaced by a compact row - so the explanation went with the thing it explained. What must
   // still hold is the outcome: no map is built here, and the row opens the run detail instead, which
   // is where the map (and everything else the card used to duplicate) actually lives.
-  ok('the run rows open the run detail rather than inlining it', /_runOpenRef_\(rf\)/.test(rn));
+  // The rows are cards on a horizontal rail now, so the handler is bound after the HTML is committed
+  // and the reference travels in a data attribute rather than a closure - a ride handle can carry
+  // characters that break out of a quoted inline onclick, which is why rideRefData_ sanitises it and
+  // rideRefFromAttr_ reads it back by shape.
+  ok('the run cards open the run detail rather than inlining it', /_runOpenRef_\(ref\)/.test(rn));
+  ok('...with the reference sanitised into the attribute', /data-runopen="'\+rideRefData_\(ref\)/.test(rn));
+  ok('...and read back by shape, not by trusting the string', /rideRefFromAttr_\(el\.getAttribute\('data-runopen'\)\)/.test(rn));
   ok('...and the row is only clickable when the run resolves', /rideRefOk_\(ref\)/.test(rn));
 
   // The Running Growth chart: off THIS page, still alive where it belongs.

@@ -305,6 +305,19 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
    as the rail's hook and as the record of that decision. */
 .lg-hs{scrollbar-width:none}
 .lg-hs::-webkit-scrollbar{display:none}
+/* RUN TRAINING horizontal rails. Namespaced rn- and used by nothing else: the Legacy page has its
+   own lg- rail and this deliberately does not borrow it, so a change to one page's scroller cannot
+   reach the other. Scroll-snap is what makes "one at a time" and "three at a time" mean something -
+   without it a flick lands mid-card and the count is a suggestion rather than a layout. */
+.rn-hs{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:2px}
+.rn-hs::-webkit-scrollbar{display:none}
+.rn-hs > *{scroll-snap-align:start;flex:0 0 auto}
+.rn-nudge{background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:26px;height:26px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rn-nudge[disabled]{opacity:.3;cursor:default}
+/* Two panels that belong beside each other rather than wherever the balancer would drop them.
+   Wraps to stacked below 560px, which is where two columns stop being readable on a phone. */
+.rn-pair{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin:0 16px 12px}
+.rn-pair > *{flex:1 1 280px;min-width:0;margin:0 !important}
 .lg-nudge{background:var(--d-raise);border:1px solid var(--d-line2);color:var(--d-t2);width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
 .lg-nudge[disabled]{opacity:.28;cursor:default}
 /* A season card is a BUTTON now, so it says so with the cursor and a hover lift. The rail is a
@@ -47867,7 +47880,7 @@ function _prSection_(){
   // render, they just share a line instead of owning one - because the three tiers exist precisely
   // so a 2015 time is never the only number in front of him, and hiding one to save height would
   // undo the thing the board was built for.
-  var html='';
+  var cards=[];
   g.rows.forEach(function(r){
     var ev=r.ev;
     var target=r.reachable?r.career:r.band;
@@ -47890,24 +47903,23 @@ function _prSection_(){
       bits.push('this year '+link(r.season, fmt(ev,r.season))
         +(gap!==null ? (', beat by '+(ev.kind==='time'?_prFmtGap_(gap):(Math.round(gap*10)/10+' mi'))) : ', ahead'));
     }
-    html+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;'
-      +'padding:7px 0;border-top:1px solid var(--d-edge)">'
-      +'<div style="min-width:0">'
-        +'<div style="font-size:12.5px;font-weight:700;color:var(--d-head)">'+ev.name+'</div>'
-        +'<div style="font-size:10px;color:var(--d-t4);margin-top:1px;line-height:1.4">'+bits.join(' &middot; ')+'</div>'
+    // ONE CARD PER EVENT, one visible at a time. The board is a reference the athlete flicks
+    // through rather than a list he reads top to bottom, and giving each event the full width lets
+    // the provenance line breathe instead of being squeezed under a right-aligned figure.
+    cards.push('<div style="background:var(--d-inset);border:1px solid var(--d-edge);border-radius:12px;padding:11px 13px;height:100%;box-sizing:border-box">'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
+        +'<div style="font-size:13px;font-weight:700;color:var(--d-head)">'+ev.name+'</div>'
+        +'<span style="font-size:17px;font-weight:800;color:#FC4C02;flex-shrink:0;white-space:nowrap">'+link(target, fmt(ev,target))+'</span>'
       +'</div>'
-      +'<span style="font-size:15px;font-weight:800;color:#FC4C02;flex-shrink:0;white-space:nowrap">'+link(target, fmt(ev,target))+'</span>'
-      +'</div>';
+      +'<div style="font-size:10.5px;color:var(--d-t4);margin-top:4px;line-height:1.5">'+bits.join(' &middot; ')+'</div>'
+      +'</div>');
   });
   // ONE sentence, not three. The scope caveat is the load-bearing half - it says what the board is
   // NOT - so that is the half that survives the trim.
   var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months. '
     +'Events with no result since '+_PR_BAND_LABEL+' are left off.';
   return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:12px 14px;margin:0 16px 12px">'
-    +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:2px">'
-    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
-    +'<span style="font-size:10.5px;color:var(--d-dim)">running</span></div>'
-    +html
+    +_runRail_('rn-pb', 1, cards, { title:'Personal Bests', sub:'running &middot; '+cards.length+' events' })
     +'<div style="font-size:9.5px;color:var(--d-dim);line-height:1.5;margin-top:9px;padding-top:8px;border-top:1px solid var(--d-edge)">'+foot
       // THE TRADE, STATED WHERE IT APPLIES. This board ranks the live library so every row links;
       // the price is that a best living only in the uploaded snapshot drops off. Prints nothing
@@ -48173,6 +48185,41 @@ function _runWhy_(days){
   return { drivers:out, window:w, recentRuns:recent.length, priorRuns:prior.length };
 }
 // ---- Phase 2 cards. HTML only; every number comes from the functions above. -----------------------
+// ONE RAIL BUILDER for this page. per is how many cards are visible at once, which is the whole
+// point of the request - Personal Bests one at a time, Recent Runs three - so it is a parameter and
+// not four hand-tuned widths that drift apart. The card width is computed from the count and the
+// gap so the last visible card ends flush with the rail rather than being clipped mid-way, which is
+// what makes "three at a time" read as three rather than as two and a sliver.
+var _RN_GAP=10;
+function _runRail_(id, per, cardsHTML, opts){
+  opts=opts||{};
+  var w='calc((100% - '+((per-1)*_RN_GAP)+'px) / '+per+')';
+  var h='';
+  if(opts.title){
+    h+='<div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px">'
+      +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">'+opts.title+'</div>'
+      +(opts.sub?('<div style="font-size:11px;color:var(--t3);opacity:.85">'+opts.sub+'</div>'):'')
+      +'<div style="flex:1"></div>'
+      +'<button class="rn-nudge" aria-label="Scroll back" onclick="_runRailNudge_(&#39;'+id+'&#39;,-1)">&#8249;</button>'
+      +'<button class="rn-nudge" aria-label="Scroll on" onclick="_runRailNudge_(&#39;'+id+'&#39;,1)">&#8250;</button>'
+      +'</div>';
+  }
+  h+='<div id="'+id+'" class="rn-hs">'
+    +cardsHTML.map(function(c){ return '<div style="width:'+w+'">'+c+'</div>'; }).join('')
+    +'</div>';
+  return h;
+}
+// Nudges by one card, measured off the first child rather than assumed, so it stays correct at any
+// per-count and any viewport.
+function _runRailNudge_(id, dir){
+  try{
+    var el=document.getElementById(id); if(!el) return;
+    var first=el.firstElementChild;
+    var step=first?(first.getBoundingClientRect().width+_RN_GAP):Math.round(el.clientWidth*0.8);
+    el.scrollBy({ left:dir*step, behavior:'smooth' });
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window._runRailNudge_=_runRailNudge_; } }catch(e){}
 function _runCard_(title, sub, bodyHTML){
   return '<div style="background:var(--s2);border-radius:14px;padding:14px 16px;margin:0 16px 12px;border:1px solid var(--b1)">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">'+title+'</div>'
@@ -48340,18 +48387,21 @@ function _runShinCardHTML_(){
     +v.body.map(function(t){ return _runEsc_(t); }).join(' ')+'</div>'
     +'<div style="font-size:11.5px;font-weight:700;color:var(--t3);margin-bottom:2px">'
     +w.drifted+' of the last '+w.sample+' easy runs went over '+w.driftPct+'% above the conversational band</div>';
-  var rows=w.rows.map(function(r){
+  // THE EVIDENCE IS A RAIL, not a stack. These rows are per-run detail under a verdict that already
+  // states the finding, so they are something to flick through when the verdict is questioned rather
+  // than a list to read. Each card still carries that day's HRV, so the summary above stays
+  // checkable run by run.
+  var rows=_runRail_('rn-drift', 3, w.rows.map(function(r){
     var hv=_runHrvOn_(r.date);
-    // The HRV that day sits ON the row, so the claim above is checkable line by line rather than
-    // being a summary the reader has to take on trust.
     var lowMark=(v.hrv.have && hv!=null && hv<v.hrv.base);
     var col=r.drifted?'var(--c-red)':'var(--c-green)';
-    return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0">'
-      +'<span style="color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_runEsc_(r.date)+' '+_runEsc_(r.name)+'</span>'
-      +'<span style="flex-shrink:0;white-space:nowrap">'
-      +(hv!=null?('<span style="color:'+(lowMark?'var(--c-red)':'var(--t3)')+';font-size:11px;margin-right:8px">HRV '+hv+'</span>'):'')
-      +'<span style="color:'+col+';font-weight:700">'+r.above+'% above easy</span></span></div>';
-  }).join('');
+    return '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:11px;padding:9px 11px;height:100%;box-sizing:border-box">'
+      +'<div style="font-size:11.5px;font-weight:700;color:'+col+'">'+r.above+'% above easy</div>'
+      +'<div style="font-size:11px;color:var(--t1);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_runEsc_(r.name)+'</div>'
+      +'<div style="font-size:9.5px;color:var(--t3);margin-top:2px;white-space:nowrap">'+_runEsc_(r.date)
+      +(hv!=null?(' &middot; <span style="color:'+(lowMark?'var(--c-red)':'var(--t3)')+'">HRV '+hv+'</span>'):'')+'</div>'
+      +'</div>';
+  }));
   return _runCard_('Easy-run drift',
     'share of each run above the conversational band &middot; drift = over '+w.driftPct+'%',
     head+rows);
@@ -48412,10 +48462,10 @@ function _runWhyCardHTML_(){
     +'Every row is a measured change in one input. Ordered by size, not by story.</div>'+rows);
 }
 function _runPhase2Mount_(scr){
-  // 10k race pace is NOT in this list any more: it mounts directly under the Personal Bests
-  // board, where the distances it targets are already ranked. Listed in both places it would
-  // render twice.
-  [_runShinCardHTML_, _runWhyCardHTML_].forEach(function(fn){
+  // NEITHER 10k RACE PACE NOR "WHY" IS IN THIS LIST. 10k mounts under the Personal Bests board where
+  // the distances it targets are already ranked; Why mounts beside HR zones as a padded pair. Listed
+  // in both places either one would render twice.
+  [_runShinCardHTML_].forEach(function(fn){
     var html='';
     try{ html=fn()||''; }catch(e){ try{ console.error('[run-p2]', e && e.message); }catch(_e){} }
     if(!html) return;
@@ -48766,7 +48816,19 @@ function renderRunInto_(scr, surface){
           : 'From your max HR in Settings.')
       +'</div>';
     zoneCard.innerHTML=zh;
-    scr.appendChild(zoneCard);
+    // PAIRED WITH "WHY", side by side and padded rather than each running the full width. They are
+    // both reference panels - one says what the bands are, the other says which inputs moved - and
+    // at full width each wasted most of its row on empty space. .rn-pair wraps to stacked below
+    // 560px, where two columns stop being readable on a phone.
+    var pair=document.createElement('div');
+    pair.className='rn-pair';
+    pair.appendChild(zoneCard);
+    try{
+      var whyHTML=(typeof _runWhyCardHTML_==='function')?(_runWhyCardHTML_()||''):'';
+      if(whyHTML){ var wd=document.createElement('div'); wd.innerHTML=whyHTML;
+        while(wd.firstChild) pair.appendChild(wd.firstChild); }
+    }catch(e){ try{ console.error('[run-why]', e&&e.message); }catch(_e){} }
+    scr.appendChild(pair);
   }
   // Phase 2 sits between the zone reference above and the per-run detail below: the drift
   // warning reads against those zones, and the pacing and Why cards read the same runs the
@@ -48809,13 +48871,10 @@ function renderRunInto_(scr, surface){
     noneY.textContent='No runs recorded yet this year.';
     scr.appendChild(noneY);
   } else {
-    var runList=document.createElement('div');
-    // NO INNER SCROLLER ANY MORE, on either surface. The desktop-only 380px box existed because the
-    // cards were tall; rows are not, so ten of them cost less than two cards did. That also retires
-    // the iPad gesture trap the old box carried - a nested scroller in a 810px column captured the
-    // touch and the page itself would not scroll.
-    runList.style.cssText='margin:0 16px 14px;background:var(--s1);border:1px solid var(--b1);border-radius:14px;overflow:hidden';
-    sorted.forEach(function(r,ri){
+    // THREE AT A TIME, HORIZONTALLY. Ten runs stacked is a column of rows the athlete scrolls past;
+    // three abreast is a glance. Each card carries the same five facts the row did and opens the
+    // same run detail.
+    var cards=sorted.map(function(r){
       var mi=parseFloat(r.distance)||0;
       var sec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs)||0);
       var pace='';
@@ -48827,27 +48886,36 @@ function renderRunInto_(scr, surface){
       var hrWarn=r.avgHR&&r.avgHR>121&&(r.type==='Easy Run'||r.type==='Long Run'||r.type==='Walk/Run');
       var ref=(typeof _runRefFor_==='function')?_runRefFor_(r):'';
       var open=(typeof rideRefOk_==='function') && rideRefOk_(ref);
-      var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px'
-        +(ri?';border-top:1px solid var(--b1)':'')+(open?';cursor:pointer':'');
-      row.innerHTML='<div style="min-width:0;flex:1">'
-          +'<div style="font-size:12.5px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            +(hrWarn?'<span title="Ran above the easy ceiling" style="color:var(--c-amber);margin-right:5px">&#9679;</span>':'')
-            +_runEsc_(nm)+'</div>'
-          +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'+_runEsc_(String(r.date).slice(0,10))
-            +(r.type?(' &middot; '+_runEsc_(String(r.type))):'')+'</div>'
-        +'</div>'
-        +'<div style="text-align:right;flex-shrink:0;white-space:nowrap">'
-          +'<div style="font-size:12.5px;font-weight:700;color:var(--t1)">'+(mi?(Math.round(mi*10)/10+' mi'):'&mdash;')+'</div>'
-          +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'
+      return '<div '+(open?('data-runopen="'+rideRefData_(ref)+'" '):'')
+        +'style="background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:10px 12px;height:100%;box-sizing:border-box'
+        +(open?';cursor:pointer':'')+'">'
+        +'<div style="font-size:12px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+          +(hrWarn?'<span title="Ran above the easy ceiling" style="color:var(--c-amber);margin-right:4px">&#9679;</span>':'')
+          +_runEsc_(nm)+'</div>'
+        +'<div style="font-size:9.5px;color:var(--t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+          +_runEsc_(String(r.date).slice(0,10))+(r.type?(' &middot; '+_runEsc_(String(r.type))):'')+'</div>'
+        +'<div style="display:flex;align-items:baseline;gap:8px;margin-top:7px;flex-wrap:wrap">'
+          +'<span style="font-size:15px;font-weight:800;color:var(--t1);line-height:1">'+(mi?(Math.round(mi*10)/10):'&mdash;')
+          +'<span style="font-size:9.5px;font-weight:600;color:var(--t3);margin-left:2px">mi</span></span>'
+          +'<span style="font-size:10.5px;color:var(--t3)">'
             +(sec>0?((typeof fmtHM_==='function')?fmtHM_(sec):Math.round(sec/60)+'m'):'&mdash;')
-            +(pace?(' &middot; '+pace+'/mi'):'')+'</div>'
+            +(pace?(' &middot; '+pace+'/mi'):'')+'</span>'
         +'</div>'
-        +(open?'<span style="color:var(--t3);font-size:14px;flex-shrink:0">&rsaquo;</span>':'');
-      if(open){ (function(rf){ row.onclick=function(){ _runOpenRef_(rf); }; })(ref); }
-      runList.appendChild(row);
+        +'</div>';
     });
-    scr.appendChild(runList);
+    var railWrap=document.createElement('div');
+    railWrap.style.cssText='margin:0 16px 14px';
+    railWrap.innerHTML=_runRail_('rn-recent', 3, cards, { title:'Recent runs', sub:sorted.length+' this year' });
+    scr.appendChild(railWrap);
+    // Bound after the HTML is committed. A data attribute rather than an inline onclick, because a
+    // ride handle can carry characters that break out of a quoted attribute - rideRefData_ sanitises
+    // it and rideRefFromAttr_ reads it back by shape.
+    railWrap.querySelectorAll('[data-runopen]').forEach(function(el){
+      el.onclick=function(){
+        var ref=(typeof rideRefFromAttr_==='function')?rideRefFromAttr_(el.getAttribute('data-runopen')):-1;
+        if(typeof rideRefOk_==='function' && rideRefOk_(ref)) _runOpenRef_(ref);
+      };
+    });
   }
   }
 

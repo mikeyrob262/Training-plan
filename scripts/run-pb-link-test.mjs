@@ -66,6 +66,10 @@ const M = new Function(
     // so every row links by construction. _prSnapshotOnly_ prices what that trade costs and is pulled
     // in from real source too, so it cannot silently stop reporting.
     exFn('_prLiveRuns_') + exFn('_prSnapshotOnly_') + exFn('_pbRefWhy_') +
+    // The board renders as a one-at-a-time horizontal rail now, so its builder has to be in the
+    // bundle. Pulled from real source rather than stubbed - a stub would let the rail stop emitting
+    // the link markup without this test noticing, which is the one thing it exists to watch.
+    'var _RN_GAP=10;' + exFn('_runRail_') +
     exFn('_prCompute_') + exFn('_prSection_') +
     exVar('RUN_RACE') + exFn('_runPaceStr_') + exFn('_runCurrentPace_') +
     exFn('_run10kPlan_') + exFn('_run10kCardHTML_') +
