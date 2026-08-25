@@ -36540,6 +36540,125 @@ window.runBackfill = function(){
 
 
 
+// ==================== WHAT THE DAILY BRIEFING IS TOLD ABOUT TODAY ====================
+//
+// Both briefing surfaces - dsShowAICoach and showAICoach - compose their own prompt, so both read
+// these. One definition, because the two prompts have drifted before and a fact that differs
+// between them is worse than one that is merely wrong.
+
+// ---- THE RACE, AND ITS DISTANCE AS A FACT RATHER THAN A NAME --------------------------------------
+//
+// The briefing said "you've got a half marathon in 54 days". It was not inventing that: raceStr was
+// built as the name, then " in ", then the day count - and the st.races entry for 2026-10-18 is
+// titled "Grand Rapids Half Marathon". A free-text TITLE was doing the work of a distance field, so
+// a stale title became a stated fact about the athlete's goal race.
+//
+// The block already knows better and says so in its own comment: _BLOCK_MILESTONES carries
+// slug 'tenk', label '10k run', note '6.2 mi - the goal race', with a note recording that the
+// half-marathon relabel was reverted because a 10-week half build put the shin in harm's way.
+//
+// So the milestone is the authority when the dates match, the distance is emitted as its own fact,
+// and where the calendar title disagrees the prompt says the title is stale rather than leaving two
+// names for one race and letting the model pick. Nothing is written back to st.races - that is the
+// athlete's store, and a briefing does not get to silently rename their calendar.
+function _coachRaceFacts_(){
+  var next=null;
+  try{ next=(typeof getNextRace_==='function')?getNextRace_():null; }catch(e){}
+  if(!next) return 'none scheduled';
+  var dk='';
+  try{ dk=next.dateObj ? (next.dateObj.getFullYear()+'-'+('0'+(next.dateObj.getMonth()+1)).slice(-2)+'-'+('0'+next.dateObj.getDate()).slice(-2)) : ''; }catch(e){}
+  var ms=null;
+  try{
+    (typeof _BLOCK_MILESTONES!=='undefined'?_BLOCK_MILESTONES:[]).forEach(function(m){
+      if(!ms && m && m.date && dk && m.date===dk) ms=m;
+    });
+  }catch(e){}
+  var out;
+  if(ms){
+    out=ms.label+(ms.note?(' ('+ms.note+')'):'')+' in '+next.daysOut+' days';
+    // The calendar title only gets mentioned when it CONTRADICTS the block, and then only to be
+    // corrected - so the model neither repeats it nor has to guess which of two names is real.
+    var t=String(next.name||'').toLowerCase(), lbl=String(ms.label||'').toLowerCase();
+    if(t && lbl && t.indexOf(lbl.split(' ')[0])<0){
+      out+='. The calendar entry is still titled "'+next.name+'" - that title is STALE and must not '
+        +'be repeated; the distance is '+ms.label+(ms.note?(', '+ms.note):'')+'.';
+    }
+  } else {
+    out=next.name+' in '+next.daysOut+' days';
+  }
+  if(next.target) out+=' (target '+next.target+')';
+  if(next.status==='tentative') out+=' [TENTATIVE - not yet confirmed]';
+  return out;
+}
+
+// ---- WHERE TODAY'S SESSION HAPPENS ---------------------------------------------------------------
+//
+// The WEATHER NOTE hedged "if any portion of the VO2 work is outdoors, cover exposed skin". The VO2
+// work is never outdoors: _CV_ZWIFT_CAT maps vo2 and threshold to Zwift categories, _cvZwiftLine_
+// writes Zwift route instructions for them, and the app exports them as .zwo workout files. The
+// briefing simply was not told, so the model hedged - which is the correct thing to do with a fact
+// you have not been given, and the fix belongs in the inputs rather than in the wording.
+//
+// z2 is deliberately UNDECIDED rather than assumed. It gets Zwift guidance too, but an endurance
+// ride is the one that genuinely goes either way, and claiming it is indoors would be the same
+// species of error in the opposite direction.
+var _COACH_VENUE={
+  vo2:      { where:'indoors on Zwift', indoor:true },
+  threshold:{ where:'indoors on Zwift', indoor:true },
+  strength: { where:'indoors',          indoor:true },
+  mobility: { where:'indoors',          indoor:true },
+  group:    { where:'outdoors',         indoor:false },
+  easyRun:  { where:'outdoors',         indoor:false },
+  run10k:   { where:'outdoors',         indoor:false },
+  z2:       { where:'either indoors or outdoors', indoor:null }
+};
+function _coachVenueToday_(dateKey){
+  var out={ line:'', allIndoor:false, anyOutdoor:false, known:false };
+  try{
+    var dk=dateKey||((typeof getTodayKey==='function')?getTodayKey():'');
+    var sess=[];
+    if(typeof planSessionsForDate_==='function') sess=planSessionsForDate_(dk)||[];
+    if(!sess.length && typeof blockPlanFor_==='function'){
+      var bp=blockPlanFor_(dk); sess=(bp&&bp.sessions)||[];
+    }
+    var bits=[], indoor=0, outdoor=0, rated=0;
+    sess.forEach(function(s){
+      if(!s || s.deleted) return;
+      var v=_COACH_VENUE[String(s.intent||s.type||'')];
+      if(!v) return;
+      rated++;
+      bits.push(String(s.intent||s.type)+' is done '+v.where);
+      if(v.indoor===true) indoor++; else if(v.indoor===false) outdoor++;
+    });
+    if(!rated) return out;
+    out.known=true;
+    out.allIndoor=(indoor>0 && outdoor===0);
+    out.anyOutdoor=(outdoor>0);
+    out.line=bits.join('; ');
+  }catch(e){}
+  return out;
+}
+// The instruction the WEATHER NOTE gets. Written here so both surfaces say the same thing, and
+// phrased as what the section is FOR rather than as a ban - a briefing that simply omits weather on
+// an indoor day reads as an oversight, whereas one that says the weather does not touch today reads
+// as a coach who checked.
+function _coachWeatherRule_(venue){
+  if(!venue || !venue.known) return '';
+  if(venue.allIndoor){
+    return ' EVERY session prescribed today is indoors ('+venue.line+'). The WEATHER NOTE must NOT give '
+      +'outdoor advice, must not hedge about "if any of it is outdoors", and must not suggest clothing '
+      +'or route changes. Say in one line that the weather does not affect today because the work is '
+      +'indoors, and if it is worth anything add what it means for tomorrow instead.';
+  }
+  if(venue.anyOutdoor){
+    return ' Session venues today: '+venue.line+'. Apply weather advice ONLY to the outdoor ones and '
+      +'never to a session done indoors.';
+  }
+  return ' Session venues today: '+venue.line+'.';
+}
+try{ if(typeof window!=='undefined'){ window._coachRaceFacts_=_coachRaceFacts_;
+  window._coachVenueToday_=_coachVenueToday_; window._coachWeatherRule_=_coachWeatherRule_; } }catch(e){}
+
 function dsShowAICoach(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
@@ -36608,8 +36727,11 @@ function dsShowAICoach(){
     return b.name+' ('+b.type+', '+bikeStatusBadge(b).label+')';
   }).join('; ');
 
-  var _nextRace=getNextRace_();
-  var raceStr=_nextRace?_nextRace.name+' in '+_nextRace.daysOut+' days'+(_nextRace.target?' (target '+_nextRace.target+')':'')+(_nextRace.status==='tentative'?' [TENTATIVE - not yet confirmed]':''):'none scheduled';
+  // The race's DISTANCE as a fact, not inferred from a calendar title that can go stale. See
+  // _coachRaceFacts_: the st.races entry for the goal race is still titled "Grand Rapids Half
+  // Marathon" and the block says 10k, so the block wins and the stale title is named as stale.
+  var raceStr=_coachRaceFacts_();
+  var _venue=_coachVenueToday_(getTodayKey());
 
   getWeather_().then(function(wres){
     var wx=wres.data;
@@ -36631,7 +36753,9 @@ function dsShowAICoach(){
       +' NUTRITION TODAY:'+Math.round(todayNutr.cal)+'cal '+Math.round(todayNutr.p)+'g protein '+Math.round(todayNutr.c)+'g carbs '+Math.round(todayNutr.f)+'g fat'
       +' RECENT RIDES:'+recentRides.map(function(r){return r.name+' '+r.date+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join(', ')
       +' UPCOMING:'+upcoming.join(', ')
+      +(_venue.known?(' TODAY VENUE:'+_venue.line):'')
       +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.'
+      +_coachWeatherRule_(_venue)
       // FORM CHECK is the section that most invites hedging - it is literally a status read - so the
       // conviction layer matters more here than anywhere else on this surface.
       +' '+_SM_CONVICTION+COACH_GONOGO;
@@ -55364,6 +55488,10 @@ function showAICoach(){
     +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
     +'. TODAY ALREADY LOGGED: '+(todayActual||'nothing yet')
     +'. TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
+    // WHERE today's work happens, so the WEATHER NOTE stops hedging about outdoor conditions for a
+    // session ridden on Zwift. Same resolver the desktop briefing uses - one definition, because a
+    // fact that differs between the two surfaces is worse than one that is merely wrong.
+    +((function(){ var v=_coachVenueToday_(getTodayKey()); return v.known?('. TODAY VENUE: '+v.line):''; })())
     +'. TODAYS WEATHER: '+weatherStr
     +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
     +'. TODAYS NUTRITION SO FAR: '+Math.round(todayNutrition.cal)+' cal, '+Math.round(todayNutrition.p)+'g protein, '+Math.round(todayNutrition.c)+'g carbs, '+Math.round(todayNutrition.f)+'g fat'
@@ -55372,6 +55500,7 @@ function showAICoach(){
     }).join('; ')
     +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
     +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'
+    +_coachWeatherRule_(_coachVenueToday_(getTodayKey()))
     // "Be direct and motivating" was already here and was never enough on its own - it is an
     // adjective, not a rule, and the caution rules outranked it. This is the rule.
     +' '+_SM_CONVICTION+COACH_GONOGO
