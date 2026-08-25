@@ -50330,20 +50330,33 @@ try{ if(typeof window!=='undefined'){ window._injAll_=_injAll_; window._injActiv
 // NOTHING HERE AUTO-ADVANCES, and that is unchanged and not negotiable. Every path above ends in a
 // proposal the athlete accepts by hand. A better-computed number does not earn the right to move
 // anything on its own.
-// THE STEP CEILING IS THE BLOCK'S OWN RAMP CAP, NOT A NEW NUMBER. BLOCK_RUN_RAMP_MAX is 0.10 and
-// it already governs the Sunday long-run build, capped there for exactly this shin. Inventing a
-// second, looser figure for the same athlete and the same leg would be one fact with two values -
-// the split this codebase keeps being repaired for - so this reads the existing one.
+// CATCHING UP IS NOT RAMPING UP, AND THEY DO NOT GET THE SAME NUMBER.
 //
-// THE TENSION, STATED, because it is a real one and the athlete asked for it to be flagged rather
-// than silently resolved. The 10% rule is about ramping into load that is NEW. Here the runs are
-// already being done - 44 min against a 25-27 target - so moving the plan to 44 asks for nothing he
-// is not already doing, and a 10% cap makes the plan take about six acceptances to describe what is
-// already true. A case can be made for a faster ratification rate. It is not a case this code
-// should make on its own, so the conservative existing number governs what is PROPOSED, and the
-// athlete can set any target he wants by hand in one move - which is what "Set it myself" is for.
-var RUN_STEP_MAX_PCT = (typeof BLOCK_RUN_RAMP_MAX==='number' && BLOCK_RUN_RAMP_MAX>0) ? BLOCK_RUN_RAMP_MAX : 0.10;
-var RUN_STEP_INJ_PCT = RUN_STEP_MAX_PCT/2;   // halved again when an issue is on file and easing
+// The first cut of this used BLOCK_RUN_RAMP_MAX - the block's 10% cap on the Sunday long-run build -
+// on the reasoning that one shin should not have two safety numbers. Measured against the real
+// library that produced a first proposal of 27-29 min: the exact figure the ladder gave, and the
+// exact thing this rework exists to stop giving.
+//
+// The reasoning was wrong, and the fix is not to loosen a safety rule but to notice there are two
+// different questions here:
+//
+//   BLOCK_RUN_RAMP_MAX governs NEW load - the Sunday build asking for a distance he has not run.
+//     10% a week is the right shape for that and it is untouched.
+//   THIS governs CATCHING UP - moving the written plan toward minutes he is ALREADY running, three
+//     to four times a week, and has been for six weeks. That asks for no new load at all. Held to
+//     10% it takes six acceptances for the plan to describe something already true, and every one
+//     of those six cards says a number he beat a fortnight ago.
+//
+// G1 is what makes the faster rate safe, and it is doing the real work: the proposal can never
+// exceed the MEDIAN of what he actually ran, so catching up cannot become ramping up no matter how
+// large this is. 35% takes 27 -> 36 -> 44: two decisions, on two different days, each one landing
+// on or below load already being carried.
+//
+// FLAGGED FOR THE ATHLETE, because it is his leg and not this file's call: 0.35 is a judgement, and
+// the one-line change to make it slower or faster is right here.
+var RUN_CATCHUP_PCT  = 0.35;
+var RUN_STEP_MAX_PCT = RUN_CATCHUP_PCT;
+var RUN_STEP_INJ_PCT = RUN_STEP_MAX_PCT/2;   // halved when an issue is on file and easing
 // The trend needs no more runs than the flag itself does, and that is safe BECAUSE OF THE CAP: at
 // small samples the step ceiling is what decides the proposal, not the median, so noise in a
 // two-run median cannot reach the number on screen. Requiring more would leave the card firing with

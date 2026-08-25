@@ -51,7 +51,8 @@ const VARS = ['_TB_VERSION', '_FTP_RETEST_DATE', 'BLOCK_RUN_RAMP_MAX', 'SCHED_PR
   // The trend target and the injury log. A constant missing from this list is a ReferenceError
   // that _runAheadFlag_'s own try/catch swallows, so the flag comes back null and every assertion
   // below reads as a broken detector rather than a broken harness.
-  'RUN_STEP_MAX_PCT', 'RUN_STEP_INJ_PCT', 'RUN_TREND_MIN_N', 'RUN_BAND_WIDTH', 'INJ_ACTIVE_DAYS'];
+  'RUN_CATCHUP_PCT', 'RUN_STEP_MAX_PCT', 'RUN_STEP_INJ_PCT', 'RUN_TREND_MIN_N', 'RUN_BAND_WIDTH',
+  'INJ_ACTIVE_DAYS'];
 const OBJS = [['_BLOCK_MILESTONES', '[', ']'], ['_RUN_BUILD', '{', '}'], ['_CLIMB_REHEARSAL', '{', '}'],
   ['_BLOCK_PROG', '{', '}'], ['STRENGTH_POOL_', '[', ']'], ['MOBILITY_POOL_', '[', ']'],
   ['SESSION_DEFS', '{', '}'], ['EX_LIBRARY', '[', ']']];
@@ -121,10 +122,9 @@ console.log('\n' + Y + '=== the detector fires on a PATTERN, not a good day ==='
   ok('a flag is raised', !!f);
   eq('...naming the current prescription', f.current, '25-27 min');
   // The proposal is now COMPUTED, not the next ladder rung. Median of 38 and 41 is 39.5; the step
-  // ceiling is 27 x 1.10 = 29, so 29 governs and the band is 27-29. It coincides with the old
-  // ladder rung here, which is exactly why a bigger sample is asserted below - that is where the
-  // two designs stop agreeing.
-  eq('...and a computed target, capped by the ramp rate', f.next, '27-29 min');
+  // ceiling is 27 x 1.35 = 36, so 36 governs and the band is 34-36. The old ladder's answer here
+  // was 27-29 whatever the runs said; this one is a step toward a named destination.
+  eq('...and a computed target, capped by the catch-up rate', f.next, '34-36 min');
   eq('...whose trend figure is the median of the two runs', f.target.trendTop, 39);
   ok('...and it says it was capped', f.target.capped === true);
   eq('...off two consecutive runs', f.streak, 2);
@@ -180,15 +180,15 @@ console.log('\n' + Y + '=== accepting advances the block, FORWARD ONLY ===' + X)
 {
   const M = load({ runs: runsOn([['2026-08-31', 38], ['2026-09-02', 41]]) });
   const done = M.runRungAccept_(NOW);
-  ok('it returns what it acted on', !!done && done.struct === '27-29 min');
+  ok('it returns what it acted on', !!done && done.struct === '34-36 min');
   eq('one rung recorded', M.st.runRungs.length, 1);
   eq('dated today, not backdated', M.st.runRungs[0].from, '2026-09-07');
-  ok('the id is content-derived, so two devices converge', M.st.runRungs[0].id === 'rr-2026-09-07-29');
+  ok('the id is content-derived, so two devices converge', M.st.runRungs[0].id === 'rr-2026-09-07-36');
 
   eq('a future weekday takes the new range',
-    M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['27-29 min']);
+    M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['34-36 min']);
   eq('...and its duration target moves with it  [or the card prices the new range at the old minutes]',
-    M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.rx.targets.durationMin), [29]);
+    M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.rx.targets.durationMin), [36]);
   eq('a run ALREADY DONE keeps the prescription it was given',
     M.blockPlanFor_('2026-09-02').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['25-27 min']);
   eq('Sunday is untouched — still _RUN_BUILD’s miles',
@@ -233,8 +233,28 @@ console.log('\n' + Y + '=== the ceiling is now what he ACTUALLY RUNS, not the la
   eq('one step moves the top by at most the block ramp cap',
     f.target.proposedTop, Math.floor(27 * (1 + M.RUN_STEP_MAX_PCT)));
   ok('...and the card is told it was capped, so it can say so', f.target.capped === true);
-  ok('the cap IS BLOCK_RUN_RAMP_MAX, not a private copy',
-    Math.abs(M.RUN_STEP_MAX_PCT - M.BLOCK_RUN_RAMP_MAX) < 1e-9);
+  // CATCHING UP IS NOT RAMPING UP. BLOCK_RUN_RAMP_MAX governs NEW load - the Sunday build asking for
+  // a distance not yet run - and is untouched. This governs moving the written plan toward minutes
+  // already being run three times a week, which asks for no new load, and G1 is what keeps that
+  // safe: the proposal can never exceed the median however large this rate is.
+  ok('the catch-up rate is its own number, not the new-load ramp',
+     M.RUN_STEP_MAX_PCT !== M.BLOCK_RUN_RAMP_MAX);
+  ok('NEG: and the block ramp cap is untouched at 10%', Math.abs(M.BLOCK_RUN_RAMP_MAX - 0.10) < 1e-9);
+  // The live shape: 27 min prescribed against a 44 min median must reach 44 in TWO decisions, not
+  // six, and must not overshoot it.
+  {
+    const L = load({ runs: runsOn([['2026-08-24', 44], ['2026-08-26', 44], ['2026-08-31', 44], ['2026-09-02', 44]]) });
+    const steps = [];
+    let cur = null, guard = 0;
+    while (guard++ < 20) {
+      const g = L._runAheadFlag_(NOW);
+      if (!g || !g.target.proposedTop || g.target.proposedTop === cur) break;
+      cur = g.target.proposedTop; steps.push(cur);
+      L.runSetWeekdayTarget_(cur, NOW, 't');
+    }
+    ok('27 -> 44 in two acceptances (' + steps.join(' -> ') + ')', steps.length === 2);
+    ok('...landing exactly on the median, never past it', steps[steps.length - 1] === 44);
+  }
 }
 {
   // G3: a logged injury is a real input, not a disclaimer.
