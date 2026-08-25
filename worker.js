@@ -41802,11 +41802,16 @@ function _rtMount_(scr){
     // preserveAspectRatio="none", so it stretches to any box without distorting what it says.
     // Capped so a very tall screen gets a better chart rather than one enormous card. 560, because
     // 460 left 56px unfilled on the tallest device measured (iPad Pro portrait, 1366px) - the cap
-    // was binding before the space ran out. It keeps its natural size on a laptop, where there is no
-    // slack for flex-grow to take.
+    // was binding before the space ran out.
+    //
+    // GROW BUT NEVER SHRINK - flex:1 0 auto, not 1 1 auto. With shrink enabled this card fitted
+    // every viewport down to 740px, and it was lying: it was compressing below its own content and
+    // cutting the insight band off inside overflow:hidden. Measured 165px of card holding 310px of
+    // content. A page that does not fit should SCROLL, which is visible; a card that quietly eats
+    // its last line is the silent-clip failure this codebase has already paid for twice.
     card.style.cssText='margin:0 16px 11px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
       +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'
-      +'flex:1 1 auto;max-height:560px';
+      +'flex:1 0 auto;max-height:560px';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
     card.querySelectorAll('[data-rtrange]').forEach(function(el){
