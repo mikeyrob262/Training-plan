@@ -33506,22 +33506,50 @@ function _zwiftPathHint_(){ var BS=String.fromCharCode(92);
 // ZWIFT itself writes — so the junction passes on evidence rather than on being named after the
 // rider id. That check was already right; this just relies on it.
 var ZWIFT_LINK_NAME='ZwiftWorkouts';
-function _zwiftLinkHint_(){
-  var BS=String.fromCharCode(92), Q=String.fromCharCode(34);
-  return 'cmd /c mklink /J '+Q+'%USERPROFILE%'+BS+'Documents'+BS+ZWIFT_LINK_NAME+Q
+function _zwiftLinkPath_(){ var BS=String.fromCharCode(92);
+  return '%USERPROFILE%'+BS+'Documents'+BS+ZWIFT_LINK_NAME; }
+// ONE COMMAND, SAFE TO RUN TWICE.
+//
+// The first version of this was a bare mklink, which fails outright the moment the link already
+// exists — and that is the state anyone lands in after a first attempt, so the command handed out
+// to fix the problem broke on the second run and looked like a new problem. This clears the old
+// entry first and then makes the link, so running it once, twice or ten times ends in the same
+// place.
+//
+// rmdir WITHOUT /s, DELIBERATELY. On a junction it removes the link and never touches the target.
+// On an empty folder it removes the folder. On a folder with real files in it, it FAILS — which is
+// the correct outcome: this command must never be capable of deleting a workout. 2>nul swallows the
+// "not found" case so a clean machine does not see a scary line before the part that worked.
+function _zwiftFixCmd_(){
+  var BS=String.fromCharCode(92), Q=String.fromCharCode(34), L=_zwiftLinkPath_();
+  return 'rmdir '+Q+L+Q+' 2>nul & mklink /J '+Q+L+Q
         +' '+Q+'%LOCALAPPDATA%'+BS+'Zwift'+BS+'Workouts'+BS+ZWIFT_EXPECT_ID+Q;
 }
-// The remedy, as a dialog rather than a console line. The old catch logged and returned false, so a
-// blocked pick looked identical to a cancelled one and the athlete was told nothing at all.
+function _zwiftLinkHint_(){ return _zwiftFixCmd_(); }
+// THE BROWSER CANNOT DO THIS PART, and saying so plainly is better than an almost-automation.
+// getDirectoryHandle({create:true}) makes a REAL directory; there is no File System Access call —
+// and no web API at all — that creates a junction or a symlink. So the one command is genuinely
+// irreducible, and the app's job is to make it a paste rather than a troubleshooting session:
+// it goes on the clipboard automatically, and the dialog says so.
 function _zwiftBlockedHelp_(){
   var NL=String.fromCharCode(10), BS=String.fromCharCode(92);
+  var cmd=_zwiftFixCmd_(), copied=false;
+  // The click that opened the picker is still the active gesture, so this usually succeeds. When it
+  // does not, the command is in the dialog to copy by hand — the message says which happened rather
+  // than claiming a copy that did not occur.
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(cmd); copied=true; } }catch(e){ copied=false; }
   try{
-    uiAlert('Chrome will not open a folder inside AppData — it blocks those, and Zwift keeps its '
-      +'workouts there. Nothing is wrong with your pick.'+NL+NL
-      +'Make a link to it once, then choose the link instead. Paste this into Command Prompt:'+NL+NL
-      +_zwiftLinkHint_()+NL+NL
-      +'Then click Set up again and choose Documents'+BS+ZWIFT_LINK_NAME+'. It is the same folder, '
-      +'not a copy — files written there are in Zwift immediately.');
+    uiAlert('Chrome refuses to open any folder inside AppData, and that is where Zwift keeps its '
+      +'workouts. Your pick was fine — the browser will not hand that folder over to any website.'+NL+NL
+      +'This needs one command, once. The browser cannot run it for you: no web API can create a '
+      +'folder link.'+NL+NL
+      +(copied?'It is on your clipboard already. Open Command Prompt and paste:':'Open Command Prompt and paste:')+NL+NL
+      +cmd+NL+NL
+      +'Safe to run more than once — it clears any half-made attempt first, and it cannot delete a '
+      +'folder that has files in it.'+NL+NL
+      +'Then click Set up again and pick Documents'+BS+ZWIFT_LINK_NAME+'. That is the same folder as '
+      +'Zwift’s, reached by a name Chrome allows — not a copy, so anything written there is in '
+      +'Zwift immediately.');
   }catch(e){}
 }
 function zwiftSupported_(){ try{ return typeof window!=='undefined' && typeof window.showDirectoryPicker==='function'; }catch(e){ return false; } }
@@ -33551,6 +33579,14 @@ function zwiftVerify_(h){
     return {ok:true, why:(byName?('folder '+h.name+' + '+ZWIFT_MARKER):(ZWIFT_MARKER+' present')), name:h.name, marker:true};
   }).catch(function(){
     if(byName) return {ok:true, why:'folder name is '+ZWIFT_EXPECT_ID+' (no '+ZWIFT_MARKER+' yet)', name:h.name, marker:false};
+    // THE FAILURE THAT ACTUALLY HAPPENS, named as itself. Picking a ZwiftWorkouts that is a plain
+    // folder rather than the link is the exact state a half-finished setup leaves behind, and the
+    // generic '"X" is not 4284972 and has no workouts.files' reads as though the wrong folder was
+    // chosen — sending someone hunting for a different folder when the right one just needs making.
+    if(String(h.name||'')===ZWIFT_LINK_NAME){
+      return {ok:false, linkEmpty:true, name:h.name, marker:false,
+              why:'"'+h.name+'" exists but is an ordinary folder, not a link to Zwift — the link command has not run yet'};
+    }
     return {ok:false, why:'"'+(h.name||'?')+'" is not '+ZWIFT_EXPECT_ID+' and has no '+ZWIFT_MARKER, name:h.name, marker:false};
   });
 }
@@ -33561,6 +33597,9 @@ function zwiftPickFolder_(){
       if(!okPerm){ try{ uiAlert('Write permission was not granted, so nothing was saved.'); }catch(e){} return false; }
       return zwiftVerify_(h).then(function(v){
         if(!v.ok){
+          // An ordinary ZwiftWorkouts folder is a half-finished setup, not a wrong pick, so it gets
+          // the command that finishes it rather than directions to a folder Chrome will refuse.
+          if(v.linkEmpty){ _zwiftBlockedHelp_(); return false; }
           // Path built with fromCharCode(92): a backslash immediately before a closing quote is
           // served as an escaped quote and breaks the whole template literal.
           try{ uiAlert('That does not look like your Zwift workouts folder — '+v.why+'.'+String.fromCharCode(10)+String.fromCharCode(10)
