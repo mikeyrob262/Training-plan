@@ -41742,8 +41742,11 @@ function _rtCardHTML_(){
     +'. Not the Dashboard numbers, which count every sport.</div>'
     +'</div>';
   // MIDDLE: the ridge.
+  // 110px, not 150. The page has to fit a viewport and the ridge was the single largest block of
+  // pure height on it; at 110 the shape - flat, then the restart climbing - reads exactly the same,
+  // because what this chart says is a DIRECTION and direction survives compression. Worth ~40px.
   H+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
-    +'<div style="flex:1;min-height:0">'+_rtChart_(w.pts, 600, 150)+'</div>'
+    +'<div style="flex:1;min-height:0">'+_rtChart_(w.pts, 600, 110)+'</div>'
     +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
       +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
     +'</div>';
@@ -48004,7 +48007,9 @@ function dsShowRun(){
     });
     full.forEach(function(el){ wrap.insertBefore(el, host); });
   }catch(e){}
-  try{ if(typeof _balCols_==='function') _balCols_(host); }catch(e){}
+  // The Run page's OWN balancer, three columns where there is width for them. _balCols_ is shared
+  // with Overview and DNA and is deliberately not touched - see _runBalCols_ for why.
+  try{ if(typeof _runBalCols_==='function') _runBalCols_(host); }catch(e){}
 }
 try{ if(typeof window!=='undefined'){ window.dsShowRun=dsShowRun; window.renderRunInto_=renderRunInto_; } }catch(e){}
 // ===================== Run Training, Phase 2 =====================================================
@@ -48567,6 +48572,60 @@ function _runRemoveKeepScroll_(el){
   }catch(e){ try{ el && el.remove(); }catch(_e){} }
 }
 try{ if(typeof window!=='undefined'){ window._runRemoveKeepScroll_=_runRemoveKeepScroll_; } }catch(e){}
+// RUN-PAGE-LOCAL COLUMN BALANCER.
+//
+// A DELIBERATE COPY OF _balCols_, not a change to it. That one is shared with the Overview and DNA
+// pages, and teaching it a third column to make THIS page fit would change the layout of two pages
+// nobody asked about - the exact trade that had to be reverted earlier in this session. So the
+// shared helper is untouched and still serves those pages; this is the Run page's own.
+//
+// WHY THREE. The page is 1600px wide and was balancing into two columns, so the lower section cost
+// 648px when its cards total ~1,159px - a third of the horizontal space was going unused while the
+// page overflowed vertically by 341px. Three columns cost the tallest of three rather than the
+// tallest of two, which is worth roughly 220px and removes no content at all. Measured, not
+// estimated.
+//
+// It steps DOWN rather than snapping: three columns need real width or the cards inside them start
+// clipping, so 1180px buys three, _RUN_BAL_MIN2 buys two, and anything narrower is one column in
+// authored order - which is what a phone gets.
+var _RUN_BAL_MIN3=1180, _RUN_BAL_MIN2=860, _RUN_BAL_GAP=10;
+function _runBalCols_(host){
+  if(!host) return;
+  // The authored order is captured ONCE. After the first pass the cards live inside column elements,
+  // so re-reading host.children would return the columns rather than the cards.
+  var cards=host.__rbCards;
+  if(!cards){ cards=Array.prototype.slice.call(host.children); host.__rbCards=cards; }
+  if(!cards.length) return;
+  var w=host.getBoundingClientRect().width;
+  var n=(w>=_RUN_BAL_MIN3)?3:((w>=_RUN_BAL_MIN2)?2:1);
+  if(host.__rbN===n && host.__rbDone) return;          // nothing structural changed
+  host.__rbN=n; host.__rbDone=true;
+  while(host.firstChild) host.removeChild(host.firstChild);
+  if(n===1){
+    host.setAttribute('style','display:flex;flex-direction:column;gap:'+_RUN_BAL_GAP+'px');
+    cards.forEach(function(c){ host.appendChild(c); });
+    return;
+  }
+  host.setAttribute('style','display:flex;gap:'+_RUN_BAL_GAP+'px;align-items:flex-start');
+  var cols=[], heights=[];
+  for(var i=0;i<n;i++){
+    var d=document.createElement('div');
+    d.setAttribute('style','flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:'+_RUN_BAL_GAP+'px');
+    host.appendChild(d); cols.push(d); heights.push(0);
+  }
+  // MEASURE AT COLUMN WIDTH, not at the full-width host: a wrapped-text card measured across the
+  // whole row comes out too short and the balance is computed from wrong numbers.
+  cards.forEach(function(c){ cols[0].appendChild(c); });
+  var hs=cards.map(function(c){ return c.getBoundingClientRect().height; });
+  cards.forEach(function(c,ix){
+    var lo=0;
+    for(var k=1;k<n;k++) if(heights[k]<heights[lo]) lo=k;
+    cols[lo].appendChild(c);
+    heights[lo]+=hs[ix]+_RUN_BAL_GAP;
+  });
+}
+try{ if(typeof window!=='undefined'){ window._runBalCols_=_runBalCols_; } }catch(e){}
+
 // THE run page. Every card on both surfaces is built here.
 function renderRunInto_(scr, surface){
 
@@ -48634,17 +48693,26 @@ function renderRunInto_(scr, surface){
                                   : (' &mdash; target <b>'+_t.band+'</b>.')))
                   : ' '+(_t.why||'Not enough yet to read a trend')+'.'))
         +'</div>'
-        // The one line that is not restating the numbers above: what it knows about the leg, which
-        // is the only input the reader cannot check at a glance.
-        +'<div style="font-size:11.5px;color:'+(_inj&&_inj.rec&&!_inj.stale?'#f59e0b':'var(--t3)')+';line-height:1.5;margin-top:7px">'
-          +(_inj&&_inj.rec
-             ? (_inj.stale
-                 ? ('Your '+_runEsc_(String(_inj.rec.area).toLowerCase())+' report is '+_inj.age+' days old and no longer holding this back.')
-                 : (_runEsc_(String(_inj.rec.area))+' issue '+_inj.age+'d ago, '+_inj.rec.severity+'/10, '+_runEsc_(_inj.rec.status)+'.'
-                    +(_inj.rec.status==='active' ? ' Nothing proposed until you mark it easing.'
-                                                 : ' Steps held to '+Math.round(RUN_STEP_INJ_PCT*100)+'%.')))
-             : 'Read off '+_ra.sample+' runs'+(_ra.thin?' &mdash; a thin base':'')+'. No injury on file.')
-        +'</div>'
+        // THE SECOND LINE ONLY WHEN IT HAS SOMETHING TO SAY. It exists for the one input the reader
+        // cannot check by looking - an injury on file, or a base too thin to trust. With neither, it
+        // was printing "Read off 8 runs. No injury on file." every time: a line whose content is the
+        // absence of content. Silence is the right rendering of nothing to report.
+        +(function(){
+           var msg='', col='var(--t3)';
+           if(_inj && _inj.rec){
+             col=_inj.stale?'var(--t3)':'#f59e0b';
+             msg=_inj.stale
+               ? ('Your '+_runEsc_(String(_inj.rec.area).toLowerCase())+' report is '+_inj.age+' days old and no longer holding this back.')
+               : (_runEsc_(String(_inj.rec.area))+' issue '+_inj.age+'d ago, '+_inj.rec.severity+'/10, '+_runEsc_(_inj.rec.status)+'.'
+                  +(_inj.rec.status==='active' ? ' Nothing proposed until you mark it easing.'
+                                               : ' Steps held to '+Math.round(RUN_STEP_INJ_PCT*100)+'%.'));
+           } else if(_ra.thin){
+             // A thin base IS worth a line: the pattern is real but it is read off few runs, and
+             // that is a different claim from one read off many.
+             msg='Read off '+_ra.sample+' runs &mdash; a thin base.';
+           }
+           return msg ? ('<div style="font-size:11.5px;color:'+col+';line-height:1.5;margin-top:7px">'+msg+'</div>') : '';
+         })()
         +'<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">'
           +((_t.proposedTop && !_t.blocked)
             ? ('<button id="run-rung-yes" style="padding:8px 13px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_t.band+'</button>')

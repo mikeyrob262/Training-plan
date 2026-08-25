@@ -312,7 +312,10 @@ console.log('\n' + Y + '=== 9. this card touches NOTHING the Dashboard renders =
   });
   ok('NEG: the _PT_COLS constant is gone too', src.indexOf('var _PT_COLS=') < 0);
   // The run card draws its own ridge, with its own gradient namespace.
-  ok('the run card calls its own chart', /_rtChart_\(w\.pts, 600, 150\)/.test(rtc));
+  // 110px, not 150 - the ridge was the largest single block of pure height on a page that has to
+  // fit a viewport, and a direction survives compression. Asserted on the call rather than on the
+  // number alone so a silent revert to the Dashboard's chart still trips it.
+  ok('the run card calls its own chart', /_rtChart_\(w\.pts, 600, 110\)/.test(rtc));
   ok('...whose gradient ids are prefixed rtg', /var uid='rtg'/.test(rch));
   ok('NEG: and the Dashboard chart still uses ptg', /var uid='ptg'/.test(exFn('_ptChart_')));
 }
