@@ -304,13 +304,21 @@ try {
         return LABELS.some(function(L){ return t.indexOf(L)>=0; }); });
     });
     var toggles=document.querySelectorAll('[data-rtrange]');
-    var svg=document.querySelector('#DS-RUN-BODY svg[viewBox="0 0 600 150"]');
+    // #DS-RUN, not #DS-RUN-BODY: full-width cards are lifted OUT of the balanced body into the
+    // scroller above it by dsShowRun, so a body-scoped selector stops finding them and reports a
+    // card that is on the page as missing.
+    var svg=document.querySelector('#DS-RUN svg[viewBox="0 0 600 150"]');
     return { page:__PAGEWIDE(),
              hasTrajectory:(txt.indexOf('RUNNING TRAJECTORY')>=0 || txt.indexOf('Running Trajectory')>=0),
              nToggles:toggles.length,
              ridge:svg?__M(svg):null,
+             trajOutsideBody:(function(){
+               var body=document.getElementById('DS-RUN-BODY');
+               var t=[].slice.call(document.querySelectorAll('#DS-RUN div'))
+                 .filter(function(d){ return (d.innerText||'').indexOf('RUNNING TRAJECTORY')===0; })[0];
+               return !!(t && body && !body.contains(t)); })(),
              trajChrome:(function(){
-               var t=[].slice.call(document.querySelectorAll('#DS-RUN-BODY div'))
+               var t=[].slice.call(document.querySelectorAll('#DS-RUN div'))
                  .filter(function(d){ return (d.innerText||'').indexOf('RUNNING TRAJECTORY')===0; })[0];
                if(!t) return null; var c=getComputedStyle(t), b=t.getBoundingClientRect();
                return { bg:c.backgroundColor, borderW:c.borderTopWidth, w:Math.round(b.width) }; })(),
@@ -338,6 +346,7 @@ try {
   ok('the trajectory card has a panel background', runD.trajChrome && runD.trajChrome.bg !== 'rgba(0, 0, 0, 0)');
   ok('...and a border', runD.trajChrome && parseFloat(runD.trajChrome.borderW) > 0);
   ok('...and it is the full width of the page column', runD.trajChrome && runD.trajChrome.w > 1200);
+  ok('...because it sits OUTSIDE the balanced body, not inside a column', runD.trajOutsideBody === true);
   ok('both stat strips rendered', runD.nStrips === 2);
   ok('neither strip overflows its box', runD.stripBoxes.every(s => !s.overX));
   ok('no stat value is silently clipped', runD.stripClips.length === 0);
