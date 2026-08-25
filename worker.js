@@ -41164,18 +41164,125 @@ function _ptChart_(pts, w, h, cols){
     +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="'+cols.ctl+'" vector-effect="non-scaling-stroke"/>'
     +'</svg>';
 }
+// ONE TRAJECTORY SHELL, TWO SPORTS.
+//
+// The Dashboard's Performance Trajectory and the Run page's Running Trajectory answer the same
+// question about different sports, and they were built as two separate renderers - so they drifted
+// immediately: different header, the headline percentage in a different column, a different panel
+// treatment, different footnote placement. Side by side they did not read as a family, which is the
+// whole point of a card that says the same KIND of thing twice.
+//
+// So the shell is ONE function and the sports are arguments. Anything genuinely sport-specific -
+// which legend rows, which driver panels, which colours, which range keys - comes in through the
+// spec. Anything structural is here and cannot diverge again. The layout is the Dashboard's,
+// unchanged, because that is the one being matched to.
+//
+// The spec:
+//   title       the uppercase card label
+//   attr        the data-* attribute the range chips carry (each card owns its own state)
+//   ranges      [[key, days], ...]
+//   range       the selected key
+//   cols        {ctl, ctlFill, atl, tsb} colourway, passed straight to _ptChart_
+//   pts         the series to draw
+//   head/tone   the verdict, in words, and its direction
+//   pctTxt      the headline figure, already formatted (a % or an absolute pair)
+//   vsTxt       what the headline is measured against
+//   legend      [[label, colour, value], ...]
+//   foot        the small print under the legend
+//   panels      the right-hand column's HTML - the one place the two cards genuinely differ
+//   insight     the interpretive sentence
+//   link        optional trailing link HTML
+//   axis        [leftLabel, rightLabel]
+function _ptTrajShell_(s){
+  var arrow=(s.tone==='up')?'&uarr;':(s.tone==='down'?'&darr;':'&rarr;');
+  var col=(s.tone==='up')?'var(--c-green)':(s.tone==='down'?'var(--c-red)':'var(--d-t3)');
+  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
+  (s.ranges||[]).forEach(function(r){
+    var on=(r[0]===s.range);
+    toggle+='<span '+s.attr+'="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
+      +(on?('background:var(--d-panel);color:'+s.cols.ctl+';border:1px solid '+s.cols.ctl+'73')
+          :'color:var(--d-t3);border:1px solid transparent')+'">'+r[0]+'</span>';
+  });
+  toggle+='</div>';
+
+  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
+  var legend='';
+  (s.legend||[]).forEach(function(row){
+    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3)">'
+      +'<span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
+  });
+
+  var H='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">'+s.title+'</span>'
+    +toggle+'</div>';
+  H+='<div style="display:flex;gap:16px;min-width:0;flex:1;flex-wrap:wrap">';
+  // LEFT: the verdict in words, then the three current values.
+  H+='<div style="flex:1 1 186px;min-width:170px;max-width:230px;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+s.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
+    +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+s.vsTxt+'</div>'
+    +legend
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto;line-height:1.45">'+s.foot+'</div>'
+    +'</div>';
+  // MIDDLE: the ridge.
+  H+='<div style="flex:2 1 300px;min-width:240px;display:flex;flex-direction:column">'
+    +'<div style="flex:1;min-height:150px">'+_ptChart_(s.pts, 600, 150, s.cols)+'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
+      +'<span>'+s.axis[0]+'</span><span>'+s.axis[1]+'</span></div>'
+    +'</div>';
+  // RIGHT: the headline figure, then whatever this card puts behind it.
+  H+='<div style="flex:1 1 300px;min-width:250px;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+s.pctTxt+'</div>'
+    +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+s.vsTxt+'</div>'
+    +s.panels
+    +(s.link?('<div style="margin-top:auto;text-align:right">'+s.link+'</div>'):'')
+    +'</div>';
+  H+='</div>';
+  // The interpretive line, in its own band, so it reads as the coach speaking rather than a caption.
+  H+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+s.cols.ctl+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
+    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+s.insight+'</span></div>';
+  return H;
+}
+// The driver rows both cards use. Same markup, so an up-arrow means the same thing on either page.
+// Direction comes from the row's own better flag where it has one - pace is inverted and Form has
+// no good side - and falls back to the sign for the Dashboard's plain percentage rows.
+function _ptDriverRows_(list){
+  var h='';
+  (list||[]).forEach(function(x){
+    var better=(x.better===undefined)?(x.pct>=0):!!x.better;
+    var tone=x.neutral?'var(--d-t2)':(better?'var(--c-green)':'var(--c-red)');
+    var glyph=x.neutral?((x.delta>=0)?'&uarr;':'&darr;'):(better?'&uarr;':'&darr;');
+    var mag=(x.pct!=null&&x.unit!=='pts'&&x.unit!=='mi')?(Math.abs(x.pct)+'%')
+           :(x.delta!=null?(Math.abs(x.delta)+(x.unit?(' '+x.unit):'')):'');
+    h+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
+        +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
+        +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
+      +'<span style="font-size:11px;font-weight:700;color:'+tone+';flex-shrink:0">'+glyph+' '+mag+'</span></div>'
+      +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail
+          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'');
+  });
+  return h;
+}
+function _ptPanelHead_(t, sub){
+  return '<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">'+t+'</div>'
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+sub+'</div>';
+}
+// The Dashboard card. Everything structural now comes from _ptTrajShell_; what stays here is what
+// is genuinely about CYCLING and the all-sport series: which values the legend shows, where the
+// current triple comes from, and the two-panel causes/outcomes split that this card argued for and
+// the run card does not have the data to reproduce.
 function _ptCardHTML_(lbl, link){
   var w=_ptWindow_(_ptRange);
   var d=_ptDelta_(w.pts);
   var v=_ptVerdict_(d, _ptRange);
   var f=(typeof getFitness_==='function')?getFitness_():null;
   var tail=w.pts.length?w.pts[w.pts.length-1]:null;
-  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
   var cur={ ctl:(f&&f.ctl!=null)?f.ctl:(tail?tail.ctl:null),
             atl:(f&&f.atl!=null)?f.atl:(tail?tail.atl:null),
             tsb:(f&&f.tsb!=null)?f.tsb:(tail?tail.tsb:null) };
-  var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
-  var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3)');
   // ABSOLUTE PAIR WHERE A PERCENTAGE WOULD BE AN ARTIFACT. "2.4 to 63" says everything the ratio
   // would have, without the false precision of a four-digit percentage.
   var pctTxt=!d?'&mdash;'
@@ -41183,62 +41290,17 @@ function _ptCardHTML_(lbl, link){
             :((d.pct>0?'+':'')+d.pct+'%'));
   var vsTxt=(_ptRange==='ALL')?'across your whole history'
            :(_ptRange==='1Y'?'vs a year ago':('vs '+(w.days)+' days ago'));
-  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
-  _PT_RANGES.forEach(function(r){
-    var on=(r[0]===_ptRange);
-    toggle+='<span data-ptrange="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
-      +(on?('background:var(--d-panel);color:#22c55e;border:1px solid rgba(34,197,94,.45)'):'color:var(--d-t3);border:1px solid transparent')+'">'+r[0]+'</span>';
-  });
-  toggle+='</div>';
-
-  var legend='';
-  [['Fitness (CTL)','#22c55e',cur.ctl],['Training Load (ATL)','#60a5fa',cur.atl],['Form (TSB)','#a78bfa',cur.tsb]].forEach(function(row){
-    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
-      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3)"><span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
-      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
-  });
-
   var fact=_ptFactors_(w.days);
   // EVERY PANEL CARRIES ITS OWN TIMEFRAME, in words, from one shared pair of strings so the two can
   // never drift apart. The headline is a POINT comparison (fitness now against fitness then); the
-  // panels are PERIOD comparisons (this window against the one before it). Those are different
-  // questions and the card now says which is which instead of stacking them and hoping.
-  // ALL SAYS "vs the previous year" BECAUSE THAT IS WHAT IT DOES. _ptFactors_ falls back to a
-  // 365-day span when the range carries no day count, so the panels on ALL compare the last year
-  // against the year before it. The old label claimed "vs the first half of your history", which
-  // described a comparison the code has never made - a caption inventing its own arithmetic.
+  // panels are PERIOD comparisons (this window against the one before it).
+  // ALL SAYS "vs the previous year" BECAUSE THAT IS WHAT IT DOES - _ptFactors_ falls back to a
+  // 365-day span when the range carries no day count.
   var periodTxt=(_ptRange==='ALL'||_ptRange==='1Y')?'vs the previous year'
                :('vs the previous '+w.days+' days');
-  var rows=function(list){
-    var h='';
-    list.forEach(function(x){
-      var up=(x.pct>=0);
-      h+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
-        +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
-          +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
-          +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
-        +'<span style="font-size:11px;font-weight:700;color:'+(up?'#22c55e':'#ef4444')+';flex-shrink:0">'+(up?'&uarr;':'&darr;')+' '+Math.abs(x.pct)+'%</span></div>'
-        +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail+'</div>'):'');
-    });
-    return h;
-  };
-  var head2=function(t){ return '<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">'+t+'</div>'
-    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+periodTxt+'</div>'; };
-  // SIDE BY SIDE, NOT STACKED, and that is a height decision as much as a design one. Stacked, the
-  // column costs the SUM of both panels and pushed the card to 448px, putting the dashboard 42px
-  // over its viewport. Side by side it costs the MAX, which is what a pair of short lists should
-  // cost. Shaving padding and dropping the "512 vs 390" detail lines would have bought the same
-  // pixels by deleting exactly the figures that make the percentages checkable - the complaint this
-  // rebuild exists to answer.
-  //
-  // A SEPARATE QUESTION, SEPARATELY TITLED. Outcomes are results of fitness, not inputs to it, so
-  // they get their own heading; filing them under "what is driving it" claimed a causal link that
-  // does not exist and let the card appear to contradict itself.
   // WHAT DROPPED OUT, NAMED. A metric that cannot be computed for both windows is omitted, which is
   // right - but at 30D that left "Is it translating" showing a single line with no way to tell a
-  // stated limitation from an arbitrary one. The note names the missing metrics and the reason, so
-  // the gap reads as an answer rather than an absence. Only shown when something is actually
-  // missing AND something is actually present: a panel with nothing in it already says so above.
+  // stated limitation from an arbitrary one.
   var andList=function(a){
     if(a.length<=1) return a[0]||'';
     if(a.length===2) return a[0]+' and '+a[1];
@@ -41249,57 +41311,40 @@ function _ptCardHTML_(lbl, link){
     return '<div style="font-size:9.5px;color:var(--d-t4);line-height:1.45;margin-top:7px;padding-top:7px;border-top:1px dashed var(--d-edge)">'
       +andList(list)+(list.length>1?' need':' needs')+' more history than this range holds.</div>';
   };
+  // A SEPARATE QUESTION, SEPARATELY TITLED. Outcomes are results of fitness, not inputs to it, so
+  // they get their own heading; filing them under "what is driving it" claimed a causal link that
+  // does not exist and let the card appear to contradict itself.
   var causesHTML = fact.causes.length
-    ? (head2('What is driving it')+rows(fact.causes)+missNote(fact.causesMiss, true))
-    // NOT an empty panel and NOT invented numbers: say which comparison could not be made.
-    : (head2('What is driving it')
+    ? (_ptPanelHead_('What is driving it', periodTxt)+_ptDriverRows_(fact.causes)+missNote(fact.causesMiss, true))
+    : (_ptPanelHead_('What is driving it', periodTxt)
        +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>');
   var outHTML = fact.outcomes.length
-    ? (head2('Is it translating')+rows(fact.outcomes)+missNote(fact.outcomesMiss, true))
+    ? (_ptPanelHead_('Is it translating', periodTxt)+_ptDriverRows_(fact.outcomes)+missNote(fact.outcomesMiss, true))
     : (fact.outcomesMiss.length
-       ? (head2('Is it translating')
+       ? (_ptPanelHead_('Is it translating', periodTxt)
           +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">'+andList(fact.outcomesMiss)
           +(fact.outcomesMiss.length>1?' need':' needs')+' more history than this range holds. Try a longer range.</div>')
        : '');
-  var dHTML='<div style="display:flex;gap:14px;min-width:0">'
+  // SIDE BY SIDE, NOT STACKED, and that is a height decision as much as a design one. Stacked, the
+  // column costs the SUM of both panels; side by side it costs the MAX, which is what a pair of
+  // short lists should cost.
+  var panels='<div style="display:flex;gap:14px;min-width:0">'
     +'<div style="flex:1;min-width:0">'+causesHTML+'</div>'
     +(outHTML?('<div style="flex:1;min-width:0;border-left:1px solid var(--d-edge);padding-left:12px">'+outHTML+'</div>'):'')
     +'</div>';
 
-  var inner=lbl('PERFORMANCE TRAJECTORY', toggle);
-  inner+='<div style="display:flex;gap:16px;min-width:0;flex:1">';
-  // LEFT: verdict, legend
-  inner+='<div style="width:186px;flex-shrink:0;display:flex;flex-direction:column;min-width:0">'
-    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
-    +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
-    +legend
-    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto">All values are 7-day averages'
-    +((f&&f.source&&f.source!=='none')?(' &middot; current from '+f.source):'')+'</div>'
-    +'</div>';
-  // MIDDLE: the ridge
-  inner+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
-    +'<div style="flex:1;min-height:0">'+_ptChart_(w.pts, 600, 150)+'</div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
-      +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
-    +'</div>';
-  // RIGHT: headline percent + drivers
-  // Widened from 196px to carry two sub-columns. The chart is flex:1 and simply gives up the width,
-  // which it can afford far more easily than the card can afford the height.
-  inner+='<div style="width:344px;flex-shrink:0;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
-    +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+pctTxt+'</div>'
-    +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
-    +dHTML
-    +'<div style="margin-top:auto;text-align:right">'+link('View details &rarr;','ai')+'</div>'
-    +'</div>';
-  inner+='</div>';
-  // The interpretive line, given its own band so it reads as the coach speaking rather than a caption.
-  inner+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
-    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
-    // ONE STRING, composed by _ptInsight_ with the factors in hand. The card no longer prepends a
-    // separate divergence sentence: that is what produced a caution and a celebration glued together
-    // with a space, each written without knowledge of the other.
-    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_ptInsight_(d, w, fact)+'</span></div>';
-  return inner;
+  return _ptTrajShell_({
+    title:'PERFORMANCE TRAJECTORY', attr:'data-ptrange', ranges:_PT_RANGES, range:_ptRange,
+    cols:_PT_COLS, pts:w.pts, head:v.head, tone:v.tone, pctTxt:pctTxt, vsTxt:vsTxt,
+    legend:[['Fitness (CTL)',_PT_COLS.ctl,cur.ctl],
+            ['Training Load (ATL)',_PT_COLS.atl,cur.atl],
+            ['Form (TSB)',_PT_COLS.tsb,cur.tsb]],
+    foot:'All values are 7-day averages'+((f&&f.source&&f.source!=='none')?(' &middot; current from '+f.source):''),
+    axis:[(w.days>0?(w.days+' days ago'):'start'),'Today'],
+    panels:panels,
+    insight:_ptInsight_(d, w, fact),
+    link:link('View details &rarr;','ai')
+  });
 }
 // ==================== RUNNING PERFORMANCE TRAJECTORY ====================
 //
@@ -41608,8 +41653,14 @@ function rtSetRange_(k){
   _rtRepaint_();
 }
 try{ if(typeof window!=='undefined'){ window.rtSetRange_=rtSetRange_; window._rtSeries_=_rtSeries_; window._rtInvalidate_=_rtInvalidate_; } }catch(e){}
-// The card. One self-contained HTML string so BOTH Run Training surfaces mount the same thing - the
-// drift this app keeps paying for is a card that shipped on one surface only.
+// The Run page card. Structure comes from _ptTrajShell_, the SAME shell the Dashboard's
+// Performance Trajectory renders through, so the two read as one family by construction rather than
+// by two renderers agreeing to look alike - which they did not: the header, the column the headline
+// percentage sat in, the panel treatment and the footnote had all drifted within a day of shipping.
+//
+// What stays here is what is genuinely about running: the run-only series, the layoff, and a single
+// driver panel instead of the Dashboard's causes/outcomes split. That split is not reproduced
+// because the run library cannot support it - there are no 20-minute power efforts to be an outcome.
 function _rtCardHTML_(){
   var w=_rtWindow_(_rtRange);
   var d=_rtDelta_(w.pts);
@@ -41617,48 +41668,11 @@ function _rtCardHTML_(){
   var lay=_rtLayoff_(w.days);
   var f=_rtDrivers_(w.days);
   var tail=w.pts.length?w.pts[w.pts.length-1]:null;
-  var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
-  var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3,var(--t3))');
   var pctTxt=!d?'&mdash;':(d.weakBase?(d.from+' &rarr; '+d.to):((d.pct>0?'+':'')+d.pct+'%'));
   var vsTxt=(_rtRange==='ALL')?'across your whole run history'
            :(_rtRange==='1Y'?'vs a year ago':('vs '+w.days+' days ago'));
-
-  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset,var(--s2));border:1px solid var(--d-edge,var(--b1));border-radius:9px;padding:2px">';
-  _RT_RANGES.forEach(function(r){
-    var on=(r[0]===_rtRange);
-    toggle+='<span data-rtrange="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
-      +(on?('background:var(--d-panel,var(--s1));color:'+_RT_COLS.ctl+';border:1px solid rgba(251,146,60,.45)'):'color:var(--d-t3,var(--t3));border:1px solid transparent')+'">'+r[0]+'</span>';
-  });
-  toggle+='</div>';
-
-  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
-  var legend='';
-  [['Fitness (CTL)',_RT_COLS.ctl,tail?tail.ctl:null],
-   ['Training Load (ATL)',_RT_COLS.atl,tail?tail.atl:null],
-   ['Form (TSB)',_RT_COLS.tsb,tail?tail.tsb:null]].forEach(function(row){
-    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
-      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3,var(--t3))"><span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
-      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1,var(--t1))">'+num(row[2])+'</span></div>';
-  });
-
   var periodTxt=(_rtRange==='ALL'||_rtRange==='1Y')?'vs the previous year':('vs the previous '+w.days+' days');
-  var rows='';
-  f.rows.forEach(function(x){
-    // Direction comes from the row's own better flag, never from the sign - pace is inverted and Form
-    // has no good side at all.
-    var up=!!x.better;
-    var tone=x.neutral?'var(--d-t2,var(--t2))':(up?'#22c55e':'#ef4444');
-    var glyph=x.neutral?((x.delta>=0)?'&uarr;':'&darr;'):(up?'&uarr;':'&darr;');
-    var mag=(x.unit==='%'&&x.pct!=null)?(Math.abs(x.pct)+'%')
-           :(x.unit==='%'?String(Math.abs(x.delta)):(Math.abs(x.delta)+' '+x.unit));
-    rows+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
-      +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3,var(--t3));min-width:0">'
-        +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
-        +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
-      +'<span style="font-size:11px;font-weight:700;color:'+tone+';flex-shrink:0">'+glyph+' '+mag+'</span></div>'
-      +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4,var(--t3));margin:-3px 0 6px 13px">'+x.detail
-          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'');
-  });
+
   var andList=function(a){
     if(a.length<=1) return a[0]||'';
     if(a.length===2) return a[0]+' and '+a[1];
@@ -41666,43 +41680,27 @@ function _rtCardHTML_(){
   };
   var missNote='';
   if(f.miss.length){
-    missNote='<div style="font-size:9.5px;color:var(--d-t4,var(--t3));line-height:1.45;margin-top:7px;padding-top:7px;border-top:1px dashed var(--d-edge,var(--b1))">'
+    missNote='<div style="font-size:9.5px;color:var(--d-t4);line-height:1.45;margin-top:7px;padding-top:7px;border-top:1px dashed var(--d-edge)">'
       +andList(f.miss)+(f.miss.length>1?' need':' needs')+' a comparable stretch on both sides of this range'
       +(f.missWhy?(' &mdash; '+f.missWhy):'')+'.</div>';
   }
-  var head2='<div style="font-size:10px;font-weight:700;color:var(--d-dim,var(--t3));text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">The numbers behind it</div>';
-  var driversHTML=f.rows.length
-    ? (head2+'<div style="font-size:9.5px;color:var(--d-t4,var(--t3));margin-bottom:7px">'+periodTxt+'</div>'+rows+missNote)
-    : (head2+'<div style="font-size:11px;color:var(--d-t4,var(--t3));line-height:1.5">Not enough matched running history in this range to compare yet.</div>'+missNote);
+  var panels=_ptPanelHead_('The numbers behind it', periodTxt)
+    +(f.rows.length
+       ? (_ptDriverRows_(f.rows)+missNote)
+       : ('<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched running history in this range to compare yet.</div>'+missNote));
 
-  var H='<div style="background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));border-radius:14px;padding:15px 16px">'
-    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
-      +'<span style="font-size:11px;font-weight:800;color:var(--d-t3,var(--t3));text-transform:uppercase;letter-spacing:.05em">Running Trajectory</span>'
-      +'<div style="flex:1"></div>'+toggle
-    +'</div>'
-    +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">'
-    +'<div style="flex:1 1 190px;min-width:180px;display:flex;flex-direction:column">'
-      +'<div style="font-size:18px;font-weight:800;color:var(--d-head,var(--t1));line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
-      +'<div style="font-size:20px;font-weight:800;color:'+col+';line-height:1;margin:7px 0 1px">'+arrow+' '+pctTxt+'</div>'
-      +'<div style="font-size:10px;color:var(--d-t4,var(--t3));margin-bottom:10px">'+vsTxt+'</div>'
-      +legend
-      +'<div style="font-size:9.5px;color:var(--d-t4,var(--t3));margin-top:auto;line-height:1.45">Running only, 7-day averages. '
-      +'Scored from heart rate against an LTHR of '+((typeof stLthr_==='function')?stLthr_():'&mdash;')
-      +' &mdash; so these are not the Dashboard numbers, which count every sport.</div>'
-    +'</div>'
-    +'<div style="flex:2 1 300px;min-width:240px;display:flex;flex-direction:column">'
-      +'<div style="flex:1;min-height:150px">'+_ptChart_(w.pts, 600, 150, _RT_COLS)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4,var(--t3));margin-top:2px">'
-        +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
-    +'</div>'
-    +'<div style="flex:1 1 210px;min-width:200px;display:flex;flex-direction:column">'+driversHTML+'</div>'
-    +'</div>'
-    // The interpretive line, in its own band, exactly as the Dashboard card frames it.
-    +'<div style="display:flex;align-items:center;gap:10px;margin-top:11px;padding:9px 12px;background:var(--d-inset,var(--s2));border:1px solid var(--d-edge,var(--b1));border-radius:10px">'
-      +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+_RT_COLS.ctl+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
-      +'<span style="font-size:11.5px;color:var(--d-t2,var(--t2));line-height:1.45">'+_rtInsight_(d, w, f, lay)+'</span></div>'
-    +'</div>';
-  return H;
+  return _ptTrajShell_({
+    title:'RUNNING TRAJECTORY', attr:'data-rtrange', ranges:_RT_RANGES, range:_rtRange,
+    cols:_RT_COLS, pts:w.pts, head:v.head, tone:v.tone, pctTxt:pctTxt, vsTxt:vsTxt,
+    legend:[['Fitness (CTL)',_RT_COLS.ctl,tail?tail.ctl:null],
+            ['Training Load (ATL)',_RT_COLS.atl,tail?tail.atl:null],
+            ['Form (TSB)',_RT_COLS.tsb,tail?tail.tsb:null]],
+    foot:'Running only, 7-day averages &middot; scored from heart rate against an LTHR of '
+      +((typeof stLthr_==='function')?stLthr_():'&mdash;')+'. Not the Dashboard numbers, which count every sport.',
+    axis:[(w.days>0?(w.days+' days ago'):'start'),'Today'],
+    panels:panels,
+    insight:_rtInsight_(d, w, f, lay)
+  });
 }
 // Mounts the card and binds its range toggle. Called from renderRunInto_, so ONE call site serves
 // both surfaces. A range change re-renders the whole page rather than patching the card: the
@@ -47804,68 +47802,67 @@ function _prSection_(){
       +'style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px">'
       +inner+'</span>';
   };
+  // CONDENSED, WITHOUT DROPPING A FACT.
+  //
+  // Each event used to cost four or five stacked lines - target, provenance, the other tier, this
+  // year, sometimes a gap - plus a three-sentence footnote. Four events filled most of a screen for
+  // what is a reference board, not a daily decision.
+  //
+  // Now: ONE row per event. Name and target value on the first line, everything else folded into a
+  // single sub-line of small print. Nothing is deleted - the other tier and this year's mark still
+  // render, they just share a line instead of owning one - because the three tiers exist precisely
+  // so a 2015 time is never the only number in front of him, and hiding one to save height would
+  // undo the thing the board was built for.
   var html='';
   g.rows.forEach(function(r){
     var ev=r.ev;
-    // The target line. When the career best is out of reach the band best carries "beat by" and the
-    // career best renders as a plain fact with its year; when it is reachable the career best is
-    // the target. Either way the career best is always shown.
     var target=r.reachable?r.career:r.band;
     var gap=null;
     if(r.season && target && r.season!==target){
       gap=(ev.kind==='time') ? (r.season.val-target.val) : (target.val-r.season.val);
-      if(gap<=0) gap=null;                                  // already beaten — no gap to close
+      if(gap<=0) gap=null;                                  // already beaten - no gap to close
     }
-    html+='<div style="padding:11px 0;border-bottom:1px solid var(--d-edge)">'
-      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">'
-      +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+ev.name+'</span>'
-      +'<span style="font-size:15px;font-weight:800;color:#FC4C02">'+link(target, fmt(ev,target))+'</span>'
-      +'</div>'
-      +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px">'
-      +(r.reachable
-         ? ('career best &middot; '+yr(r.career)+(r.careerIsBand?'':' &middot; still your target'))
-         : ('best since '+_PR_BAND_LABEL+' &middot; '+yr(r.band)))
-      +'</div>';
-    // The OTHER tier always renders. Two ways this row can be wrong by omission:
-    //   - career unreachable -> career best must still appear, as HISTORY, so the fastest thing he
-    //     ever did stays on the page without being posed as something to chase.
-    //   - career reachable but NOT the band best -> the band best must still appear, because it is
-    //     the rung he set as the athlete he is now. Showing only a 2015 time on a row whose target
-    //     is a 2015 time is the exact failure the three tiers were built to prevent: a board where
-    //     the only number in front of him is from an athlete he no longer is.
+    // The sub-line, assembled from the parts that actually apply to THIS row.
+    var bits=[];
+    bits.push(r.reachable
+      ? ('career best &middot; '+yr(r.career)+(r.careerIsBand?'':' &middot; your target'))
+      : ('best since '+_PR_BAND_LABEL+' &middot; '+yr(r.band)));
     if(!r.reachable){
-      html+='<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'
-        +'career best '+link(r.career, fmt(ev,r.career)+' &middot; '+yr(r.career))+' &middot; history</div>';
+      bits.push('career '+link(r.career, fmt(ev,r.career)+' ('+yr(r.career)+')'));
     }else if(!r.careerIsBand){
-      html+='<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'
-        +'best since '+_PR_BAND_LABEL+' '+link(r.band, fmt(ev,r.band)+' &middot; '+yr(r.band))+'</div>';
+      bits.push('since '+_PR_BAND_LABEL+' '+link(r.band, fmt(ev,r.band)+' ('+yr(r.band)+')'));
     }
     if(r.season && r.season!==target){
-      html+='<div style="font-size:11px;color:var(--d-t4);margin-top:2px">this year '+link(r.season, fmt(ev,r.season))
-        +(gap!==null ? (' &middot; beat by '+(ev.kind==='time'?_prFmtGap_(gap):(Math.round(gap*10)/10+' mi'))) : ' &middot; ahead')
-        +'</div>';
+      bits.push('this year '+link(r.season, fmt(ev,r.season))
+        +(gap!==null ? (', beat by '+(ev.kind==='time'?_prFmtGap_(gap):(Math.round(gap*10)/10+' mi'))) : ', ahead'));
     }
-    html+='</div>';
+    html+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;'
+      +'padding:7px 0;border-top:1px solid var(--d-edge)">'
+      +'<div style="min-width:0">'
+        +'<div style="font-size:12.5px;font-weight:700;color:var(--d-head)">'+ev.name+'</div>'
+        +'<div style="font-size:10px;color:var(--d-t4);margin-top:1px;line-height:1.4">'+bits.join(' &middot; ')+'</div>'
+      +'</div>'
+      +'<span style="font-size:15px;font-weight:800;color:#FC4C02;flex-shrink:0;white-space:nowrap">'+link(target, fmt(ev,target))+'</span>'
+      +'</div>';
   });
+  // ONE sentence, not three. The scope caveat is the load-bearing half - it says what the board is
+  // NOT - so that is the half that survives the trim.
   var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months. '
-    +'Events with no result since '+_PR_BAND_LABEL+' are left off &mdash; this board shows what you can still climb, '
-    +'not everything you have ever done.';
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin:0 16px 14px">'
-    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+    +'Events with no result since '+_PR_BAND_LABEL+' are left off.';
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:12px 14px;margin:0 16px 12px">'
+    +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:2px">'
     +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
-    +'<span style="font-size:11px;color:var(--d-dim)">running &middot; career, since '+_PR_BAND_LABEL+', this year</span></div>'
+    +'<span style="font-size:10.5px;color:var(--d-dim)">running</span></div>'
     +html
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot
-      // THE TRADE, STATED WHERE IT APPLIES. This board now ranks the live library so every row
-      // links; the price is that a best living only in the uploaded snapshot drops off. Naming the
-      // specific figure that is missing keeps that an informed omission rather than a number
-      // quietly disappearing - the athlete can see what the trade cost and judge it for himself.
-      // Prints nothing when it cost nothing, which should be the common case.
+    +'<div style="font-size:9.5px;color:var(--d-dim);line-height:1.5;margin-top:9px;padding-top:8px;border-top:1px solid var(--d-edge)">'+foot
+      // THE TRADE, STATED WHERE IT APPLIES. This board ranks the live library so every row links;
+      // the price is that a best living only in the uploaded snapshot drops off. Prints nothing
+      // when it cost nothing, which should be the common case.
       +(function(){
         try{
           var lost=(typeof _prSnapshotOnly_==='function')?_prSnapshotOnly_():[];
           if(!lost.length) return '';
-          return '<div style="margin-top:8px;color:var(--d-t3)"><b>Not shown:</b> '
+          return '<div style="margin-top:6px;color:var(--d-t3)"><b>Not shown:</b> '
             +lost.map(function(x){ return x.name+' '+x.val+' ('+x.date+')'; }).join(' &middot; ')
             +' &mdash; in the uploaded snapshot but not in your activity library, so there is no run to open.</div>';
         }catch(e){ return ''; }
@@ -48610,55 +48607,54 @@ function renderRunInto_(scr, surface){
     {l:'Elev YTD',   v:Math.round(totalElev).toLocaleString(), s:'ft'}
   ], 10));
 
-  // Zone pills
-  var zoneLbl=document.createElement('div');
-  zoneLbl.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin:0 16px 8px';
-  zoneLbl.textContent='HR Zones — Max 172 · Age 64';
-  scr.appendChild(zoneLbl);
-  // Zone vertical bar chart
-  var zoneChartCard=document.createElement('div');
-  zoneChartCard.style.cssText='margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:14px';
-
-  var zoneChartTitle=document.createElement('div');
-  zoneChartTitle.style.cssText='font-size:13px;font-weight:700;color:var(--t1);margin-bottom:3px';
-  zoneChartTitle.textContent='HR zones by ceiling';
-  zoneChartCard.appendChild(zoneChartTitle);
-
-  var zoneChartSub=document.createElement('div');
-  zoneChartSub.style.cssText='font-size:11px;color:var(--t3);margin-bottom:12px';
-  zoneChartSub.textContent='Max HR 172 · Age 64 · Coach Parry method';
-  zoneChartCard.appendChild(zoneChartSub);
-
-  // Vertical bars container
-  var barWrap2=document.createElement('div');
-  barWrap2.style.cssText='display:flex;flex-direction:column;gap:6px';
-
-  RUN_ZONES.forEach(function(z){
-    var row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;background:var(--s3);border-radius:10px;padding:8px 12px;border-left:4px solid '+z.c;
-
-    var namePart=document.createElement('div');
-    namePart.style.cssText='min-width:80px';
-    namePart.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1)">'+z.n+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'+(z.desc.split('.')[0])+'</div>';
-    row.appendChild(namePart);
-
-    var bar=document.createElement('div');
-    bar.style.cssText='flex:1;height:8px;background:var(--s1);border-radius:4px;overflow:hidden';
-    var pct=Math.round((z.hi/172)*100);
-    bar.innerHTML='<div style="height:8px;background:'+z.c+';border-radius:4px;width:'+pct+'%;opacity:.85"></div>';
-    row.appendChild(bar);
-
-    var rangeLbl=document.createElement('div');
-    rangeLbl.style.cssText='font-size:12px;font-weight:800;color:'+z.c+';min-width:60px;text-align:right';
-    rangeLbl.textContent=(z.lo?z.lo+'–':'')+z.hi;
-    row.appendChild(rangeLbl);
-
-    barWrap2.appendChild(row);
-  });
-
-  zoneChartCard.appendChild(barWrap2);
-  scr.appendChild(zoneChartCard);
+  // HR ZONES: NUMBERS, NOT BARS.
+  //
+  // This was five rows of name + description + a proportional gradient bar + the range. The bar
+  // encoded exactly one thing - the zone ceiling as a fraction of max HR - which is a monotonic
+  // ladder by construction: it can only ever go up, so it draws the same staircase for every
+  // athlete and says nothing. Reference numbers do not need a chart.
+  //
+  // AND THE NUMBERS THEMSELVES WERE STALE. The old card read RUN_ZONES - the hardcoded pair this
+  // app has already been repaired for once - whose Easy band is 113-121 bpm; across 2,371 runs only
+  // 32 fall inside it, 1 in the last year. It also printed "Max 172" as a literal in two places
+  // while st.maxHR sat in Settings driving everything else. Now it reads runHrBands_(), the live
+  // five-zone split off runHrMax_(), so the reference on this page is the same one the zone
+  // classifier uses. A number on the page is not decoration.
+  var zoneCard=document.createElement('div');
+  zoneCard.style.cssText='margin:0 16px 12px;background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:12px 14px';
+  var _mx=(typeof runHrMax_==='function')?runHrMax_():0;
+  var _bands=(typeof runHrBands_==='function')?runHrBands_(_mx):null;
+  if(_bands){
+    // Five zones from four boundaries: below b0, b0-b1, b1-b2, b2-b3, above b3.
+    var Z=[
+      {n:'Z1 Recovery',   lo:0,          hi:_bands[0]-1, c:'var(--d-t4)'},
+      {n:'Z2 Easy',       lo:_bands[0],  hi:_bands[1],   c:'var(--c-green)'},
+      {n:'Z3 Steady',     lo:_bands[1]+1,hi:_bands[2],   c:'var(--c-blue)'},
+      {n:'Z4 Threshold',  lo:_bands[2]+1,hi:_bands[3],   c:'var(--c-amber)'},
+      {n:'Z5 Hard',       lo:_bands[3]+1,hi:0,           c:'var(--c-red)'}
+    ];
+    var zh='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+      +'<span style="font-size:11px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.05em">HR zones</span>'
+      +'<span style="font-size:10.5px;color:var(--t3)">running &middot; max '+_mx+' bpm</span></div>';
+    // One line per zone: name left, range right. Nothing else.
+    Z.forEach(function(z,i){
+      var range=(z.lo===0)?('under '+(z.hi+1)) : (z.hi===0 ? (z.lo+'+') : (z.lo+'&ndash;'+z.hi));
+      zh+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;'
+        +'padding:5px 0'+(i?';border-top:1px solid var(--b1)':'')+'">'
+        +'<span style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t2)">'
+        +'<span style="width:6px;height:6px;border-radius:50%;background:'+z.c+';flex-shrink:0"></span>'+z.n+'</span>'
+        +'<span style="font-size:12.5px;font-weight:700;color:var(--t1);white-space:nowrap">'+range+' bpm</span></div>';
+    });
+    // Where the number comes from, in one line, because a max HR of 180 is the DEFAULT and a reader
+    // has no way to tell an assumed figure from a measured one otherwise.
+    zh+='<div style="font-size:9.5px;color:var(--t3);margin-top:8px;line-height:1.45">'
+      +(( _mx===((typeof RUN_HR_MAX_DEFAULT!=='undefined')?RUN_HR_MAX_DEFAULT:180))
+          ? 'Max HR is the assumed default &mdash; set yours in Settings and these move with it.'
+          : 'From your max HR in Settings.')
+      +'</div>';
+    zoneCard.innerHTML=zh;
+    scr.appendChild(zoneCard);
+  }
   // Phase 2 sits between the zone reference above and the per-run detail below: the drift
   // warning reads against those zones, and the pacing and Why cards read the same runs the
   // detail list shows.
@@ -48673,147 +48669,73 @@ function renderRunInto_(scr, surface){
 
   if(!runs.length){
     var empty=document.createElement('div');
-    empty.style.cssText='margin:0 16px;background:var(--s2);border-radius:16px;padding:32px;text-align:center';
-    empty.innerHTML='<div style="font-size:36px;margin-bottom:10px">🏃</div>'
-      +'<div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:6px">No runs logged yet</div>'
-      +'<div style="font-size:12px;color:var(--t3)">Tap Log a Run to get started</div>';
+    empty.style.cssText='margin:0 16px;background:var(--s2);border-radius:14px;padding:24px;text-align:center';
+    empty.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">No runs logged yet</div>'
+      +'<div style="font-size:11.5px;color:var(--t3)">Log a run, or sync, and they appear here.</div>';
     scr.appendChild(empty);
   } else {
-    var yearStr=new Date().getFullYear()+'-01-01';
-    var sorted=runs.filter(function(r){return r.date&&r.date>=yearStr;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
+  // RECENT RUNS: ROWS, NOT CARDS.
+  //
+  // Each run used to be a bordered card carrying a header with a Strava link, an eight-cell stat
+  // grid across two rows, a zone breakdown strip, an HR warning, notes and a delete button - about
+  // 200px per run, ten of them. That is the single largest block on the page, and it is a LIST: the
+  // question it answers is "what have I run lately", which is a date, a name, a distance, a time
+  // and a pace. Everything beyond that already has a home in the run detail, which every row now
+  // opens.
+  //
+  // WHAT MOVED RATHER THAN VANISHED:
+  //   the stat grid, zone breakdown, notes and the Strava link -> the run detail, one tap away
+  //   delete -> the run detail's own menu, which is where every other activity is deleted from
+  // WHAT STAYED ON THE ROW: the HR-over-easy flag, as a single dot. It is the only thing here that
+  // is a WARNING rather than a record, and a warning you have to open something to see is not one.
+  var yearStr=new Date().getFullYear()+'-01-01';
+  var sorted=runs.filter(function(r){return r.date&&r.date>=yearStr;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
+  if(!sorted.length){
+    var noneY=document.createElement('div');
+    noneY.style.cssText='margin:0 16px 12px;font-size:12px;color:var(--t3)';
+    noneY.textContent='No runs recorded yet this year.';
+    scr.appendChild(noneY);
+  } else {
     var runList=document.createElement('div');
-    // THE INNER SCROLLER IS DESKTOP-ONLY. A fixed 380px box with its own overflow-y is fine on
-    // desktop, where the cards are wide-and-short and _balCols_ wants a bounded height to measure.
-    // On a touch surface it produced both halves of the reported iPad bug: in a ~810px column the
-    // stat grids wrap and a single card is taller than 380px, so exactly ONE run is visible, and a
-    // nested scroller captures the touch gesture, so the page itself will not scroll.
-    //
-    // iPad is the MOBILE surface here, which is why today's #ds-content fix could not reach it:
-    // isDesktop() is innerWidth>=1024, and iPad portrait is 810-834px. Landscape (>=1080px) does
-    // take the desktop path and was already fixed. This branch covers portrait.
-    //
-    // Mobile therefore lets the list flow at its natural height and scroll with the page - one
-    // scroller, no gesture trap, every run reachable.
-    runList.style.cssText=(surface==='desktop')
-      ? 'margin:0 16px 16px;height:380px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)'
-      : 'margin:0 16px 16px;border-radius:14px;border:1px solid var(--b1)';
+    // NO INNER SCROLLER ANY MORE, on either surface. The desktop-only 380px box existed because the
+    // cards were tall; rows are not, so ten of them cost less than two cards did. That also retires
+    // the iPad gesture trap the old box carried - a nested scroller in a 810px column captured the
+    // touch and the page itself would not scroll.
+    runList.style.cssText='margin:0 16px 14px;background:var(--s1);border:1px solid var(--b1);border-radius:14px;overflow:hidden';
     sorted.forEach(function(r,ri){
-      var rcard=document.createElement('div');
-      rcard.style.cssText='background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden;margin-bottom:8px;padding:14px';
+      var mi=parseFloat(r.distance)||0;
+      var sec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs)||0);
+      var pace='';
+      if(mi>0 && sec>0){ var sp=sec/mi, pm=Math.floor(sp/60), ps=Math.round(sp%60);
+        if(ps===60){pm++;ps=0;} pace=pm+':'+(ps<10?'0':'')+ps; }
+      // NEVER r.name raw - actName_ owns the fallback for file-derived and all-digit names.
+      var nm=(typeof actName_==='function')?actName_(r):String(r.name||'Run');
+      // The one warning worth keeping in the list: an easy run that did not stay easy.
       var hrWarn=r.avgHR&&r.avgHR>121&&(r.type==='Easy Run'||r.type==='Long Run'||r.type==='Walk/Run');
-      var typeColor=r.type==='Tempo Run'?{bg:'#FAEEDA',tc:'#633806'}:r.type==='Long Run'?{bg:'#E6F1FB',tc:'#0C447C'}:{bg:'#EAF3DE',tc:'#27500A'};
-      var rpeColor=r.rpe<=4?{bg:'#EAF3DE',tc:'#27500A'}:r.rpe<=6?{bg:'#FAEEDA',tc:'#633806'}:{bg:'#FCEBEB',tc:'#791F1F'};
-
-      // Header
-      var hdr=document.createElement('div');
-      hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px';
-      var stravaLink=r.stravaId?'<a href="https://www.strava.com/activities/'+r.stravaId+'" target="_blank" style="font-size:10px;color:#FC4C02;text-decoration:none;font-weight:600">Open in Strava ↗</a>':'';
-      hdr.innerHTML='<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+actName_(r)+'</div>'
-        +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.weather?' · '+r.weather:'')+'</div>'
-        +(stravaLink?'<div style="margin-top:3px">'+stravaLink+'</div>':'')
+      var ref=(typeof _runRefFor_==='function')?_runRefFor_(r):'';
+      var open=(typeof rideRefOk_==='function') && rideRefOk_(ref);
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px'
+        +(ri?';border-top:1px solid var(--b1)':'')+(open?';cursor:pointer':'');
+      row.innerHTML='<div style="min-width:0;flex:1">'
+          +'<div style="font-size:12.5px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            +(hrWarn?'<span title="Ran above the easy ceiling" style="color:var(--c-amber);margin-right:5px">&#9679;</span>':'')
+            +_runEsc_(nm)+'</div>'
+          +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'+_runEsc_(String(r.date).slice(0,10))
+            +(r.type?(' &middot; '+_runEsc_(String(r.type))):'')+'</div>'
         +'</div>'
-        +'<div style="display:flex;gap:5px">'
-        +(r.type?'<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+typeColor.bg+';color:'+typeColor.tc+'">'+r.type.split(' ')[0]+'</span>':'')
-        +(r.rpe?'<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+rpeColor.bg+';color:'+rpeColor.tc+'">RPE '+r.rpe+'</span>':'')
-        +'</div>';
-      rcard.appendChild(hdr);
-
-      // Main stats grid
-      var sg=document.createElement('div');
-      sg.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:5px';
-      [{v:r.distance?r.distance+' mi':'—',l:'miles'},{v:r.pace||'—',l:'pace'},{v:r.time||'—',l:'time'},{v:r.avgHR||'—',l:'avg HR',c:r.avgHR?'#ef4444':null}].forEach(function(s){
-        var cell=document.createElement('div');
-        cell.style.cssText='text-align:center;background:var(--s1);border-radius:8px;padding:7px';
-        cell.innerHTML='<div style="font-size:14px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
-          +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:1px">'+s.l+'</div>';
-        sg.appendChild(cell);
-      });
-      rcard.appendChild(sg);
-
-      // Secondary stats grid
-      var sg2=document.createElement('div');
-      sg2.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px';
-      [{v:r.cadence||'—',l:'cadence'},{v:r.elevation?(r.elevation+' ft'):'—',l:'elev gain'},{v:r.stride||'—',l:'stride'},{v:r.rss||'—',l:'rss'}].forEach(function(s){
-        var cell=document.createElement('div');
-        cell.style.cssText='text-align:center;background:var(--s1);border-radius:8px;padding:7px';
-        cell.innerHTML='<div style="font-size:14px;font-weight:800;color:var(--t1)">'+s.v+'</div>'
-          +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:1px">'+s.l+'</div>';
-        sg2.appendChild(cell);
-      });
-      rcard.appendChild(sg2);
-
-      // Zone breakdown if available
-      if(r.z1pct||r.z2pct||r.z3pct||r.z4pct){
-        var zb=document.createElement('div');
-        zb.style.cssText='background:var(--s1);border-radius:8px;padding:8px 10px;margin-bottom:6px';
-        zb.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">Zone breakdown</div>'
-          +'<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:1px">'
-          +(r.z1pct?'<div style="background:var(--d-t4);width:'+r.z1pct+'%"></div>':'')
-          +(r.z2pct?'<div style="background:#0F6E56;width:'+r.z2pct+'%"></div>':'')
-          +(r.z3pct?'<div style="background:#BA7517;width:'+r.z3pct+'%"></div>':'')
-          +(r.z4pct?'<div style="background:#ef4444;width:'+r.z4pct+'%"></div>':'')
-          +'</div>'
-          +'<div style="display:flex;gap:8px;margin-top:5px;flex-wrap:wrap">'
-          +(r.z1pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:var(--d-t4);display:inline-block"></span>Z1 '+r.z1pct+'%</span>':'')
-          +(r.z2pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#0F6E56;display:inline-block"></span>Z2 '+r.z2pct+'%</span>':'')
-          +(r.z3pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#BA7517;display:inline-block"></span>Z3 '+r.z3pct+'%</span>':'')
-          +(r.z4pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#ef4444;display:inline-block"></span>Z4 '+r.z4pct+'%</span>':'')
-          +'</div>';
-        rcard.appendChild(zb);
-      }
-
-      // NO MAP HERE, BY DECISION. This card used to draw a 160px Leaflet mini-map per run, plus a
-      // 'Load GPS Map' button whose only purpose was to feed it. Both are gone: the Activities tab
-      // already opens the full route for any run, so this was the same track drawn twice, and the
-      // duplicate cost the page real height on the surface that has the least of it.
-      //
-      // The button went with the map rather than being left behind. It fetched GPS for the sole
-      // purpose of drawing the thing above it; kept without the map it would be a control whose
-      // effect is invisible, which is worse than no control. Nothing else on this page read the
-      // track. The ride-detail path still fetches GPS through ensureRideStreams on open, so a run
-      // opened from Activities still backfills exactly as before.
-
-      // HR warning
-      if(hrWarn){
-        var warn=document.createElement('div');
-        warn.style.cssText='padding:7px 10px;background:rgba(186,117,23,.1);border-radius:8px;font-size:11px;color:#BA7517;margin-bottom:6px';
-        warn.textContent='⚠ HR exceeded zone 2 ceiling — use walk breaks next time';
-        rcard.appendChild(warn);
-      }
-
-      // Notes
-      if(r.notes){
-        var notes=document.createElement('div');
-        notes.style.cssText='font-size:12px;color:var(--t3);font-style:italic;margin-top:4px';
-        notes.textContent=r.notes;
-        rcard.appendChild(notes);
-      }
-
-      // Delete button
-      var delBtn=document.createElement('button');
-      delBtn.style.cssText='margin-top:8px;font-size:11px;color:var(--c-red);background:none;border:none;cursor:pointer;font-family:inherit;padding:0';
-      delBtn.textContent='Delete run';
-      (function(rRef){delBtn.onclick=async function(){
-        if(!(await uiConfirm('Delete this run?',{danger:true}))) return;
-        if(rRef.stravaId){
-          // Resolved to a POSITION here, after the uiConfirm await, because splice needs an
-          // index and the array can be reordered while the dialog is open. rRef is a getRuns()
-          // projection, so the handle is the s<id> form (this branch is gated on stravaId).
-          var rideIdx=(STORE_V2_HANDLES && typeof rideHandle_==='function')
-            ? rideResolveIdx_(rideHandle_(rRef))
-            : st.rides.findIndex(function(x){return x.stravaId===rRef.stravaId;});
-          if(rideIdx>=0) st.rides.splice(rideIdx,1);
-        } else {
-          var manIdx=(st.runs||[]).findIndex(function(x){return x.date===rRef.date&&x.name===rRef.name&&x.distance===rRef.distance;});
-          if(manIdx>=0) st.runs.splice(manIdx,1);
-        }
-        sv();fbPush(true);renderRun();toast('Run deleted');
-      };})(r);
-      rcard.appendChild(delBtn);
-
-      runList.appendChild(rcard);
+        +'<div style="text-align:right;flex-shrink:0;white-space:nowrap">'
+          +'<div style="font-size:12.5px;font-weight:700;color:var(--t1)">'+(mi?(Math.round(mi*10)/10+' mi'):'&mdash;')+'</div>'
+          +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'
+            +(sec>0?((typeof fmtHM_==='function')?fmtHM_(sec):Math.round(sec/60)+'m'):'&mdash;')
+            +(pace?(' &middot; '+pace+'/mi'):'')+'</div>'
+        +'</div>'
+        +(open?'<span style="color:var(--t3);font-size:14px;flex-shrink:0">&rsaquo;</span>':'');
+      if(open){ (function(rf){ row.onclick=function(){ _runOpenRef_(rf); }; })(ref); }
+      runList.appendChild(row);
     });
     scr.appendChild(runList);
+  }
   }
 
   // Weekly chart

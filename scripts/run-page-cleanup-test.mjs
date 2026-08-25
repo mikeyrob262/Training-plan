@@ -196,7 +196,12 @@ console.log('\n' + Y + '=== 6. the page cleanup ===' + X);
   // names the button, and a bare phrase search finds that and reports a regression that is not one.
   ok('NEG: and the Load GPS Map button went with it', !/loadMapBtn/.test(src));
   ok('NEG: ...and nothing on this page still fetches GPS for it', !/fetchStravaGPS/.test(rn));
-  ok('the removal is explained where it happened', /NO MAP HERE, BY DECISION/.test(rn));
+  // The comment that recorded the map removal lived inside the per-run CARD, and that card has since
+  // been replaced by a compact row - so the explanation went with the thing it explained. What must
+  // still hold is the outcome: no map is built here, and the row opens the run detail instead, which
+  // is where the map (and everything else the card used to duplicate) actually lives.
+  ok('the run rows open the run detail rather than inlining it', /_runOpenRef_\(rf\)/.test(rn));
+  ok('...and the row is only clickable when the run resolves', /rideRefOk_\(ref\)/.test(rn));
 
   // The Running Growth chart: off THIS page, still alive where it belongs.
   // The CALL, not the name - the comment recording the move names _rgSection_ too.
@@ -212,7 +217,11 @@ console.log('\n' + Y + '=== 6. the page cleanup ===' + X);
   // Scoped to the stat strip. The per-run detail card has its own legitimate 4-column grid further
   // down, and a file-wide search for the rule finds that instead and fails on innocent code.
   {
-    const strip = rn.slice(rn.indexOf('var statRow='), rn.indexOf('// Zone pills'));
+    // Bounded by the builder's own closing, not by whatever comment happens to follow it - the
+    // section below was renamed in the redesign and the old anchor silently became -1, which slices
+    // to the end of the function and measures the wrong region.
+    const stripStart = rn.indexOf('var statRow=');
+    const strip = rn.slice(stripStart, rn.indexOf('scr.appendChild(statRow([', stripStart));
     ok('NEG: the old boxed grid is gone from the stat strip', strip.indexOf('grid-template-columns') < 0);
     ok('NEG: ...and so is the three-line tile with its own panel', strip.indexOf('border-radius:10px;padding:8px 4px') < 0);
     ok('the strip is one panel with hairline dividers', /border-left:1px solid var\(--b1\)/.test(strip));

@@ -608,8 +608,17 @@ check('the .phase-pill badge is untouched', stillCapsule('.phase-pill{'), true);
 check('the .badge class is untouched', stillCapsule('.badge{'), true);
 check('the Segment Attack funnel chips are untouched',
       (flatSrc.match(/border-radius:999px/g) || []).length >= 2, true);
-check('strength type/RPE badges are untouched',
-      (flatSrc.match(/border-radius:100px/g) || []).length >= 2, true);
+// THE 100px PAIR IS GONE, AND NOT BECAUSE THE SWEEP TOOK IT. Both were the run type and RPE badges
+// inside the Run Training per-run CARD, and that card was replaced wholesale by a compact row - so
+// this control lost its subject rather than failing. The rule it guarded (buttons are not capsules,
+// badges may be) is still held by the three checks above it, which have their own subjects.
+//
+// What replaces it is the substantive claim: the information the type badge carried must still be
+// on the page. A badge can go; the fact it displayed cannot.
+check('NEG: the retired badges are really gone, not half-removed',
+      (flatSrc.match(/border-radius:100px/g) || []).length, 0);
+check('the run type still shows on the compact row',
+      /r\.type\?\('\s*&middot;\s*'\+_runEsc_\(String\(r\.type\)\)\)/.test(flatSrc), true);
 check('bottom-sheet corners are untouched', (flatSrc.match(/border-radius:20px 20px 0 0/g) || []).length, 7);
 // The button this rule came from must itself be compliant, sized to its label, and beside its text.
 const todayBtn = codeLines.find(L => /data-act="plan"/.test(L) && /View</.test(L));
