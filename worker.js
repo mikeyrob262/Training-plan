@@ -48880,6 +48880,9 @@ function _runWhyCardHTML_(){
     +'</div>'
     +'</div>';
 }
+// The wrapper Why shares with Weekly Build, so the chart can be appended into it rather than as a
+// separate card the balancer is free to send to another column. Reset on every render.
+var _runWhyStack=null;
 // Session-local, so it reopens collapsed on a fresh load but survives a re-render within a visit.
 var _runWhyOpen=false;
 function runWhyToggle_(){
@@ -49152,6 +49155,10 @@ function _runArmWatch_(surface){
 try{ if(typeof window!=='undefined'){ window._runArmWatch_=_runArmWatch_; window._runArmed_=_runArmed_; } }catch(e){}
 // THE run page. Every card on both surfaces is built here.
 function renderRunInto_(scr, surface){
+  // Reset per render. Left over from the previous pass it points at a DETACHED wrapper, and the
+  // weekly chart would be appended into a node that is no longer on the page - which is a card that
+  // silently stops existing, the failure mode this page has already paid for twice today.
+  _runWhyStack=null;
 
 
 
@@ -49471,8 +49478,17 @@ function renderRunInto_(scr, surface){
     scr.appendChild(zoneCard);
     try{
       var whyHTML=(typeof _runWhyCardHTML_==='function')?(_runWhyCardHTML_()||''):'';
+      // WHY AND WEEKLY BUILD ARE ONE BLOCK. The balancer assigns cards to columns by measured
+      // height, so two cards that belong together land wherever the packing puts them - Why went
+      // to one column and Weekly Build to another. Stacked inside a single wrapper they are ONE
+      // card as far as the packing is concerned, so Weekly Build is always directly under Why.
       if(whyHTML){ var wd=document.createElement('div'); wd.innerHTML=whyHTML;
-        while(wd.firstChild) scr.appendChild(wd.firstChild);
+        _runWhyStack=document.createElement('div');
+        _runWhyStack.style.cssText='margin:0 16px 12px;display:flex;flex-direction:column;gap:10px;min-width:0';
+        while(wd.firstChild){ var _wc=wd.firstChild;
+          if(_wc.style){ _wc.style.margin='0'; }
+          _runWhyStack.appendChild(_wc); }
+        scr.appendChild(_runWhyStack);
         // Bound after the node is in the pair. Expanding makes its column taller and the page will
         // scroll - which is correct: the reader asked to see it.
         setTimeout(function(){ var hh=document.getElementById('run-why-head');
@@ -49578,7 +49594,9 @@ function renderRunInto_(scr, surface){
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0F6E56;display:inline-block"></span>Actual</span>'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;border-top:1.5px dashed #0F6E56;display:inline-block"></span>Target</span>'
     +'</div>';
-  scr.appendChild(chartCard);
+  // Into the Why block when there is one, so it sits directly under it; on its own otherwise.
+  if(_runWhyStack){ chartCard.style.margin='0'; _runWhyStack.appendChild(chartCard); }
+  else scr.appendChild(chartCard);
 
   // Race Goals collapsible
   var raceToggle=document.createElement('div');
