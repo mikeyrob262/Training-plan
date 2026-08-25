@@ -51176,7 +51176,7 @@ function runInjDebriefOpen_(id){
   if(!rec) return;
   var modal=document.createElement('div');
   modal.id='run-inj-debrief';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:330;display:flex;align-items:flex-end;justify-content:center';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1201;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px 32px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;display:flex;flex-direction:column';
   modal.appendChild(sheet);
@@ -51302,7 +51302,12 @@ function runOpenTargetSheet_(){
   }catch(e){}
   var modal=document.createElement('div');
   modal.id='run-target-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:320;display:flex;align-items:flex-end;justify-content:center';
+  // ABOVE THE DESKTOP SHELL. #desktop-shell is position:absolute z-index:999, so a sheet at 320
+  // opened on the desktop Run page and rendered COMPLETELY BEHIND the app - it was there, it was
+  // just invisible and unclickable. Measured: elementFromPoint at the centre of the screen came
+  // back outside the modal at every height tested. On mobile there is no shell and 320 was fine,
+  // which is why this only ever showed up on desktop.
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1200;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px 32px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto';
   sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 14px"></div>'
@@ -51360,7 +51365,12 @@ function runOpenIssueSheet_(){
   var log=(typeof _injAll_==='function')?_injAll_():[];
   var modal=document.createElement('div');
   modal.id='run-issue-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:320;display:flex;align-items:flex-end;justify-content:center';
+  // ABOVE THE DESKTOP SHELL. #desktop-shell is position:absolute z-index:999, so a sheet at 320
+  // opened on the desktop Run page and rendered COMPLETELY BEHIND the app - it was there, it was
+  // just invisible and unclickable. Measured: elementFromPoint at the centre of the screen came
+  // back outside the modal at every height tested. On mobile there is no shell and 320 was fine,
+  // which is why this only ever showed up on desktop.
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1200;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px 32px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto';
   var areaOpts=INJ_AREAS.map(function(a){ return '<option value="'+a+'">'+a+'</option>'; }).join('');
