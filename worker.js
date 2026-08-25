@@ -329,6 +329,10 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .lg-t tr:last-child td{border-bottom:none}
 .lg-t tfoot td{border-top:1px solid var(--d-line2);border-bottom:none;font-weight:800;color:var(--d-head);padding-top:9px}
 .lg-t td.lg-dim{color:var(--d-dim)}
+/* A NAME COLUMN READS LEFT. Everything else in these tables is a figure and lines up on the
+   right, but the activity name inherited that and every ride title sat flush against the miles
+   column with a ragged left edge - correct for numbers, unreadable for a list of names. */
+.lg-t th.lg-nm,.lg-t td.lg-nm{text-align:left}
 .lg-t td.lg-nm{white-space:normal;min-width:150px}
 /* A row is a link ONLY when its activity actually resolves. An unresolvable row stays plain text -
    the same do-not-claim contract the Personal Bests board uses - so a click never dead-ends. */
@@ -14494,7 +14498,7 @@ function _lgActivityTable_(list, cfg){
       ? ('<tr class="lg-arow" style="color:'+cfg.col+'" title="Open this '+cfg.noun+'" onclick="_runOpenRef_('+rideRefAttr_(ref)+')">'+cells+'</tr>')
       : ('<tr>'+cells+'</tr>');
   });
-  var head='<tr><th>Date</th><th>Activity</th><th>Miles</th><th>Time</th>'
+  var head='<tr><th>Date</th><th class="lg-nm">Activity</th><th>Miles</th><th>Time</th>'
     +(isRun?'<th>Pace</th><th>Avg HR</th>':'<th>Ft climbed</th><th>Avg mph</th>')+'</tr>';
   var H='<div class="lg-tw"><table class="lg-t"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
   // The link rate is STATED, never discovered by clicking. A run that only exists in the snapshot

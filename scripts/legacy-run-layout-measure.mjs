@@ -205,6 +205,15 @@ try {
              tableWiderThanWrapper:tw.map(function(w,i){ var t=tables[i]; if(!t) return null;
                return Math.round(t.getBoundingClientRect().width) - Math.round(w.getBoundingClientRect().width); }),
              clickable:arows.length,
+             // Numbers line up right; a list of NAMES must not. Read off the rendered cell, because
+             // the name column inherited the table's right alignment and every ride title sat flush
+             // against the miles column with a ragged left edge.
+             nameAlign:(function(){ var c=document.querySelector('.lg-t td.lg-nm');
+               return c?getComputedStyle(c).textAlign:null; })(),
+             headAlign:(function(){ var h=document.querySelector('.lg-t th.lg-nm');
+               return h?getComputedStyle(h).textAlign:null; })(),
+             numAlign:(function(){ var t=document.querySelectorAll('.lg-t tbody td');
+               return t[2]?getComputedStyle(t[2]).textAlign:null; })(),
              monthRows:document.querySelectorAll('.lg-t tbody tr').length,
              cellClips:__CLIP(document, '.lg-t td').filter(function(c){ return c.clipped; }).length,
              totalH:wrap?wrap.scrollHeight:null,
@@ -215,6 +224,8 @@ try {
   ok('both tables rendered', detD.nTables === 2 && detD.nWrappers === 2);
   ok('no table cell is silently clipped', detD.cellClips === 0);
   ok('the activity rows are clickable', detD.clickable > 0);
+  ok('the name column reads left', detD.nameAlign === 'left' && detD.headAlign === 'left');
+  ok('NEG: the figures still line up right', detD.numAlign === 'right');
   info('wrappers: ' + JSON.stringify(detD.wrapperBoxes) + '  clickable rows: ' + detD.clickable);
 
   console.log('\n' + Y + '=== desktop LIGHT MODE - is any of it actually readable? ===' + X);
