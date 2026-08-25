@@ -89,11 +89,8 @@ console.log('\n' + Y + '=== _ptFactors_ RUN, not just read ===' + X);
 console.log('\n' + Y + '=== outcomes live in their own panel, honestly titled ===' + X);
 ok('best 20-min power is an outcome', /add\(res\.outcomes,res\.outcomesMiss,'Best 20-min power'/.test(src));
 ok('W/kg is an outcome', /add\(res\.outcomes,res\.outcomesMiss,'W\/kg at 20 min'/.test(src));
-// The heading helper is now _ptPanelHead_(title, sub), shared with the Run page's trajectory card so
-// the two cannot drift apart again. The requirement is unchanged - outcomes get their OWN heading,
-// distinct from the causes one - so the assertion follows the helper rather than being dropped.
-ok('the card renders a separate heading for them', /_ptPanelHead_\('Is it translating'/.test(src));
-ok('...distinct from the causes heading', /_ptPanelHead_\('What is driving it'/.test(src));
+ok('the card renders a separate heading for them', /head2\('Is it translating'\)/.test(src));
+ok('...distinct from the causes heading', /head2\('What is driving it'\)/.test(src));
 ok('NEG: the old single undifferentiated panel is gone', !/_ptDrivers_/.test(src));
 
 console.log('\n' + Y + '=== outcomes are stable, not peak-vs-peak ===' + X);
@@ -121,16 +118,7 @@ console.log('\n' + Y + '=== outcomes are stable, not peak-vs-peak ===' + X);
 
 console.log('\n' + Y + '=== every panel states its own timeframe ===' + X);
 ok('one shared period string builds every panel label', /var periodTxt=\(_ptRange==='ALL'\|\|_ptRange==='1Y'\)/.test(src));
-// STRICTER THAN BEFORE: the old check only proved the helper's body mentioned periodTxt. The helper
-// now takes the timeframe as an argument, so what matters is that EVERY call site passes it - a
-// heading rendered without its timeframe is the exact defect this section exists to prevent.
-{
-  // The DEFINITION also reads _ptPanelHead_(t, sub) and carries no timeframe; counting it makes
-  // every() fail on correct code. Third time this file-wide-match trap has bitten this session.
-  const calls = src.match(/(?<!function )_ptPanelHead_\([^)]*\)/g) || [];
-  ok('every panel heading is given a timeframe', calls.length >= 4 && calls.every(c => /periodTxt/.test(c)));
-  ok('...and the helper renders whatever it is given', /function _ptPanelHead_\(t, sub\)\{[\s\S]{0,400}\+sub\+/.test(src));
-}
+ok('...and the heading helper always prints it', /head2=function\(t\)\{[\s\S]{0,400}periodTxt/.test(src));
 ok('the headline keeps its own POINT-comparison wording', /var vsTxt=\(_ptRange==='ALL'\)/.test(src));
 ok('the two strings are different, because the two comparisons are',
    /vs the previous '\+w\.days\+' days/.test(src) && /'vs '\+\(w\.days\)\+' days ago'/.test(src));

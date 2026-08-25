@@ -31219,41 +31219,18 @@ function _balCols_(host){
     cards.forEach(function(c){ host.appendChild(c); });
     return;
   }
-  // FULL-WIDTH OPT-OUT, IN AUTHORED ORDER. Some cards are a ROW, not a column item: the trajectory
-  // card lays out three columns of its own, and squeezed into half the width its third column wraps
-  // underneath and the whole thing reads as broken. The Dashboard already treats its copy this way
-  // - "its own full-width row, above the card strip, because it IS the row" - so the run page needs
-  // the same escape hatch rather than a second layout rule.
-  //
-  // Order is PRESERVED rather than hoisting the full-width cards to the top: the page is authored in
-  // priority order, and a layout pass that reorders it is deciding something the author already did.
-  // So the list is walked, and each RUN of ordinary cards is balanced into its own two-column row
-  // between the full-width ones.
-  host.setAttribute('style','display:flex;flex-direction:column;gap:'+_BAL_GAP+'px');
+  host.setAttribute('style','display:flex;gap:'+_BAL_GAP+'px;align-items:flex-start');
   var mk=function(){ var d=document.createElement('div');
     d.setAttribute('style','flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:'+_BAL_GAP+'px');
     return d; };
-  var isFull=function(c){ try{ return !!(c.getAttribute && c.getAttribute('data-bal')==='full'); }catch(e){ return false; } };
-  var groups=[], cur=null;
-  cards.forEach(function(c){
-    if(isFull(c)){ groups.push({full:c}); cur=null; return; }
-    if(!cur){ cur={list:[]}; groups.push(cur); }
-    cur.list.push(c);
-  });
-  groups.forEach(function(g){
-    if(g.full){ host.appendChild(g.full); return; }
-    var row=document.createElement('div');
-    row.setAttribute('style','display:flex;gap:'+_BAL_GAP+'px;align-items:flex-start');
-    host.appendChild(row);
-    var A=mk(), B=mk();
-    row.appendChild(A); row.appendChild(B);
-    g.list.forEach(function(c){ A.appendChild(c); });        // measure at COLUMN width
-    var hs=g.list.map(function(c){ return c.getBoundingClientRect().height; });
-    var ha=0, hb=0;
-    g.list.forEach(function(c,i){
-      if(ha<=hb){ A.appendChild(c); ha+=hs[i]+_BAL_GAP; }
-      else      { B.appendChild(c); hb+=hs[i]+_BAL_GAP; }
-    });
+  var A=mk(), B=mk();
+  host.appendChild(A); host.appendChild(B);
+  cards.forEach(function(c){ A.appendChild(c); });          // measure at COLUMN width
+  var hs=cards.map(function(c){ return c.getBoundingClientRect().height; });
+  var ha=0, hb=0;
+  cards.forEach(function(c,i){
+    if(ha<=hb){ A.appendChild(c); ha+=hs[i]+_BAL_GAP; }
+    else      { B.appendChild(c); hb+=hs[i]+_BAL_GAP; }
   });
 }
 // Re-run only when the one-column/two-column threshold is actually crossed. Rebalancing on every
@@ -41146,13 +41123,7 @@ function _ptFactors_(days){
 // the one thing this app has repeatedly paid for is a second copy of a renderer drifting from the
 // first. So the colours are a parameter and there is still exactly one skyline. Omitted, it draws
 // the dashboard's green/blue/violet exactly as before.
-// ctlFill is a SEPARATE key on purpose: the ridge fill has always been the lighter #4ade80 under
-// a #22c55e stroke, and folding the two into one value would have quietly restyled the dashboard
-// card while 'only' extracting a constant.
-var _PT_COLS={ ctl:'#22c55e', ctlFill:'#4ade80', atl:'#60a5fa', tsb:'#a78bfa' };
-function _ptChart_(pts, w, h, cols){
-  cols=cols||_PT_COLS;
-  var _cf=cols.ctlFill||cols.ctl;
+function _ptChart_(pts, w, h){
   if(!pts || pts.length<2) return '<div style="height:'+h+'px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--d-t4)">Not enough history to draw a trajectory yet.</div>';
   var n=pts.length, pad=6, iw=w, ih=h-pad*2;
   var ctl=pts.map(function(p){ return +p.ctl||0; });
@@ -41169,143 +41140,33 @@ function _ptChart_(pts, w, h, cols){
   var by=pad+ih;
   var tband=''; for(var i=0;i<n;i++){ tband+=(i?'L':'M')+x(i).toFixed(1)+' '+(by-(tsb[i]/tmax)*10).toFixed(1); }
   tband+='L'+x(n-1).toFixed(1)+' '+by.toFixed(1)+'L0 '+by.toFixed(1)+'Z';
-  // The gradient id carries the COLOURWAY as well as the shape. Two skylines in one document with
-  // the same point count and peak would otherwise share an id, and the second defs block would
-  // silently lose to the first - one card drawn in the other's colours.
-  var uid='ptg'+String(n)+String(Math.round(hi))+String(cols.ctl).replace(/[^A-Za-z0-9]/g,'');
+  var uid='ptg'+String(n)+String(Math.round(hi));
   return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
     +'<defs>'
-    +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+_cf+'" stop-opacity=".55"/><stop offset="1" stop-color="'+_cf+'" stop-opacity=".04"/></linearGradient>'
-    +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+cols.atl+'" stop-opacity=".45"/><stop offset="1" stop-color="'+cols.atl+'" stop-opacity=".03"/></linearGradient>'
+    +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ade80" stop-opacity=".55"/><stop offset="1" stop-color="#4ade80" stop-opacity=".04"/></linearGradient>'
+    +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa" stop-opacity=".45"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".03"/></linearGradient>'
     +'</defs>'
     +'<path d="'+area(ctl)+'" fill="url(#'+uid+'a)"/>'
     +'<path d="'+area(atl)+'" fill="url(#'+uid+'b)"/>'
-    +'<path d="'+tband+'" fill="'+cols.tsb+'" fill-opacity=".38"/>'
+    +'<path d="'+tband+'" fill="#a78bfa" fill-opacity=".38"/>'
     // The skyline stroke is drawn LAST so the ridge reads as the subject. vector-effect keeps it
     // 2px after the non-uniform viewBox scale, which would otherwise squash it to a hairline.
-    +'<path d="'+line(ctl)+'" fill="none" stroke="'+cols.ctl+'" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
-    +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="'+cols.ctl+'" vector-effect="non-scaling-stroke"/>'
+    +'<path d="'+line(ctl)+'" fill="none" stroke="#22c55e" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
+    +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="#22c55e" vector-effect="non-scaling-stroke"/>'
     +'</svg>';
 }
-// ONE TRAJECTORY SHELL, TWO SPORTS.
-//
-// The Dashboard's Performance Trajectory and the Run page's Running Trajectory answer the same
-// question about different sports, and they were built as two separate renderers - so they drifted
-// immediately: different header, the headline percentage in a different column, a different panel
-// treatment, different footnote placement. Side by side they did not read as a family, which is the
-// whole point of a card that says the same KIND of thing twice.
-//
-// So the shell is ONE function and the sports are arguments. Anything genuinely sport-specific -
-// which legend rows, which driver panels, which colours, which range keys - comes in through the
-// spec. Anything structural is here and cannot diverge again. The layout is the Dashboard's,
-// unchanged, because that is the one being matched to.
-//
-// The spec:
-//   title       the uppercase card label
-//   attr        the data-* attribute the range chips carry (each card owns its own state)
-//   ranges      [[key, days], ...]
-//   range       the selected key
-//   cols        {ctl, ctlFill, atl, tsb} colourway, passed straight to _ptChart_
-//   pts         the series to draw
-//   head/tone   the verdict, in words, and its direction
-//   pctTxt      the headline figure, already formatted (a % or an absolute pair)
-//   vsTxt       what the headline is measured against
-//   legend      [[label, colour, value], ...]
-//   foot        the small print under the legend
-//   panels      the right-hand column's HTML - the one place the two cards genuinely differ
-//   insight     the interpretive sentence
-//   link        optional trailing link HTML
-//   axis        [leftLabel, rightLabel]
-function _ptTrajShell_(s){
-  var arrow=(s.tone==='up')?'&uarr;':(s.tone==='down'?'&darr;':'&rarr;');
-  var col=(s.tone==='up')?'var(--c-green)':(s.tone==='down'?'var(--c-red)':'var(--d-t3)');
-  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
-  (s.ranges||[]).forEach(function(r){
-    var on=(r[0]===s.range);
-    toggle+='<span '+s.attr+'="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
-      +(on?('background:var(--d-panel);color:'+s.cols.ctl+';border:1px solid '+s.cols.ctl+'73')
-          :'color:var(--d-t3);border:1px solid transparent')+'">'+r[0]+'</span>';
-  });
-  toggle+='</div>';
-
-  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
-  var legend='';
-  (s.legend||[]).forEach(function(row){
-    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
-      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3)">'
-      +'<span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
-      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
-  });
-
-  var H='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">'+s.title+'</span>'
-    +toggle+'</div>';
-  H+='<div style="display:flex;gap:16px;min-width:0;flex:1;flex-wrap:wrap">';
-  // LEFT: the verdict in words, then the three current values.
-  H+='<div style="flex:1 1 186px;min-width:170px;max-width:230px;display:flex;flex-direction:column;min-width:0">'
-    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+s.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
-    +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+s.vsTxt+'</div>'
-    +legend
-    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto;line-height:1.45">'+s.foot+'</div>'
-    +'</div>';
-  // MIDDLE: the ridge.
-  H+='<div style="flex:2 1 300px;min-width:240px;display:flex;flex-direction:column">'
-    +'<div style="flex:1;min-height:150px">'+_ptChart_(s.pts, 600, 150, s.cols)+'</div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
-      +'<span>'+s.axis[0]+'</span><span>'+s.axis[1]+'</span></div>'
-    +'</div>';
-  // RIGHT: the headline figure, then whatever this card puts behind it.
-  H+='<div style="flex:1 1 300px;min-width:250px;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
-    +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+s.pctTxt+'</div>'
-    +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+s.vsTxt+'</div>'
-    +s.panels
-    +(s.link?('<div style="margin-top:auto;text-align:right">'+s.link+'</div>'):'')
-    +'</div>';
-  H+='</div>';
-  // The interpretive line, in its own band, so it reads as the coach speaking rather than a caption.
-  H+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
-    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+s.cols.ctl+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
-    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+s.insight+'</span></div>';
-  return H;
-}
-// The driver rows both cards use. Same markup, so an up-arrow means the same thing on either page.
-// Direction comes from the row's own better flag where it has one - pace is inverted and Form has
-// no good side - and falls back to the sign for the Dashboard's plain percentage rows.
-function _ptDriverRows_(list){
-  var h='';
-  (list||[]).forEach(function(x){
-    var better=(x.better===undefined)?(x.pct>=0):!!x.better;
-    var tone=x.neutral?'var(--d-t2)':(better?'var(--c-green)':'var(--c-red)');
-    var glyph=x.neutral?((x.delta>=0)?'&uarr;':'&darr;'):(better?'&uarr;':'&darr;');
-    var mag=(x.pct!=null&&x.unit!=='pts'&&x.unit!=='mi')?(Math.abs(x.pct)+'%')
-           :(x.delta!=null?(Math.abs(x.delta)+(x.unit?(' '+x.unit):'')):'');
-    h+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
-      +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
-        +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
-        +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
-      +'<span style="font-size:11px;font-weight:700;color:'+tone+';flex-shrink:0">'+glyph+' '+mag+'</span></div>'
-      +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail
-          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'');
-  });
-  return h;
-}
-function _ptPanelHead_(t, sub){
-  return '<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">'+t+'</div>'
-    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+sub+'</div>';
-}
-// The Dashboard card. Everything structural now comes from _ptTrajShell_; what stays here is what
-// is genuinely about CYCLING and the all-sport series: which values the legend shows, where the
-// current triple comes from, and the two-panel causes/outcomes split that this card argued for and
-// the run card does not have the data to reproduce.
 function _ptCardHTML_(lbl, link){
   var w=_ptWindow_(_ptRange);
   var d=_ptDelta_(w.pts);
   var v=_ptVerdict_(d, _ptRange);
   var f=(typeof getFitness_==='function')?getFitness_():null;
   var tail=w.pts.length?w.pts[w.pts.length-1]:null;
+  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
   var cur={ ctl:(f&&f.ctl!=null)?f.ctl:(tail?tail.ctl:null),
             atl:(f&&f.atl!=null)?f.atl:(tail?tail.atl:null),
             tsb:(f&&f.tsb!=null)?f.tsb:(tail?tail.tsb:null) };
+  var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
+  var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3)');
   // ABSOLUTE PAIR WHERE A PERCENTAGE WOULD BE AN ARTIFACT. "2.4 to 63" says everything the ratio
   // would have, without the false precision of a four-digit percentage.
   var pctTxt=!d?'&mdash;'
@@ -41313,17 +41174,62 @@ function _ptCardHTML_(lbl, link){
             :((d.pct>0?'+':'')+d.pct+'%'));
   var vsTxt=(_ptRange==='ALL')?'across your whole history'
            :(_ptRange==='1Y'?'vs a year ago':('vs '+(w.days)+' days ago'));
+  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
+  _PT_RANGES.forEach(function(r){
+    var on=(r[0]===_ptRange);
+    toggle+='<span data-ptrange="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
+      +(on?('background:var(--d-panel);color:#22c55e;border:1px solid rgba(34,197,94,.45)'):'color:var(--d-t3);border:1px solid transparent')+'">'+r[0]+'</span>';
+  });
+  toggle+='</div>';
+
+  var legend='';
+  [['Fitness (CTL)','#22c55e',cur.ctl],['Training Load (ATL)','#60a5fa',cur.atl],['Form (TSB)','#a78bfa',cur.tsb]].forEach(function(row){
+    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3)"><span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
+  });
+
   var fact=_ptFactors_(w.days);
   // EVERY PANEL CARRIES ITS OWN TIMEFRAME, in words, from one shared pair of strings so the two can
   // never drift apart. The headline is a POINT comparison (fitness now against fitness then); the
-  // panels are PERIOD comparisons (this window against the one before it).
-  // ALL SAYS "vs the previous year" BECAUSE THAT IS WHAT IT DOES - _ptFactors_ falls back to a
-  // 365-day span when the range carries no day count.
+  // panels are PERIOD comparisons (this window against the one before it). Those are different
+  // questions and the card now says which is which instead of stacking them and hoping.
+  // ALL SAYS "vs the previous year" BECAUSE THAT IS WHAT IT DOES. _ptFactors_ falls back to a
+  // 365-day span when the range carries no day count, so the panels on ALL compare the last year
+  // against the year before it. The old label claimed "vs the first half of your history", which
+  // described a comparison the code has never made - a caption inventing its own arithmetic.
   var periodTxt=(_ptRange==='ALL'||_ptRange==='1Y')?'vs the previous year'
                :('vs the previous '+w.days+' days');
+  var rows=function(list){
+    var h='';
+    list.forEach(function(x){
+      var up=(x.pct>=0);
+      h+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
+        +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
+          +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
+          +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
+        +'<span style="font-size:11px;font-weight:700;color:'+(up?'#22c55e':'#ef4444')+';flex-shrink:0">'+(up?'&uarr;':'&darr;')+' '+Math.abs(x.pct)+'%</span></div>'
+        +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail+'</div>'):'');
+    });
+    return h;
+  };
+  var head2=function(t){ return '<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">'+t+'</div>'
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+periodTxt+'</div>'; };
+  // SIDE BY SIDE, NOT STACKED, and that is a height decision as much as a design one. Stacked, the
+  // column costs the SUM of both panels and pushed the card to 448px, putting the dashboard 42px
+  // over its viewport. Side by side it costs the MAX, which is what a pair of short lists should
+  // cost. Shaving padding and dropping the "512 vs 390" detail lines would have bought the same
+  // pixels by deleting exactly the figures that make the percentages checkable - the complaint this
+  // rebuild exists to answer.
+  //
+  // A SEPARATE QUESTION, SEPARATELY TITLED. Outcomes are results of fitness, not inputs to it, so
+  // they get their own heading; filing them under "what is driving it" claimed a causal link that
+  // does not exist and let the card appear to contradict itself.
   // WHAT DROPPED OUT, NAMED. A metric that cannot be computed for both windows is omitted, which is
   // right - but at 30D that left "Is it translating" showing a single line with no way to tell a
-  // stated limitation from an arbitrary one.
+  // stated limitation from an arbitrary one. The note names the missing metrics and the reason, so
+  // the gap reads as an answer rather than an absence. Only shown when something is actually
+  // missing AND something is actually present: a panel with nothing in it already says so above.
   var andList=function(a){
     if(a.length<=1) return a[0]||'';
     if(a.length===2) return a[0]+' and '+a[1];
@@ -41334,40 +41240,57 @@ function _ptCardHTML_(lbl, link){
     return '<div style="font-size:9.5px;color:var(--d-t4);line-height:1.45;margin-top:7px;padding-top:7px;border-top:1px dashed var(--d-edge)">'
       +andList(list)+(list.length>1?' need':' needs')+' more history than this range holds.</div>';
   };
-  // A SEPARATE QUESTION, SEPARATELY TITLED. Outcomes are results of fitness, not inputs to it, so
-  // they get their own heading; filing them under "what is driving it" claimed a causal link that
-  // does not exist and let the card appear to contradict itself.
   var causesHTML = fact.causes.length
-    ? (_ptPanelHead_('What is driving it', periodTxt)+_ptDriverRows_(fact.causes)+missNote(fact.causesMiss, true))
-    : (_ptPanelHead_('What is driving it', periodTxt)
+    ? (head2('What is driving it')+rows(fact.causes)+missNote(fact.causesMiss, true))
+    // NOT an empty panel and NOT invented numbers: say which comparison could not be made.
+    : (head2('What is driving it')
        +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched history in this range to attribute the change yet.</div>');
   var outHTML = fact.outcomes.length
-    ? (_ptPanelHead_('Is it translating', periodTxt)+_ptDriverRows_(fact.outcomes)+missNote(fact.outcomesMiss, true))
+    ? (head2('Is it translating')+rows(fact.outcomes)+missNote(fact.outcomesMiss, true))
     : (fact.outcomesMiss.length
-       ? (_ptPanelHead_('Is it translating', periodTxt)
+       ? (head2('Is it translating')
           +'<div style="font-size:11px;color:var(--d-t4);line-height:1.5">'+andList(fact.outcomesMiss)
           +(fact.outcomesMiss.length>1?' need':' needs')+' more history than this range holds. Try a longer range.</div>')
        : '');
-  // SIDE BY SIDE, NOT STACKED, and that is a height decision as much as a design one. Stacked, the
-  // column costs the SUM of both panels; side by side it costs the MAX, which is what a pair of
-  // short lists should cost.
-  var panels='<div style="display:flex;gap:14px;min-width:0">'
+  var dHTML='<div style="display:flex;gap:14px;min-width:0">'
     +'<div style="flex:1;min-width:0">'+causesHTML+'</div>'
     +(outHTML?('<div style="flex:1;min-width:0;border-left:1px solid var(--d-edge);padding-left:12px">'+outHTML+'</div>'):'')
     +'</div>';
 
-  return _ptTrajShell_({
-    title:'PERFORMANCE TRAJECTORY', attr:'data-ptrange', ranges:_PT_RANGES, range:_ptRange,
-    cols:_PT_COLS, pts:w.pts, head:v.head, tone:v.tone, pctTxt:pctTxt, vsTxt:vsTxt,
-    legend:[['Fitness (CTL)',_PT_COLS.ctl,cur.ctl],
-            ['Training Load (ATL)',_PT_COLS.atl,cur.atl],
-            ['Form (TSB)',_PT_COLS.tsb,cur.tsb]],
-    foot:'All values are 7-day averages'+((f&&f.source&&f.source!=='none')?(' &middot; current from '+f.source):''),
-    axis:[(w.days>0?(w.days+' days ago'):'start'),'Today'],
-    panels:panels,
-    insight:_ptInsight_(d, w, fact),
-    link:link('View details &rarr;','ai')
-  });
+  var inner=lbl('PERFORMANCE TRAJECTORY', toggle);
+  inner+='<div style="display:flex;gap:16px;min-width:0;flex:1">';
+  // LEFT: verdict, legend
+  inner+='<div style="width:186px;flex-shrink:0;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
+    +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
+    +legend
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto">All values are 7-day averages'
+    +((f&&f.source&&f.source!=='none')?(' &middot; current from '+f.source):'')+'</div>'
+    +'</div>';
+  // MIDDLE: the ridge
+  inner+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
+    +'<div style="flex:1;min-height:0">'+_ptChart_(w.pts, 600, 150)+'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
+      +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
+    +'</div>';
+  // RIGHT: headline percent + drivers
+  // Widened from 196px to carry two sub-columns. The chart is flex:1 and simply gives up the width,
+  // which it can afford far more easily than the card can afford the height.
+  inner+='<div style="width:344px;flex-shrink:0;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+pctTxt+'</div>'
+    +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
+    +dHTML
+    +'<div style="margin-top:auto;text-align:right">'+link('View details &rarr;','ai')+'</div>'
+    +'</div>';
+  inner+='</div>';
+  // The interpretive line, given its own band so it reads as the coach speaking rather than a caption.
+  inner+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
+    // ONE STRING, composed by _ptInsight_ with the factors in hand. The card no longer prepends a
+    // separate divergence sentence: that is what produced a caution and a celebration glued together
+    // with a space, each written without knowledge of the other.
+    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_ptInsight_(d, w, fact)+'</span></div>';
+  return inner;
 }
 // ==================== RUNNING PERFORMANCE TRAJECTORY ====================
 //
@@ -41676,14 +41599,54 @@ function rtSetRange_(k){
   _rtRepaint_();
 }
 try{ if(typeof window!=='undefined'){ window.rtSetRange_=rtSetRange_; window._rtSeries_=_rtSeries_; window._rtInvalidate_=_rtInvalidate_; } }catch(e){}
-// The Run page card. Structure comes from _ptTrajShell_, the SAME shell the Dashboard's
-// Performance Trajectory renders through, so the two read as one family by construction rather than
-// by two renderers agreeing to look alike - which they did not: the header, the column the headline
-// percentage sat in, the panel treatment and the footnote had all drifted within a day of shipping.
+// ---- THE RUN CARD'S OWN RIDGE ----------------------------------------------------------------
 //
-// What stays here is what is genuinely about running: the run-only series, the layoff, and a single
-// driver panel instead of the Dashboard's causes/outcomes split. That split is not reproduced
-// because the run library cannot support it - there are no 20-minute power efforts to be an outcome.
+// DELIBERATELY A SEPARATE COPY OF _ptChart_, NOT A SHARED ONE. An earlier pass parameterised the
+// Dashboard's chart so both cards could call it; that edited a file the Dashboard renders, to serve
+// a change scoped to this page, and it is not a trade this project wants. The Dashboard's copy is
+// byte-identical to what it has always been and nothing here can reach it.
+//
+// The cost is real and accepted: a fix to one ridge has to be applied to the other by hand. That is
+// cheaper than a shared renderer that silently restyles a page nobody asked to change.
+function _rtChart_(pts, w, h){
+  if(!pts || pts.length<2) return '<div style="height:'+h+'px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--d-t4)">Not enough history to draw a trajectory yet.</div>';
+  var n=pts.length, pad=6, iw=w, ih=h-pad*2;
+  var ctl=pts.map(function(p){ return +p.ctl||0; });
+  var atl=pts.map(function(p){ return +p.atl||0; });
+  var tsb=pts.map(function(p){ return +p.tsb||0; });
+  var hi=0; ctl.concat(atl).forEach(function(v){ if(v>hi) hi=v; });
+  if(!(hi>0)) hi=1;
+  var x=function(i){ return (n===1)?0:(i/(n-1))*iw; };
+  var y=function(v){ return pad + ih - (v/hi)*ih*0.86; };
+  var line=function(arr){ var d=''; for(var i=0;i<n;i++){ d+=(i?'L':'M')+x(i).toFixed(1)+' '+y(arr[i]).toFixed(1); } return d; };
+  var area=function(arr){ return line(arr)+'L'+x(n-1).toFixed(1)+' '+(pad+ih).toFixed(1)+'L0 '+(pad+ih).toFixed(1)+'Z'; };
+  // Form rides the baseline: a thin band whose thickness is |TSB|, above the line when positive.
+  var tmax=1; tsb.forEach(function(v){ if(Math.abs(v)>tmax) tmax=Math.abs(v); });
+  var by=pad+ih;
+  var tband=''; for(var i=0;i<n;i++){ tband+=(i?'L':'M')+x(i).toFixed(1)+' '+(by-(tsb[i]/tmax)*10).toFixed(1); }
+  tband+='L'+x(n-1).toFixed(1)+' '+by.toFixed(1)+'L0 '+by.toFixed(1)+'Z';
+  // The gradient id carries 'rt' so it can never collide with the Dashboard chart's, which builds
+  // its id from point count and peak alone - two ridges with the same shape in one document would
+  // otherwise share a defs block and one would be drawn in the other's colours.
+  var uid='rtg'+String(n)+String(Math.round(hi));
+  return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
+    +'<defs>'
+    +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdba74" stop-opacity=".55"/><stop offset="1" stop-color="#fdba74" stop-opacity=".04"/></linearGradient>'
+    +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa" stop-opacity=".45"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".03"/></linearGradient>'
+    +'</defs>'
+    +'<path d="'+area(ctl)+'" fill="url(#'+uid+'a)"/>'
+    +'<path d="'+area(atl)+'" fill="url(#'+uid+'b)"/>'
+    +'<path d="'+tband+'" fill="#a78bfa" fill-opacity=".38"/>'
+    // The skyline stroke is drawn LAST so the ridge reads as the subject. vector-effect keeps it
+    // 2px after the non-uniform viewBox scale, which would otherwise squash it to a hairline.
+    +'<path d="'+line(ctl)+'" fill="none" stroke="#fb923c" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
+    +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="#fb923c" vector-effect="non-scaling-stroke"/>'
+    +'</svg>';
+}
+// The card. SELF-CONTAINED: its own toggle, its own legend, its own driver rows, its own layout.
+// It is modelled on the Dashboard's Performance Trajectory - same three-column reading order,
+// verdict left, ridge centre, the numbers behind it right, one interpretive line underneath - but
+// it shares no code with it, and the fixed column widths below are this card's own.
 function _rtCardHTML_(){
   var w=_rtWindow_(_rtRange);
   var d=_rtDelta_(w.pts);
@@ -41691,11 +41654,50 @@ function _rtCardHTML_(){
   var lay=_rtLayoff_(w.days);
   var f=_rtDrivers_(w.days);
   var tail=w.pts.length?w.pts[w.pts.length-1]:null;
+  var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
+  var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3)');
   var pctTxt=!d?'&mdash;':(d.weakBase?(d.from+' &rarr; '+d.to):((d.pct>0?'+':'')+d.pct+'%'));
   var vsTxt=(_rtRange==='ALL')?'across your whole run history'
            :(_rtRange==='1Y'?'vs a year ago':('vs '+w.days+' days ago'));
   var periodTxt=(_rtRange==='ALL'||_rtRange==='1Y')?'vs the previous year':('vs the previous '+w.days+' days');
 
+  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:2px">';
+  _RT_RANGES.forEach(function(r){
+    var on=(r[0]===_rtRange);
+    toggle+='<span data-rtrange="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
+      +(on?('background:var(--d-panel);color:#fb923c;border:1px solid rgba(251,146,60,.45)')
+          :'color:var(--d-t3);border:1px solid transparent')+'">'+r[0]+'</span>';
+  });
+  toggle+='</div>';
+
+  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
+  var legend='';
+  [['Fitness (CTL)','#fb923c',tail?tail.ctl:null],
+   ['Training Load (ATL)','#60a5fa',tail?tail.atl:null],
+   ['Form (TSB)','#a78bfa',tail?tail.tsb:null]].forEach(function(row){
+    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3)">'
+      +'<span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1)">'+num(row[2])+'</span></div>';
+  });
+
+  // Driver rows. Direction comes from the row's own better flag, never from the sign - pace is
+  // inverted and Form has no good side at all.
+  var rows='';
+  f.rows.forEach(function(x){
+    var up=!!x.better;
+    var tone=x.neutral?'var(--d-t2)':(up?'#22c55e':'#ef4444');
+    var glyph=x.neutral?((x.delta>=0)?'&uarr;':'&darr;'):(up?'&uarr;':'&darr;');
+    var mag=(x.unit==='%'&&x.pct!=null)?(Math.abs(x.pct)+'%')
+           :(x.unit==='%'?String(Math.abs(x.delta)):(Math.abs(x.delta)+' '+x.unit));
+    rows+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
+        +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
+        +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
+      +'<span style="font-size:11px;font-weight:700;color:'+tone+';flex-shrink:0">'+glyph+' '+mag+'</span></div>'
+      +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail
+          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'');
+  });
   var andList=function(a){
     if(a.length<=1) return a[0]||'';
     if(a.length===2) return a[0]+' and '+a[1];
@@ -41707,24 +41709,45 @@ function _rtCardHTML_(){
       +andList(f.miss)+(f.miss.length>1?' need':' needs')+' a comparable stretch on both sides of this range'
       +(f.missWhy?(' &mdash; '+f.missWhy):'')+'.</div>';
   }
-  var panels=_ptPanelHead_('The numbers behind it', periodTxt)
-    +(f.rows.length
-       ? (_ptDriverRows_(f.rows)+missNote)
-       : ('<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched running history in this range to compare yet.</div>'+missNote));
+  var head2='<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">The numbers behind it</div>'
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+periodTxt+'</div>';
+  var panels=head2+(f.rows.length
+    ? (rows+missNote)
+    : ('<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched running history in this range to compare yet.</div>'+missNote));
 
-  return _ptTrajShell_({
-    title:'RUNNING TRAJECTORY', attr:'data-rtrange', ranges:_RT_RANGES, range:_rtRange,
-    cols:_RT_COLS, pts:w.pts, head:v.head, tone:v.tone, pctTxt:pctTxt, vsTxt:vsTxt,
-    legend:[['Fitness (CTL)',_RT_COLS.ctl,tail?tail.ctl:null],
-            ['Training Load (ATL)',_RT_COLS.atl,tail?tail.atl:null],
-            ['Form (TSB)',_RT_COLS.tsb,tail?tail.tsb:null]],
-    foot:'Running only, 7-day averages &middot; scored from heart rate against an LTHR of '
-      +((typeof stLthr_==='function')?stLthr_():'&mdash;')+'. Not the Dashboard numbers, which count every sport.',
-    axis:[(w.days>0?(w.days+' days ago'):'start'),'Today'],
-    panels:panels,
-    insight:_rtInsight_(d, w, f, lay)
-  });
+  var H='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">RUNNING TRAJECTORY</span>'
+    +toggle+'</div>';
+  H+='<div style="display:flex;gap:16px;min-width:0;flex:1">';
+  // LEFT: the verdict in words, then the three current values.
+  H+='<div style="width:186px;flex-shrink:0;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
+    +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
+    +legend
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto;line-height:1.45">Running only, 7-day averages &middot; '
+    +'scored from heart rate against an LTHR of '+((typeof stLthr_==='function')?stLthr_():'&mdash;')
+    +'. Not the Dashboard numbers, which count every sport.</div>'
+    +'</div>';
+  // MIDDLE: the ridge.
+  H+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
+    +'<div style="flex:1;min-height:0">'+_rtChart_(w.pts, 600, 150)+'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
+      +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
+    +'</div>';
+  // RIGHT: the headline figure, then the drivers.
+  H+='<div style="width:344px;flex-shrink:0;border-left:1px solid var(--d-edge);padding-left:14px;display:flex;flex-direction:column;min-width:0">'
+    +'<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1">'+arrow+' '+pctTxt+'</div>'
+    +'<div style="font-size:10px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
+    +panels
+    +'</div>';
+  H+='</div>';
+  // The interpretive line, in its own band, so it reads as the coach speaking rather than a caption.
+  H+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
+    +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_rtInsight_(d, w, f, lay)+'</span></div>';
+  return H;
 }
+
 // Mounts the card and binds its range toggle. Called from renderRunInto_, so ONE call site serves
 // both surfaces. A range change re-renders the whole page rather than patching the card: the
 // verdict, the percentage, the axis labels, the drivers and the insight sentence all depend on the
@@ -41745,14 +41768,13 @@ function _rtMount_(scr){
       return;
     }
     var card=document.createElement('div');
-    // FULL WIDTH, for the same reason the Dashboard gives its copy a row of its own: this card lays
-    // out three columns internally, and in half the page width the third one wraps underneath and
-    // the whole thing reads as broken. Measured at 1600px before the opt-out existed.
-    card.setAttribute('data-bal','full');
-    // THE PANEL CHROME BELONGS HERE, not in the shell. _ptTrajShell_ returns bare CONTENT because
-    // the Dashboard wraps it in that page's own card() helper; mounting it raw left the run card
-    // with no background, border or padding, sitting directly on the page while every card around
-    // it had chrome. Same values as the Dashboard's card(), so the family holds on the outside too.
+    // FULL WIDTH: this card lays out three columns internally, and in half the page width the third
+    // one wraps underneath and the whole thing reads as broken - measured at 1600px. Lifted out of
+    // the balanced host by dsShowRun, so no shared layout code is touched.
+    card.setAttribute('data-runfull','1');
+    // The card's own chrome. _rtCardHTML_ returns the card's CONTENT, so the panel background,
+    // border and padding are applied here. The values match what the Dashboard's cards use because
+    // this page uses the same design tokens - not because any code is shared with it.
     card.style.cssText='margin:0 16px 16px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
       +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
     card.innerHTML=_rtCardHTML_();
@@ -47947,6 +47969,23 @@ function dsShowRun(){
       if(el && el.style){ el.style.marginLeft='0'; el.style.marginRight='0'; }
     });
   }catch(e){}
+  // FULL-WIDTH CARDS COME OUT OF THE BALANCED HOST, HERE, ON THIS PAGE ONLY.
+  //
+  // Two cards on this page are a ROW rather than a column item: the trajectory card lays out three
+  // columns internally and its third one wraps underneath at half width, and the run-ahead card is
+  // the one thing here that asks for a decision. _balCols_ is shared with Overview and DNA, so it is
+  // NOT the place to solve this - an earlier pass taught it a full-width opt-out, which meant
+  // editing layout code for two pages nobody asked to change. Reverted. Instead the marked cards are
+  // lifted into the scroller ABOVE the balanced host, which is Run Training's own business.
+  //
+  // Order is preserved by inserting them before the host in the order they were authored, and the
+  // host keeps everything else to balance into two columns exactly as before.
+  try{
+    var full=[].slice.call(host.children).filter(function(el){
+      return el && el.getAttribute && el.getAttribute('data-runfull')==='1';
+    });
+    full.forEach(function(el){ wrap.insertBefore(el, host); });
+  }catch(e){}
   try{ if(typeof _balCols_==='function') _balCols_(host); }catch(e){}
 }
 try{ if(typeof window!=='undefined'){ window.dsShowRun=dsShowRun; window.renderRunInto_=renderRunInto_; } }catch(e){}
@@ -48468,8 +48507,9 @@ function renderRunInto_(scr, surface){
     if(_ra){
       var raCard=document.createElement('div');
       // FULL WIDTH: it is the one card on this page that asks for a decision, and a decision with
-      // two buttons should not be sharing a row. See the data-bal opt-out in _balCols_.
-      raCard.setAttribute('data-bal','full');
+      // two buttons should not be sharing a row. Lifted out of the balanced host by dsShowRun -
+      // a Run-Training-only mechanism, so no shared layout code is involved.
+      raCard.setAttribute('data-runfull','1');
       raCard.style.cssText='margin:0 16px 16px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
       var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
       raCard.innerHTML=

@@ -1564,6 +1564,22 @@ try {
     fail('the drift card can claim a pattern it does not have, or the page cleanup regressed (see above).');
   }
 
+  // STEP 97 - work scoped to one page must not edit another page's code. A Run Training request
+  //           produced edits to _ptCardHTML_, _ptChart_ and _balCols_ - Dashboard, and for _balCols_
+  //           Overview and DNA too - in the name of consistency. The Dashboard did NOT stay
+  //           identical: fixed 186/344px columns became flexible, the row gained flex-wrap, and the
+  //           up/down colours moved to theme tokens (in dark mode #22c55e -> #4ade80). This pins
+  //           every one of those function bodies against the commit before that work.
+  console.log(`${D}. checking the Dashboard is untouched...${X}`);
+  try {
+    const so = execSync('node scripts/dashboard-untouched-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('code another page renders has been modified (see above) - that needs asking first.');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

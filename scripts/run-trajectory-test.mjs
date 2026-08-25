@@ -14,8 +14,10 @@
 //     paints a 30-second-per-mile GAIN bright red.
 //   4 FORM CROSSES ZERO. A percentage on a swing from -5 to +7 is arithmetic, not information.
 //
-// Plus the one shared risk: _ptChart_ gained a colourway parameter, and the Dashboard card must
-// look byte-identical to what it looked like before.
+// The card SHARES NO CODE with the Dashboard's Performance Trajectory - own chart, own layout, own
+// colours. That is a deliberate duplication: an earlier pass extracted a shared shell, which meant
+// editing a file the Dashboard renders to serve a change scoped to this page. Reverted, and pinned
+// by dashboard-untouched-test.mjs.
 //
 // Every assertion carries a negative control. Run: node scripts/run-trajectory-test.mjs
 import fs from 'fs';
@@ -34,19 +36,15 @@ const ok = (l, c) => { if (!c) fails++; console.log('  ' + (c ? G+'PASS'+X : R+'
 const eq = (l, got, want) => { const c = JSON.stringify(got) === JSON.stringify(want); if (!c) fails++;
   console.log('  ' + (c ? G+'PASS'+X : R+'FAIL'+X) + '  ' + l + (c ? '' : '   got '+JSON.stringify(got)+', want '+JSON.stringify(want))); };
 
-// _ptTrajShell_ / _ptDriverRows_ / _ptPanelHead_ are the SHELL the card now renders through - the
-// same one the Dashboard's Performance Trajectory uses, which is the whole point of the refactor.
-// They have to be in the bundle or the card throws the moment it is called.
+// The card is SELF-CONTAINED - its own chart, its own layout, no helper shared with the Dashboard.
 const FNS = ['_rtInvalidate_','_rtDailyTss_','_rtSeries_','_rtWindow_','_rtDelta_','_rtLayoff_',
-             '_rtVerdict_','_rtIsEasy_','_rtDrivers_','_rtInsight_','_rtCardHTML_','_ptChart_','hrTssFor_',
-             '_ptTrajShell_','_ptDriverRows_','_ptPanelHead_'];
+             '_rtVerdict_','_rtIsEasy_','_rtDrivers_','_rtInsight_','_rtCardHTML_','_rtChart_','hrTssFor_'];
 let bundle = '';
 for (const n of FNS) { const s = exFn(n); ok('extracted ' + n, s.indexOf('function ' + n) === 0 && s.trim().endsWith('}')); bundle += s; }
 
 const lit = (re, label) => { const m = src.match(re); ok(label, !!m); return m ? m[1] : null; };
 const RT_RANGES = lit(/var _RT_RANGES=(\[\[[^\n]*?\]\]);/, '_RT_RANGES literal found');
 const RT_COLS   = lit(/var _RT_COLS=(\{[^}]*\});/, '_RT_COLS literal found');
-const PT_COLS   = lit(/var _PT_COLS=(\{[^}]*\});/, '_PT_COLS literal found');
 const RT_FLOOR  = lit(/var _RT_BASE_FLOOR=(\d+);/, '_RT_BASE_FLOOR literal found');
 const RT_EASY   = lit(/var _RT_EASY_HRIF=([\d.]+);/, '_RT_EASY_HRIF literal found');
 // Every constant _rtDrivers_ reads must be declared in the harness. A missing one is a
@@ -69,7 +67,6 @@ function build(runs, opts) {
     var _PMC_CTL_D=42, _PMC_ATL_D=7;
     var _RT_RANGES=${RT_RANGES};
     var _RT_COLS=${RT_COLS};
-    var _PT_COLS=${PT_COLS};
     var _RT_BASE_FLOOR=${RT_FLOOR};
     var _RT_VOL_FLOOR=${RT_VOL};
     var _RT_EASY_HRIF=${RT_EASY};
@@ -87,7 +84,7 @@ function build(runs, opts) {
     ${bundle}
     return { dailyTss:_rtDailyTss_, series:_rtSeries_, win:_rtWindow_, delta:_rtDelta_,
              layoff:_rtLayoff_, verdict:_rtVerdict_, isEasy:_rtIsEasy_, drivers:_rtDrivers_,
-             insight:_rtInsight_, card:_rtCardHTML_, chart:_ptChart_, hrTss:hrTssFor_ };
+             insight:_rtInsight_, card:_rtCardHTML_, chart:_rtChart_, hrTss:hrTssFor_ };
   `;
   return new Function('RealDate', harness)(Date);
 }
@@ -218,13 +215,7 @@ console.log('\n' + Y + '=== 5. pace is inverted: faster must read as better ==='
 
   const html = F.card();
   const seg = html.slice(html.indexOf('Avg easy pace'), html.indexOf('Avg easy pace') + 400);
-  // TOKENS, not literals. The shared shell paints good/bad with var(--c-green)/var(--c-red) so the
-  // card follows the theme - a hardcoded #22c55e is exactly what made the season drill-down
-  // unreadable in light mode. Asserted on the token, and on the literal being ABSENT.
-  ok('the card paints the improvement green, not red',
-     seg.indexOf('var(--c-green)') > 0 && seg.indexOf('var(--c-red)') < 0);
-  ok('NEG: and it does not hardcode a hex that ignores the theme',
-     seg.indexOf('#22c55e') < 0 && seg.indexOf('#ef4444') < 0);
+  ok('the card paints the improvement green, not red', seg.indexOf('#22c55e') > 0 && seg.indexOf('#ef4444') < 0);
   ok('...with an up arrow', seg.indexOf('&uarr;') > 0);
 
   // The mirror case must go the other way, or the flag is just hardcoded true.
@@ -255,8 +246,7 @@ console.log('\n' + Y + '=== 6. Form crosses zero, so it is never a percentage ==
   const i2 = html.indexOf('Form (TSB)', html.indexOf('The numbers behind it'));
   const seg2 = html.slice(i2, i2 + 400);
   ok('NEG: no percent sign on the Form driver row', seg2.indexOf('%') < 0);
-  ok('...and it is not coloured as a win or a loss',
-     seg2.indexOf('var(--c-green)') < 0 && seg2.indexOf('var(--c-red)') < 0);
+  ok('...and it is not coloured as a win or a loss', seg2.indexOf('#22c55e') < 0 && seg2.indexOf('#ef4444') < 0);
   // Fitness, by contrast, IS a percentage when the base allows it.
   const fit = F.drivers(90).rows.filter(r => r.label === 'Fitness (CTL)')[0];
   ok('Fitness does carry a percentage when the base allows', fit.unit === '%' || fit.pct != null);
@@ -285,57 +275,46 @@ console.log('\n' + Y + '=== 7. a driver that cannot be computed is NAMED, not dr
   ok('NEG: a range with both halves populated reports Miles / week', d2.rows.some(r => r.label === 'Miles / week'));
 }
 
-console.log('\n' + Y + '=== 8. the shared skyline: the Dashboard card is unchanged ===' + X);
+console.log('\n' + Y + '=== 8. the run card draws its OWN ridge ===' + X);
 {
   const F = build([]);
   const pts = [];
   for (let i = 0; i < 30; i++) pts.push({ ctl: 20 + i, atl: 15 + i, tsb: 5 });
-  const dash = F.chart(pts, 600, 150);                       // no colourway - the default path
-  ok('the ridge fill is still the lighter green', dash.indexOf('#4ade80') > 0);
-  ok('the ridge stroke is still #22c55e', dash.indexOf('stroke="#22c55e"') > 0);
-  ok('load is still blue', dash.indexOf('#60a5fa') > 0);
-  ok('form is still violet', dash.indexOf('#a78bfa') > 0);
-  ok('NEG: no orange leaked into the dashboard colourway', dash.indexOf('#fb923c') < 0);
 
-  const run = F.chart(pts, 600, 150, JSON.parse(JSON.stringify({ ctl:'#fb923c', ctlFill:'#fdba74', atl:'#60a5fa', tsb:'#a78bfa' })));
+  const run = F.chart(pts, 600, 150);
   ok('the run ridge is orange', run.indexOf('stroke="#fb923c"') > 0 && run.indexOf('#fdba74') > 0);
-  ok('NEG: no green leaked into the run colourway', run.indexOf('#22c55e') < 0 && run.indexOf('#4ade80') < 0);
-  // Two colourways in one document must not share a gradient id, or the second defs block loses.
-  const idOf = (s) => (s.match(/id="(ptg[^"]+)a"/) || [])[1];
-  ok('the two colourways carry different gradient ids', idOf(dash) !== idOf(run));
+  ok('NEG: no dashboard green in the run ridge', run.indexOf('#22c55e') < 0 && run.indexOf('#4ade80') < 0);
+  // The two charts are separate copies, so their gradient ids must not collide if both ever render
+  // in one document - the run one is prefixed rtg, the Dashboard's ptg.
+  ok('the run gradient id cannot collide with the Dashboard chart', /id="rtg[^"]+a"/.test(run));
 
   // Too little history says so rather than drawing a flat line at zero.
   ok('one point draws no ridge', F.chart([{ctl:1,atl:1,tsb:0}], 600, 150).indexOf('Not enough history') > 0);
 }
 
-console.log('\n' + Y + '=== 9. ONE SHELL, so the two cards cannot drift apart again ===' + X);
+console.log('\n' + Y + '=== 9. this card touches NOTHING the Dashboard renders ===' + X);
 {
-  // They were built as two renderers and drifted within a day of shipping: different header,
-  // headline percentage in a different column, different panel treatment, footnote somewhere else.
-  // Side by side they did not read as a family, which is the whole point of a card that says the
-  // same KIND of thing about two sports. The structure is now one function and the sports are
-  // arguments, so this asserts BOTH cards go through it and NEITHER rebuilds the structure itself.
-  const ptc = exFn('_ptCardHTML_'), rtc = exFn('_rtCardHTML_'), shell = exFn('_ptTrajShell_');
-  ok('the Dashboard card renders through the shell', /return _ptTrajShell_\(\{/.test(ptc));
-  ok('the Run card renders through the same shell', /return _ptTrajShell_\(\{/.test(rtc));
-  // The structure lives in ONE place. If a card starts laying out its own columns again the family
-  // is over, so the load-bearing pieces are asserted present in the shell and absent from both.
-  ['flex:2 1 300px', 'border-left:1px solid var(--d-edge);padding-left:14px', 'letter-spacing:.09em']
-    .forEach(frag => {
-      ok('the shell owns "' + frag.slice(0, 28) + '"', shell.indexOf(frag) > 0);
-      ok('NEG: the Dashboard card does not rebuild it', ptc.indexOf(frag) < 0);
-      ok('NEG: the Run card does not rebuild it', rtc.indexOf(frag) < 0);
-    });
-  ok('NEG: neither card builds its own range toggle', ptc.indexOf('data-ptrange="') < 0 && rtc.indexOf('data-rtrange="') < 0);
-  ok('...the shell builds it from the attr it is given', /s\.attr\+'="'\+r\[0\]/.test(shell));
-  ok('NEG: neither card builds its own insight band', ptc.indexOf('M3 18l6-8 4 5 3-4 5 7z') < 0 && rtc.indexOf('M3 18l6-8 4 5 3-4 5 7z') < 0);
-  ok('...the shell draws it once', shell.indexOf('M3 18l6-8 4 5 3-4 5 7z') > 0);
-  // Each card still owns its OWN state and colours - a shared shell must not merge those.
-  ok('the two keep separate range state', /range:_ptRange/.test(ptc) && /range:_rtRange/.test(rtc));
-  ok('...and separate colourways', /cols:_PT_COLS/.test(ptc) && /cols:_RT_COLS/.test(rtc));
-  ok('...and separate titles', /PERFORMANCE TRAJECTORY/.test(ptc) && /RUNNING TRAJECTORY/.test(rtc));
-  // The driver ROW markup is shared too, so an up-arrow means the same thing on either page.
-  ok('both use the shared driver rows', /_ptDriverRows_\(/.test(ptc) && /_ptDriverRows_\(/.test(rtc));
+  // An earlier pass extracted a shared shell so both trajectory cards could render through one
+  // function. It looked like good engineering and it was the wrong call: it edited code the
+  // Dashboard renders in order to serve a change scoped to the Run page, and it DID change the
+  // Dashboard - fixed 186/344px columns became flexible, the row gained flex-wrap, and the good/bad
+  // colours moved from #22c55e/#ef4444 to theme tokens. Reverted; the duplication below is
+  // deliberate and is the cheaper of the two costs.
+  const rtc = exFn('_rtCardHTML_'), rch = exFn('_rtChart_');
+  const SHARED = ['_ptTrajShell_', '_ptDriverRows_', '_ptPanelHead_', '_ptChart_', '_PT_COLS',
+                  '_ptWindow_', '_ptDelta_', '_ptVerdict_', '_ptInsight_', '_ptFactors_'];
+  SHARED.forEach(n => {
+    ok('NEG: the run card does not call ' + n, rtc.indexOf(n) < 0 && rch.indexOf(n) < 0);
+  });
+  // ...and the helpers that pass no longer exist at all, so nothing can start using them again.
+  ['_ptTrajShell_', '_ptDriverRows_', '_ptPanelHead_'].forEach(n => {
+    ok('NEG: ' + n + ' is gone from the file', src.indexOf('function ' + n + '(') < 0);
+  });
+  ok('NEG: the _PT_COLS constant is gone too', src.indexOf('var _PT_COLS=') < 0);
+  // The run card draws its own ridge, with its own gradient namespace.
+  ok('the run card calls its own chart', /_rtChart_\(w\.pts, 600, 150\)/.test(rtc));
+  ok('...whose gradient ids are prefixed rtg', /var uid='rtg'/.test(rch));
+  ok('NEG: and the Dashboard chart still uses ptg', /var uid='ptg'/.test(exFn('_ptChart_')));
 }
 
 console.log('\n' + Y + '=== 10. the card mounts once, for both surfaces ===' + X);

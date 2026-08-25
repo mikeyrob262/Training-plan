@@ -209,14 +209,7 @@ ok('...and no card is emitted as a full-width section below the row', !/if\(sign
 const bal = ex('_balCols_');
 ok('_balCols_ assigns each card to whichever column is currently shorter', /if\(ha<=hb\)/.test(bal));
 ok('...accumulating the measured height plus the gap', /ha\+=hs\[i\]\+_BAL_GAP/.test(bal) && /hb\+=hs\[i\]\+_BAL_GAP/.test(bal));
-// The balance now runs per GROUP - _balCols_ gained a data-bal="full" opt-out for cards that are a
-// row rather than a column item, and it walks the authored list splitting it into runs of ordinary
-// cards between the full-width ones. The in-order requirement is unchanged and the order guarantee
-// is STRONGER: full-width cards are not hoisted to the top, they stay where the page put them.
-ok('...walking the cards in authored order, so each column stays in order', /g\.list\.forEach\(function\(c,i\)/.test(bal));
-ok('a full-width card opts out by attribute, not by position', /getAttribute\('data-bal'\)==='full'/.test(bal));
-ok('...and authored order is preserved rather than hoisting them', /groups\.push\(\{full:c\}\)/.test(bal) && /cur\.list\.push\(c\)/.test(bal));
-ok('NEG: the narrow path is untouched - one column, authored order', /if\(!wide\)\{[\s\S]{0,300}cards\.forEach\(function\(c\)\{ host\.appendChild\(c\)/.test(bal));
+ok('...walking the cards in authored order, so each column stays in order', /cards\.forEach\(function\(c,i\)/.test(bal));
 // A card in the full-width host measures at twice its final width, so every wrapped-text card
 // would come out too short and the balance would be computed from wrong numbers.
 ok('heights are measured inside a real column, not the full-width host',
