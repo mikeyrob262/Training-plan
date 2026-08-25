@@ -148,17 +148,30 @@ console.log('\n' + Y + '=== Why is deterministic, and silent when it has nothing
   ok('drivers are produced', w.drivers.length >= 3);
   ok('each carries both windows and a delta', w.drivers.every((d) => d.recent != null && d.prior != null && d.rawDelta != null));
   ok('...and a unit', w.drivers.every((d) => !!d.unit));
-  ok('ordered by SIZE of change, not by name', w.drivers.every((d, i, a) => i === 0 || Math.abs(a[i - 1].delta) >= Math.abs(d.delta)));
+  ok('ordered by SIZE of change, not by name', w.drivers.every((d, i, a) => i === 0 || Math.abs(a[i - 1].rawDelta) >= Math.abs(d.rawDelta)));
+  // NO ROW CARRIES A VERDICT ANY MORE, and this assertion used to require the opposite: HR rising was
+  // scored negative, cadence falling was scored negative, and the card painted them red and green.
+  // That is "more distance is good, more of everything else is concerning" - applied to rows that are
+  // per-run means over the SAME runs whose volume changed. One behaviour was being stated four times
+  // with three of them called problems, while the drift card beside it called that same behaviour
+  // progress. The card is named Why: it reports which inputs moved, and the verdict is reached
+  // elsewhere. Direction is still carried, because direction is information.
   const hr = w.drivers.filter((d) => d.key === 'Average HR')[0];
-  ok('HR rising is scored as a NEGATIVE', hr && hr.rawDelta > 0 && hr.delta < 0);
+  ok('HR rising is still reported, with its direction', !!hr && hr.rawDelta > 0);
   const cad = w.drivers.filter((d) => d.key === 'Cadence')[0];
-  ok('cadence falling is also negative', cad && cad.rawDelta < 0 && cad.delta < 0);
+  ok('cadence falling is still reported, with its direction', !!cad && cad.rawDelta < 0);
+  ok('NEG: no row carries a good/bad score at all', w.drivers.every((d) => d.delta === undefined));
+  ok('NEG: and the card paints no row green or red',
+     !/--c-green/.test(exFn('_runWhyCardHTML_')) && !/--c-red/.test(exFn('_runWhyCardHTML_')));
   ok('a driver with no data on either side is absent', !w.drivers.some((d) => d.key === 'Temperature'));
   ok('window and run counts are reported', w.window === 90 && w.recentRuns === 2 && w.priorRuns === 2);
 
   const card = exFn('_runWhyCardHTML_');
   ok('the card says every row is measured', /measured change in one input/.test(card));
-  ok('...and that order is size, not story', /Ordered by size, not by story/.test(card));
+  ok('...and that order is size', /ordered by size/i.test(card));
+  ok('...and that they are inputs behind a verdict, not findings of their own',
+     /not separate findings/.test(card));
+  ok('...naming the dominant mover, so the rest are read against it', /moved most/.test(card));
   ok('no free text is generated anywhere', !/narrat|prose|sentence/i.test(exFn('_runWhy_')));
 }
 
@@ -178,8 +191,15 @@ console.log('\n' + Y + '=== both surfaces get all three ===' + X);
   ok('the phase-2 list still mounts the drift card', /_runShinCardHTML_/.test(mount));
   ok('NEG: why is no longer in the phase-2 list', !/_runWhyCardHTML_/.test(mount));
   ok('why mounts from the shared renderer instead', /_runWhyCardHTML_/.test(rn));
-  ok('...paired with the HR zones panel', /pair\.appendChild\(zoneCard\)/.test(rn));
-  ok('...in a padded, wrapping pair rather than full width', /className='rn-pair'/.test(rn));
+  // UNPAIRED. Side by side each panel was half a column wide, and Why is a table of label/number
+  // cells - at 190px every one wrapped and the card became the tall narrow strip it was asked not to
+  // be. It takes the column width now and lays its cells ACROSS it. Stricter, not looser: it must
+  // still mount, still mount exactly once, and must no longer be inside the pair it left.
+  ok('NEG: why is no longer paired into a half-width column', !/pair\.appendChild/.test(rn));
+  ok('...the zone panel is appended at the column width like every other card',
+     /scr\.appendChild\(zoneCard\)/.test(rn));
+  ok('...and the why cells lay out across rather than down',
+     /flex-wrap:wrap/.test(exFn('_runWhyCardHTML_')));
   ok('exactly one why call site in the file',
      (src.match(/(?<!function )_runWhyCardHTML_\(\)/g) || []).length === 1);
   ok('NEG: 10k is no longer in the phase-2 list', !/_run10kCardHTML_/.test(mount));

@@ -48496,21 +48496,41 @@ function _runWhy_(days){
   var out=[];
   var pct=function(x,y){ return y>0?Math.round((x-y)/y*100):null; };
   var mean=function(arr,f){ var s=0,n=0; arr.forEach(function(r){ var v=f(r); if(v>0){ s+=v; n++; } }); return n?{v:s/n,n:n}:null; };
-  var push=function(key,unit,R,P,invert){
+  // NO VALENCE. Each row used to carry an invert flag deciding which direction was GOOD, and the
+  // card coloured it green or red on that basis: volume and cadence up were green, average HR, time
+  // above easy, elevation per mile and temperature up were red. That is "more distance is good, more
+  // of everything else is concerning", and it is wrong here in three separate ways.
+  //
+  //   IT JUDGES CIRCUMSTANCES. Elevation per mile and temperature are not things done well or badly.
+  //   Red on temperature says running in summer was a mistake; red on elevation says the same about
+  //   hills. Nobody would make either claim in words.
+  //
+  //   THE ROWS ARE NOT INDEPENDENT. They are per-run means over the SAME runs whose count and volume
+  //   changed. When volume moves 1,192% after a layoff, treating the other four as separate findings
+  //   states one behaviour four times and calls three of them problems.
+  //
+  //   IT CONTRADICTED THE CARD BESIDE IT. Easy-Run Drift adjudicates this exact behaviour and its
+  //   verdict is "this is the same running the card above is calling progress". Two adjacent cards,
+  //   one behaviour, opposite colours.
+  //
+  // The card is called WHY. Its job is to say which inputs moved, so a verdict reached elsewhere can
+  // be understood - and its own subtitle already said "ordered by size, not by story" while every
+  // row was coloured with a story. Direction is still shown, because that is information. Good and
+  // bad are not, because this card is not the one that adjudicates.
+  var push=function(key,unit,R,P){
     if(!R||!P) return;
     var d=pct(R.v,P.v); if(d==null) return;
-    out.push({ key:key, unit:unit, recent:R.v, prior:P.v, n:R.n+P.n,
-               delta:invert?-d:d, rawDelta:d });
+    out.push({ key:key, unit:unit, recent:R.v, prior:P.v, n:R.n+P.n, rawDelta:d });
   };
-  push('Average HR','bpm', mean(recent,function(r){return +r.avgHR;}), mean(prior,function(r){return +r.avgHR;}), true);
-  push('Time above easy','%', mean(recent,function(r){return _runZonePct_(r);}), mean(prior,function(r){return _runZonePct_(r);}), true);
-  push('Cadence','spm', mean(recent,function(r){return +r.cadence;}), mean(prior,function(r){return +r.cadence;}), false);
+  push('Average HR','bpm', mean(recent,function(r){return +r.avgHR;}), mean(prior,function(r){return +r.avgHR;}));
+  push('Time above easy','%', mean(recent,function(r){return _runZonePct_(r);}), mean(prior,function(r){return _runZonePct_(r);}));
+  push('Cadence','spm', mean(recent,function(r){return +r.cadence;}), mean(prior,function(r){return +r.cadence;}));
   push('Elevation per mile','ft', mean(recent,function(r){ var mi=parseFloat(r.distance)||0; return mi>0?((+r.elev||0)/mi):0; }),
-                                  mean(prior, function(r){ var mi=parseFloat(r.distance)||0; return mi>0?((+r.elev||0)/mi):0; }), true);
-  push('Temperature','F', mean(recent,function(r){return +r.avgTemp;}), mean(prior,function(r){return +r.avgTemp;}), true);
+                                  mean(prior, function(r){ var mi=parseFloat(r.distance)||0; return mi>0?((+r.elev||0)/mi):0; }));
+  push('Temperature','F', mean(recent,function(r){return +r.avgTemp;}), mean(prior,function(r){return +r.avgTemp;}));
   var vol=function(arr){ var s=0; arr.forEach(function(r){ s+=parseFloat(r.distance)||0; }); return s>0?{v:s,n:arr.length}:null; };
-  push('Weekly volume','mi', vol(recent), vol(prior), false);
-  out.sort(function(x,y){ return Math.abs(y.delta)-Math.abs(x.delta); });
+  push('Weekly volume','mi', vol(recent), vol(prior));
+  out.sort(function(x,y){ return Math.abs(y.rawDelta)-Math.abs(x.rawDelta); });
   return { drivers:out, window:w, recentRuns:recent.length, priorRuns:prior.length };
 }
 // ---- Phase 2 cards. HTML only; every number comes from the functions above. -----------------------
@@ -48804,16 +48824,26 @@ function _run10kCardHTML_(asSection){
 function _runWhyCardHTML_(){
   var w=_runWhy_(90);
   if(!w.drivers.length) return '';
-  var rows=w.drivers.slice(0,5).map(function(d){
-    var up=d.delta>0, flat=(d.delta===0);
-    var col=flat?'var(--t3)':(up?'var(--c-green)':'var(--c-red)');
+  var rows=w.drivers.slice(0,6).map(function(d){
+    // ONE TONE. The arrow carries the direction; the colour used to carry a verdict this card is not
+    // entitled to make. See _runWhy_ for why - in short, three of these rows were red for going up
+    // while the drift card beside them called the same behaviour progress.
+    var flat=(d.rawDelta===0);
+    var col='var(--t2)';
     var arrow=flat?'&ndash;':(d.rawDelta>0?'&uarr;':'&darr;');
     var fmt=function(v){ return (Math.round(v*10)/10); };
-    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;padding:4px 0;border-top:1px solid var(--b1)">'
-      +'<span style="color:var(--t1);font-weight:600">'+_runEsc_(d.key)+'</span>'
-      +'<span style="color:var(--t3);flex-shrink:0">'+fmt(d.prior)+' &rarr; <b style="color:'+col+'">'+fmt(d.recent)+'</b> '+_runEsc_(d.unit)+' '
-      +'<span style="color:'+col+'">'+arrow+' '+Math.abs(d.rawDelta)+'%</span></span></div>';
+    // HORIZONTAL. Each input is a CELL, not a row: label, the change, and the two values it moved
+    // between, stacked in a narrow block. Five of them sit across the card instead of down it, which
+    // is what makes this a wide short card rather than a tall thin one. They wrap on a narrow column.
+    return '<div style="flex:1 1 108px;min-width:0;padding:2px 0">'
+      +'<div style="font-size:9.5px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_runEsc_(d.key)+'</div>'
+      +'<div style="font-size:13px;font-weight:800;color:'+col+';white-space:nowrap;margin-top:1px">'
+        +arrow+' '+Math.abs(d.rawDelta)+'%</div>'
+      +'<div style="font-size:9.5px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+        +fmt(d.prior)+' &rarr; '+fmt(d.recent)+' '+_runEsc_(d.unit)+'</div>'
+      +'</div>';
   }).join('');
+  rows='<div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:flex-start">'+rows+'</div>';
   // COLLAPSED BY DEFAULT. This is the page's reference panel, not one of its decisions: it says
   // which inputs moved, which is worth having and is not worth 196px of a viewport the page is
   // trying to fit. The header still names it and still says how much is behind the click, so it is
@@ -48835,7 +48865,18 @@ function _runWhyCardHTML_(){
     +'</div>'
     +'<div id="run-why-body" style="'+(open?'':'display:none;')+'margin-top:9px">'
       +'<div style="font-size:11.5px;color:var(--t3);line-height:1.5;margin-bottom:4px">'
-      +'Every row is a measured change in one input. Ordered by size, not by story.</div>'+rows
+      // NAMES THE DOMINANT MOVER, and says the rest are not independent of it. This is an
+      // observation, not a causal claim: the other rows are per-run means over the same runs whose
+      // count and volume changed, so they cannot be read as separate findings. The verdict lives on
+      // the cards that adjudicate - the trajectory above and the drift card beside this one.
+      +(function(){
+         var top=w.drivers[0];
+         if(!top) return 'Every row is a measured change in one input. Ordered by size.';
+         return 'Inputs behind the verdict above, ordered by size &mdash; not separate findings. '
+           +_runEsc_(top.key)+' moved most ('+(top.rawDelta>0?'+':'')+top.rawDelta+'%); the rest are '
+           +'measured over those same runs.';
+       })()
+      +'</div>'+rows
     +'</div>'
     +'</div>';
 }
@@ -49032,6 +49073,27 @@ function _runBalCols_(host){
   // ...but APPEND in authored order, so within a column the page still reads in the order it was
   // written. Only the assignment is by size; the sequence a reader sees is untouched.
   cards.forEach(function(c,ix){ cols[owner[ix]].appendChild(c); });
+
+  // EVERY COLUMN BOTTOMS OUT LEVEL.
+  //
+  // The region is as tall as its tallest column, and Personal Bests is a 368px card that no packing
+  // can break up - so the other two columns ended well short of the bottom and left dead space under
+  // Longest Run and under Races. The space was already being paid for; it was just not being used.
+  //
+  // DISTRIBUTED AS GAPS, NOT AS STRETCH. Growing the cards to fill would inflate a stat strip or a
+  // rail into a mostly-empty box, which looks like a rendering fault rather than a layout. Spreading
+  // the slack between the cards keeps every card its natural size and lands the last one on the same
+  // line as the tallest column's last one. A column with a single card is left alone - there is no
+  // gap to distribute into, and centring one card in a tall column reads as an accident.
+  var maxH=0;
+  cols.forEach(function(col){ var h=col.getBoundingClientRect().height; if(h>maxH) maxH=h; });
+  cols.forEach(function(col){
+    if(col.children.length<2) return;
+    var h=col.getBoundingClientRect().height;
+    if(maxH-h < 12) return;                      // already level enough to leave alone
+    col.style.minHeight=maxH+'px';
+    col.style.justifyContent='space-between';
+  });
 }
 try{ if(typeof window!=='undefined'){ window._runBalCols_=_runBalCols_; } }catch(e){}
 
@@ -49402,23 +49464,20 @@ function renderRunInto_(scr, surface){
        })()
       +'</div>';
     zoneCard.innerHTML=zh;
-    // PAIRED WITH "WHY", side by side and padded rather than each running the full width. They are
-    // both reference panels - one says what the bands are, the other says which inputs moved - and
-    // at full width each wasted most of its row on empty space. .rn-pair wraps to stacked below
-    // 560px, where two columns stop being readable on a phone.
-    var pair=document.createElement('div');
-    pair.className='rn-pair';
-    pair.appendChild(zoneCard);
+    // WHY IS NO LONGER PAIRED WITH THIS CARD. Side by side they were each half a column wide, and
+    // Why is a table of five label/number rows - at 190px every row wrapped and the card became
+    // the tall narrow thing it was asked not to be. It gets the column to itself now and lays its
+    // rows out across it; the zone rail is a rail and was always happy at full width.
+    scr.appendChild(zoneCard);
     try{
       var whyHTML=(typeof _runWhyCardHTML_==='function')?(_runWhyCardHTML_()||''):'';
       if(whyHTML){ var wd=document.createElement('div'); wd.innerHTML=whyHTML;
-        while(wd.firstChild) pair.appendChild(wd.firstChild);
+        while(wd.firstChild) scr.appendChild(wd.firstChild);
         // Bound after the node is in the pair. Expanding makes its column taller and the page will
         // scroll - which is correct: the reader asked to see it.
         setTimeout(function(){ var hh=document.getElementById('run-why-head');
           if(hh) hh.onclick=function(){ runWhyToggle_(); }; }, 0); }
     }catch(e){ try{ console.error('[run-why]', e&&e.message); }catch(_e){} }
-    scr.appendChild(pair);
   }
   // Phase 2 sits between the zone reference above and the per-run detail below: the drift
   // warning reads against those zones, and the pacing and Why cards read the same runs the
@@ -49512,9 +49571,9 @@ function renderRunInto_(scr, surface){
   // card with its own chart further down the page. A label that can be separated from its content
   // will be; the fix is that it cannot be a separate element.
   var chartCard=document.createElement('div');
-  chartCard.style.cssText='margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:14px';
+  chartCard.style.cssText='margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:11px 12px';
   chartCard.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:9px">Weekly build</div>'
-    +'<div style="position:relative;height:90px;margin-bottom:8px"><canvas id="run-miles-chart" role="img" aria-label="Weekly run mileage chart">Weekly run miles</canvas></div>'
+    +'<div style="position:relative;height:62px;margin-bottom:6px"><canvas id="run-miles-chart" role="img" aria-label="Weekly run mileage chart">Weekly run miles</canvas></div>'
     +'<div style="display:flex;gap:12px;font-size:11px;color:var(--t3)">'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0F6E56;display:inline-block"></span>Actual</span>'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;border-top:1.5px dashed #0F6E56;display:inline-block"></span>Target</span>'
