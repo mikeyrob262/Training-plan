@@ -167,7 +167,22 @@ console.log('\n' + Y + '=== both surfaces get all three ===' + X);
   const rn = exFn('renderRunInto_');
   ok('mounted inside the SHARED renderer', /_runPhase2Mount_\(scr\)/.test(rn));
   const mount = exFn('_runPhase2Mount_');
-  ok('all three cards are mounted', /_runShinCardHTML_/.test(mount) && /_run10kCardHTML_/.test(mount) && /_runWhyCardHTML_/.test(mount));
+  // 10k RACE PACE MOVED OUT of this list and now mounts directly under the Personal Bests board,
+  // where the distances it targets are already ranked. The requirement changed, so the assertion
+  // does - but it gets STRICTER, not looser: the card must still render, still render exactly once,
+  // and must no longer be in the list it left, or it would draw twice.
+  ok('the phase-2 list still mounts drift and why', /_runShinCardHTML_/.test(mount) && /_runWhyCardHTML_/.test(mount));
+  ok('NEG: 10k is no longer in the phase-2 list', !/_run10kCardHTML_/.test(mount));
+  ok('10k mounts from the shared renderer instead', /_run10kCardHTML_/.test(rn));
+  ok('...immediately after the PR board', rn.indexOf('_prSection_') < rn.indexOf('_run10kCardHTML_'));
+  // Anchored on the CALL, not the bare name: the 10k mount's own comment mentions
+  // _runPhase2Mount_, and an indexOf on the name alone finds that comment first and reports the
+  // wrong order.
+  ok('...and before the phase-2 block', rn.indexOf('_run10kCardHTML_') < rn.indexOf('_runPhase2Mount_(scr)'));
+  // Exactly one CALL site across the whole file, so the move cannot have left a second one behind.
+  // The definition also reads _run10kCardHTML_(), so it is excluded rather than counted.
+  ok('exactly one 10k call site in the file',
+     (src.match(/(?<!function )_run10kCardHTML_\(\)/g) || []).length === 1);
   ok('one card throwing cannot take the page down', /catch\(e\)\{ try\{ console\.error\('\[run-p2\]'/.test(mount));
   ok('an empty card renders nothing at all', /if\(!html\) return;/.test(mount));
   // The union source, not getRuns alone - the snapshot under-reports the recent runs these read.

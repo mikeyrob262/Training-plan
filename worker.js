@@ -307,6 +307,32 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .lg-hs::-webkit-scrollbar{display:none}
 .lg-nudge{background:rgba(20,24,34,.86);border:1px solid rgba(255,255,255,.16);color:#e2e8f0;width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
 .lg-nudge[disabled]{opacity:.28;cursor:default}
+/* A season card is a BUTTON now, so it says so with the cursor and a hover lift. The rail is a
+   horizontal scroller, and a drag across it must not be read as a click — the card's own handler
+   checks how far the pointer travelled before opening (see _lgCardDown_). */
+.lg-scard{cursor:pointer;transition:border-color .15s,background .15s,transform .15s;text-align:left}
+.lg-scard:hover{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.06);transform:translateY(-1px)}
+.lg-scard:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+/* House shape, 9px, per the standing no-pill-buttons rule. */
+.lg-back{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#cbd5e1;font-family:inherit;cursor:pointer}
+.lg-back:hover{color:#f1f5f9;border-color:rgba(255,255,255,.22)}
+/* Season detail tables. Wide content scrolls inside its own box; the page never scrolls sideways. */
+.lg-tw{overflow-x:auto;margin-top:11px}
+.lg-t{border-collapse:collapse;width:100%;font-size:12px;min-width:430px}
+.lg-t th{text-align:right;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;padding:0 0 7px;border-bottom:1px solid rgba(255,255,255,.09);white-space:nowrap}
+.lg-t th:first-child,.lg-t td:first-child{text-align:left}
+.lg-t td{text-align:right;padding:7px 0;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,.045);white-space:nowrap}
+.lg-t th+th,.lg-t td+td{padding-left:14px}
+.lg-t tr:last-child td{border-bottom:none}
+.lg-t tfoot td{border-top:1px solid rgba(255,255,255,.14);border-bottom:none;font-weight:800;color:#f1f5f9;padding-top:9px}
+.lg-t td.lg-dim{color:#8b93a7}
+.lg-t td.lg-nm{white-space:normal;min-width:150px}
+/* A row is a link ONLY when its activity actually resolves. An unresolvable row stays plain text —
+   the same do-not-claim contract the Personal Bests board uses — so a click never dead-ends. */
+.lg-arow{cursor:pointer}
+.lg-arow:hover td{background:rgba(255,255,255,.05);color:#fff}
+.lg-arow td:first-child{border-left:2px solid transparent}
+.lg-arow:hover td:first-child{border-left-color:currentColor}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
 .ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
 .ds-map-ctrl{position:absolute;top:10px;left:10px;background:var(--d-panel);border:1px solid var(--d-line2);border-radius:6px;overflow:hidden}
@@ -14086,10 +14112,7 @@ function _lgAwaitPrime_(){
     if(!open || tries>40){ clearInterval(_lgAwaitTimer); _lgAwaitTimer=null; return; }
     if(!_lgRunsPrimed_()) return;
     clearInterval(_lgAwaitTimer); _lgAwaitTimer=null;
-    try{
-      if(document.getElementById('LEGACY')) showLegacy();
-      else if(typeof _dsCurView!=='undefined' && _dsCurView==='legacy') dsShowLegacy();
-    }catch(e){}
+    _lgRepaint_();          // one repaint rule, shared with the season selection
   }, 1500);
 }
 // Runs through the canonical accessor, with only what this page needs kept.
@@ -14147,12 +14170,140 @@ function _lgMonthlyPts_(rows, year){
   for(i=0;i<end;i++) out.push({ v:Math.round(m[i]*10)/10, lab:_LG_MON[i] });
   return out;
 }
-function _lgSeasonCard_(s, col, showHours, rows){
+// =============================================================================================
+// SEASON DRILL-DOWN. A season card opens the season.
+//
+// WHY THIS IS NOT THE ATHLETIC LIFE HERO'S PROBLEM. That surface's month strip stops at a month
+// summary because _zsCompute_ is an AGGREGATOR: it keeps {ym, score, mi, byDay} and throws the
+// activity rows away, so reaching activities means re-resolving a month back into st.rides, and
+// only a fraction of snapshot records have a live twin there.
+//
+// The season cards are the opposite shape. _lgByYear_ is HANDED the row array it aggregates, and
+// that same array is already threaded through to _lgSeasonCard_ for the sparkline. So the activity
+// list is not a lookup at all — it is the rows the card counted, filtered by year. It cannot
+// disagree with the card's own totals, because it IS the card's own totals unrolled.
+//
+// MEASURED on the live library (scripts/legacy-season-drilldown-probe.mjs), which is the only
+// reason any of this is stated as fact:
+//   cycling 2024/2025/2026 -> 55/187/98 rides, every one carrying name, distance, duration and
+//     elevation, and every one resolving to a LIVE st.rides record. 340 of 340 clickable.
+//   running 2016-2024      -> 1,563 runs, every one carrying name, distance, duration and HR.
+//     164 of them resolve through _runRefFor_. 1,399 do not.
+//
+// That second number is the real limit and it is NOT hidden. Every run row still LISTS — name,
+// date, distance, time, pace, HR, all from the snapshot record itself. What a run row cannot
+// always do is OPEN, because the ride-detail modal indexes st.rides and most runs from those
+// seasons only exist in the snapshot. So a row links when it resolves and is plain text when it
+// does not, the same contract the Personal Bests board already uses, and the panel prints the
+// count rather than letting the reader discover it by clicking.
+// =============================================================================================
+var _LG_SEL=null;                 // {sport:'cyc'|'run', year:2025} or null for the season rails
+function _lgEsc_(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){
+  return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&#39;'; }); }
+// Per-sport constants in ONE place. The seasons panel and the detail view both read this, so the
+// colour, the scope years and whether hours are shown cannot drift between the card and the page
+// it opens.
+function _lgSportCfg_(sport){
+  return (sport==='run')
+    ? { key:'run', label:'Running', col:'#fb923c', from:_LG_RUN_FROM, to:_LG_RUN_TO, showHours:false, noun:'run' }
+    : { key:'cyc', label:'Cycling', col:'#a78bfa', from:_LG_CYC_FROM, to:null,        showHours:true,  noun:'ride' };
+}
+// THE one row source per sport. _lgHTML_ reads it too, so the rails and the detail are the same
+// array and a season can never count one thing on the card and list another inside it.
+function _lgRowsFor_(sport){
+  if(sport==='run') return _lgRuns_();
+  try{ return (typeof _msCycling_==='function')?(_msCycling_()||[]):[]; }catch(e){ return []; }
+}
+// Cycling rows come from _msCycling_ and carry .mi with NO .distance; runs carry .distance. Same
+// raw-field test _lgByYear_ documents: a unary plus on r.distance coerces an absent field to NaN, and NaN!=null
+// is true, so a coerce-then-test check always takes the wrong branch.
+function _lgRowMi_(r){ return (r&&r.distance!=null ? +r.distance : +((r&&r.mi))) || 0; }
+// _msCycling_ pre-computes .sec. Everything else goes through the canonical accessor — never a unary plus on r.duration,
+// which on a cycling record is the FORMATTED string "1:11:16" and digit-strips to 11116.
+function _lgRowSec_(r){
+  if(r && r.sec!=null) return +r.sec||0;
+  return (typeof actSecs_==='function') ? actSecs_(r) : (+((r&&r.movingSecs))||0);
+}
+function _lgRowsInYear_(rows, year){
+  return (rows||[]).filter(function(r){ return r && (+String(r.date||'').slice(0,4))===year; })
+    .slice().sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+}
+// The click target for one listed activity. Runs go through _runRefFor_ — the SHIPPED resolver
+// (durable handle, then a stravaId scan, then a unique content match), already covered by
+// run-pb-link-test. Rides are st.rides records to begin with, so their handle resolves directly
+// and the run-only content tier is never reached; sending a ride down that tier could match a RUN
+// of the same date and distance, and opening the wrong activity is worse than not linking.
+function _lgRefFor_(r, sport){
+  try{
+    if(sport==='run') return (typeof _runRefFor_==='function') ? _runRefFor_(r) : '';
+    if(typeof rideHandle_==='function' && typeof rideResolveIdx_==='function'){
+      var h=rideHandle_(r);
+      if(h){
+        var hi=rideResolveIdx_(h);
+        // A tombstone must never win a click. rideHandleIndex_ only prefers a live record when two
+        // records COLLIDE on a handle, so the liveness test belongs here — 83% of st.rides are
+        // tombstones, which makes this the common case rather than an edge.
+        if(hi>=0 && typeof st!=='undefined' && st && st.rides && st.rides[hi] && !st.rides[hi].deleted) return h;
+      }
+    }
+    if(r && r.stravaId!=null && typeof st!=='undefined' && st && st.rides){
+      var want=String(r.stravaId);   // string on some records, number on others — coerce both sides
+      for(var i=0;i<st.rides.length;i++){ var x=st.rides[i]; if(x && !x.deleted && String(x.stravaId)===want) return i; }
+    }
+  }catch(e){}
+  return '';
+}
+// Repaint whichever Legacy surface is actually open. Mobile mounts a #LEGACY sheet, desktop renders
+// into ds-content and is identified by _dsCurView, exactly as the prime-await already tested.
+function _lgRepaint_(){
+  try{
+    if(document.getElementById('LEGACY')) showLegacy();
+    else if(typeof _dsCurView!=='undefined' && _dsCurView==='legacy') dsShowLegacy();
+  }catch(e){}
+}
+function lgOpenSeason_(sport, year){
+  year=+year; if(!year) return;
+  _LG_SEL={ sport:(sport==='run'?'run':'cyc'), year:year };
+  _lgRepaint_();
+  // The rails were scrolled; the detail is a fresh page and must start at its top.
+  try{
+    var sc=document.getElementById('lg-detail'); if(sc && sc.scrollIntoView) sc.scrollIntoView({block:'start'});
+  }catch(e){}
+}
+function lgCloseSeason_(){ _LG_SEL=null; _lgRepaint_(); }
+// A DRAG ACROSS THE RAIL IS NOT A CLICK. The season strip is a horizontal scroller, so without this
+// every flick to reach 2019 would open whichever card the finger happened to land on. Records where
+// the pointer went down and only treats the release as a click if it barely moved.
+var _lgDown=null;
+function _lgCardDown_(ev){ try{ _lgDown={x:ev.clientX, y:ev.clientY}; }catch(e){ _lgDown=null; } }
+function _lgCardUp_(ev, sport, year){
+  try{
+    if(_lgDown){
+      var dx=Math.abs(ev.clientX-_lgDown.x), dy=Math.abs(ev.clientY-_lgDown.y);
+      _lgDown=null;
+      if(dx>8 || dy>8) return;
+    }
+  }catch(e){}
+  lgOpenSeason_(sport, year);
+}
+try{ if(typeof window!=='undefined'){
+  window.lgOpenSeason_=lgOpenSeason_; window.lgCloseSeason_=lgCloseSeason_;
+  window._lgCardDown_=_lgCardDown_; window._lgCardUp_=_lgCardUp_;
+} }catch(e){}
+function _lgSeasonCard_(s, col, showHours, rows, sport){
   var rowsOut=[['Activities',_lgNum_(s.n)],['Miles',_lgNum_(s.mi)]];
   if(showHours) rowsOut.push(['Hours',_lgNum_(s.sec/3600)]);
   rowsOut.push(['Longest',(Math.round(s.max*10)/10)+' mi']);
-  var H='<div style="flex:1 1 190px;min-width:190px;background:var(--d-panel2,rgba(255,255,255,.035));border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:14px 15px 11px;display:flex;flex-direction:column">'
+  var clickable=!!sport;
+  var H='<'+(clickable?'button type="button" class="lg-scard"':'div')
+    +' style="flex:1 1 190px;min-width:190px;background:var(--d-panel2,rgba(255,255,255,.035));border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:14px 15px 11px;display:flex;flex-direction:column;font-family:inherit;color:inherit"'
+    +(clickable?(' aria-label="Open the '+s.year+' '+(sport==='run'?'running':'cycling')+' season"'
+       +' onpointerdown="_lgCardDown_(event)" onclick="_lgCardUp_(event,&#39;'+sport+'&#39;,'+s.year+')"'):'')
+    +'>'
+    +'<div style="display:flex;align-items:baseline;gap:7px">'
     +'<div style="font-size:25px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+s.year+'</div>'
+    +(clickable?'<div style="flex:1"></div><div style="font-size:15px;color:'+col+';line-height:1;opacity:.75">&#8250;</div>':'')
+    +'</div>'
     +'<div style="margin-top:9px;flex:1 1 auto">';
   rowsOut.forEach(function(r){
     H+='<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-top:6px">'
@@ -14166,7 +14317,7 @@ function _lgSeasonCard_(s, col, showHours, rows){
     ? ('<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07)">'+spark
        +'<div style="font-size:9px;color:#6b7280;margin-top:2px">Miles by month</div></div>')
     : '<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);font-size:9px;color:#6b7280">Too few months to plot</div>';
-  return H+'</div>';
+  return H+(clickable?'</button>':'</div>');
 }
 // FLAT SUMMARY PANEL. Same surface treatment as every other panel in the app — solid --d-panel,
 // one hairline border, no gradient and no glow. An earlier pass built this as a large gradient
@@ -14240,25 +14391,205 @@ function _lgSeasonsPanel_(title, col, seasons, scopeLine, showHours, rows, key){
     +'<button id="lg-bp-'+key+'" class="lg-nudge" aria-label="Scroll to earlier seasons" onclick="_lgHsNudge_(&#39;'+key+'&#39;,-1)">&#8249;</button>'
     +'<button id="lg-bn-'+key+'" class="lg-nudge" aria-label="Scroll to more seasons" onclick="_lgHsNudge_(&#39;'+key+'&#39;,1)">&#8250;</button>'
     +'</div></div>'
-    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">'+scopeLine+'</div>'
+    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">'+scopeLine
+    +' <span style="color:'+col+';font-weight:700">Open a season</span> for its month-by-month figures and every activity in it.</div>'
     +'<div style="position:relative;margin-top:13px">'
     +'<div id="lg-hs-'+key+'" class="lg-hs" onscroll="_lgHsUpdate_(&#39;'+key+'&#39;)" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:9px">';
-  seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours,rows); });
+  seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours,rows,key); });
   H+='</div>'
     +'<div id="lg-fl-'+key+'" style="position:absolute;left:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(90deg,rgba(5,7,13,.92),rgba(5,7,13,0))"></div>'
     +'<div id="lg-fr-'+key+'" style="position:absolute;right:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(270deg,rgba(5,7,13,.92),rgba(5,7,13,0))"></div>'
     +'</div></div>';
   return H;
 }
+// ---- SEASON DETAIL -----------------------------------------------------------------------------
+// Month-by-month numbers BEHIND the sparkline, then the activities themselves.
+//
+// The month table is truncated for an in-progress year on exactly the rule the sparkline already
+// uses: padding to December would show real zeros for months that have not happened, which reads
+// as a collapse in form rather than as a calendar. A month INSIDE the elapsed part of the year with
+// no activity is a real zero and is shown as one.
+function _lgMonthTable_(rows, year, cfg){
+  var m=[], i;
+  for(i=0;i<12;i++) m.push({ n:0, mi:0, sec:0, max:0 });
+  var any=false;
+  (rows||[]).forEach(function(r){
+    var ds=String((r&&r.date)||'');
+    if((+ds.slice(0,4))!==year) return;
+    var mo=+ds.slice(5,7); if(!(mo>=1&&mo<=12)) return;
+    var b=m[mo-1], mi=_lgRowMi_(r);
+    b.n++; b.mi+=mi; b.sec+=_lgRowSec_(r); if(mi>b.max) b.max=mi;
+    any=true;
+  });
+  if(!any) return '';
+  var now=new Date(), end=12, partial=false;
+  if(year===now.getFullYear()){ end=now.getMonth()+1; partial=true; }
+  var one=function(v){ return Math.round(v*10)/10; };
+  var H='<div class="lg-tw"><table class="lg-t"><thead><tr>'
+    +'<th>Month</th><th>Activities</th><th>Miles</th>'
+    +(cfg.showHours?'<th>Hours</th>':'')
+    +'<th>Longest</th></tr></thead><tbody>';
+  var tN=0, tMi=0, tSec=0, tMax=0;
+  for(i=0;i<end;i++){
+    var b=m[i], zero=(b.n===0);
+    tN+=b.n; tMi+=b.mi; tSec+=b.sec; if(b.max>tMax) tMax=b.max;
+    H+='<tr>'
+      +'<td'+(zero?' class="lg-dim"':'')+'>'+_LG_MON[i]+'</td>'
+      +'<td'+(zero?' class="lg-dim"':'')+'>'+(zero?'&mdash;':b.n)+'</td>'
+      +'<td'+(zero?' class="lg-dim"':'')+'>'+(zero?'&mdash;':one(b.mi).toLocaleString())+'</td>'
+      +(cfg.showHours?('<td'+(zero?' class="lg-dim"':'')+'>'+(zero?'&mdash;':one(b.sec/3600))+'</td>'):'')
+      +'<td'+(zero?' class="lg-dim"':'')+'>'+(zero?'&mdash;':(one(b.max)+' mi'))+'</td>'
+      +'</tr>';
+  }
+  H+='</tbody><tfoot><tr><td>'+year+'</td><td>'+tN+'</td><td>'+one(tMi).toLocaleString()+'</td>'
+    +(cfg.showHours?('<td>'+one(tSec/3600)+'</td>'):'')
+    +'<td>'+one(tMax)+' mi</td></tr></tfoot></table></div>';
+  if(partial){
+    H+='<div style="font-size:10.5px;color:#6b7280;margin-top:7px;line-height:1.5">'
+      +'Through '+_LG_MON[end-1]+' only &mdash; '+year+' is still running. The remaining months are left out rather than '
+      +'printed as zero, because a zero for a month that has not happened reads as a month you did nothing.</div>';
+  }
+  return H;
+}
+// The activities. This is the SAME array the card counted, filtered by year — not a lookup, so the
+// list and the totals above it cannot disagree.
+//
+// Running shows no elevation column. That is not an oversight: the local run elevation figure runs
+// 100-143 ft/mi for 2016-2020 against 17-35 for 2021+ (cycling, for scale, is 32), so this page
+// already refuses to state it anywhere, and a per-activity column would be the same unstated claim
+// at higher resolution.
+function _lgActivityTable_(list, cfg){
+  if(!list.length) return '';
+  var isRun=(cfg.key==='run');
+  var linkable=0;
+  var body='';
+  list.forEach(function(r){
+    var mi=_lgRowMi_(r), sec=_lgRowSec_(r);
+    // NEVER r.name raw — actName_ owns the fallback for file-derived and all-digit names.
+    var ni=(typeof actNameInfo_==='function')?actNameInfo_(r):{ text:String((r&&r.name)||''), isFallback:false };
+    var ref=_lgRefFor_(r, cfg.key), ok=(typeof rideRefOk_==='function') && rideRefOk_(ref);
+    if(ok) linkable++;
+    var cells='<td class="lg-dim">'+_lgEsc_(String(r.date).slice(0,10))+'</td>'
+      +'<td class="lg-nm"'+(ni.isFallback?' style="color:#8b93a7"':'')+'>'+_lgEsc_(ni.text)+'</td>'
+      +'<td>'+(Math.round(mi*10)/10)+'</td>'
+      +'<td>'+(sec>0?((typeof fmtHM_==='function')?fmtHM_(sec):Math.round(sec/60)+'m'):'&mdash;')+'</td>';
+    if(isRun){
+      // Pace is DERIVED from the same two numbers in this row, so it can never contradict them.
+      var pace='&mdash;';
+      if(mi>0 && sec>0){ var sp=sec/mi, pm=Math.floor(sp/60), ps=Math.round(sp%60); if(ps===60){pm++;ps=0;} pace=pm+':'+(ps<10?'0':'')+ps; }
+      cells+='<td>'+pace+'</td>'
+        +'<td'+(r.avgHR==null?' class="lg-dim"':'')+'>'+(r.avgHR!=null?Math.round(+r.avgHR):'&mdash;')+'</td>';
+    } else {
+      cells+='<td'+(r.elev==null?' class="lg-dim"':'')+'>'+(r.elev!=null?Math.round(+r.elev).toLocaleString():'&mdash;')+'</td>'
+        +'<td'+(!(mi>0&&sec>0)?' class="lg-dim"':'')+'>'+((mi>0&&sec>0)?(Math.round(mi/(sec/3600)*10)/10):'&mdash;')+'</td>';
+    }
+    body+= ok
+      ? ('<tr class="lg-arow" style="color:'+cfg.col+'" title="Open this '+cfg.noun+'" onclick="_runOpenRef_('+rideRefAttr_(ref)+')">'+cells+'</tr>')
+      : ('<tr>'+cells+'</tr>');
+  });
+  var head='<tr><th>Date</th><th>Activity</th><th>Miles</th><th>Time</th>'
+    +(isRun?'<th>Pace</th><th>Avg HR</th>':'<th>Ft climbed</th><th>Avg mph</th>')+'</tr>';
+  var H='<div class="lg-tw"><table class="lg-t"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
+  // The link rate is STATED, never discovered by clicking. A run that only exists in the snapshot
+  // has no st.rides record for the detail modal to index, and that is most of the older seasons.
+  var pct=Math.round(linkable/list.length*100);
+  H+='<div style="font-size:10.5px;color:#6b7280;margin-top:9px;line-height:1.55">'
+    + (linkable===list.length
+        ? ('Every '+cfg.noun+' here opens &mdash; click a row for the full activity.')
+        : (linkable===0
+            ? ('None of these '+cfg.noun+'s can be opened in full. ')
+            : ('<b style="color:#8b93a7">'+linkable+'</b> of '+list.length+' ('+pct+'%) open in full &mdash; those rows are coloured and clickable. '))
+          + 'The rest are listed from the history snapshot, which holds the figures above but has no record in the '
+          + 'live activity library for the detail view to index. Nothing is missing from the numbers; only the click is.')
+    +'</div>';
+  return H;
+}
+function _lgSeasonDetailHTML_(){
+  var sel=_LG_SEL; if(!sel) return '';
+  var cfg=_lgSportCfg_(sel.sport);
+  // Running waits for its snapshot for the same reason the rails do: getRuns() degrades to the
+  // inflated legacy union until primed, and a page whose whole claim is trustworthy numbers cannot
+  // paint 342 activities and then quietly settle to 220.
+  if(cfg.key==='run' && !_lgRunsPrimed_()){ _lgAwaitPrime_(); return _lgBackBar_(cfg)+_lgWaitingHTML_('Running'); }
+  var rows=_lgRowsFor_(cfg.key);
+  var seasons=_lgByYear_(rows, cfg.from, cfg.to);
+  // Resolve the year against the SAME sorted array that produced the ranking, so position IS rank
+  // and no second lookup can disagree with the rail.
+  var s=null, rank=0;
+  for(var i=0;i<seasons.length;i++) if(seasons[i].year===sel.year){ s=seasons[i]; rank=i+1; break; }
+  if(!s){
+    return _lgBackBar_(cfg)
+      +'<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px">'
+      +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">'+sel.year+' &mdash; '+cfg.label+'</div>'
+      +'<div style="font-size:12px;color:var(--d-dim,#8b93a7);margin-top:5px;line-height:1.55">This season is no longer in the ranked set. '
+      +'Nothing is claimed about a year the page cannot rank.</div></div>';
+  }
+  var list=_lgRowsInYear_(rows, sel.year);
+  var one=function(v){ return Math.round(v*10)/10; };
+  var tiles=[ {k:'Activities', v:_lgNum_(s.n)}, {k:'Miles', v:_lgNum_(s.mi)} ];
+  if(cfg.showHours) tiles.push({k:'Hours', v:_lgNum_(s.sec/3600)});
+  tiles.push({k:'Longest', v:one(s.max)+' mi'});
+  if(cfg.key!=='run'){
+    var ft=0, anyFt=false;
+    list.forEach(function(r){ if(r.elev!=null){ ft+=+r.elev||0; anyFt=true; } });
+    if(anyFt) tiles.push({k:'Ft climbed', v:_lgNum_(ft)});
+  }
+  var H=_lgBackBar_(cfg);
+  H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">'
+    +'<div style="font-size:31px;font-weight:800;color:'+cfg.col+';line-height:1;letter-spacing:-.02em">'+s.year+'</div>'
+    +'<div style="font-size:13px;font-weight:800;color:var(--d-head,#f1f5f9)">'+cfg.label+'</div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7)">#'+rank+' of '+seasons.length+' ranked seasons, by miles</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px 28px;margin-top:14px">';
+  tiles.forEach(function(t){
+    H+='<div><div style="font-size:27px;font-weight:800;color:var(--d-head,#f1f5f9);line-height:1;letter-spacing:-.02em">'+t.v+'</div>'
+      +'<div style="font-size:11px;color:'+cfg.col+';margin-top:3px;font-weight:700">'+t.k+'</div></div>';
+  });
+  H+='</div>';
+  var pts=_lgMonthlyPts_(rows, s.year);
+  var spark=(typeof _gcSpark_==='function')?_gcSpark_(pts, cfg.col, { H:64, fill:true, aria:s.year+' monthly miles' }):'';
+  if(spark) H+='<div style="margin-top:15px">'+spark+'<div style="font-size:10px;color:#6b7280;margin-top:3px">Miles by month</div></div>';
+  H+='</div>';
+
+  H+='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:14px">'
+    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">Month by month</div>'
+    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">The numbers behind the line above &mdash; the same '
+    +s.n+' '+cfg.noun+(s.n===1?'':'s')+' the card counts, split by month.</div>'
+    +(_lgMonthTable_(rows, s.year, cfg) || '<div style="font-size:11.5px;color:#8b93a7;margin-top:10px">No dated activities in this season.</div>')
+    +'</div>';
+
+  H+='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">Every '+cfg.noun+' in '+s.year+'</div>'
+    +'<div style="font-size:11px;color:'+cfg.col+';font-weight:700">'+list.length+'</div></div>'
+    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">Newest first. Nothing is trimmed &mdash; this is the whole season.</div>'
+    +(_lgActivityTable_(list, cfg) || '<div style="font-size:11.5px;color:#8b93a7;margin-top:10px">No dated activities in this season.</div>')
+    +'</div>';
+  return H;
+}
+function _lgBackBar_(cfg){
+  return '<div id="lg-detail" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<button type="button" class="lg-back" onclick="lgCloseSeason_()">&#8249;&nbsp; All seasons</button>'
+    +'<div style="font-size:11.5px;color:#8b93a7">'+cfg.label+' season</div></div>';
+}
 // ONE builder, both surfaces. Desktop renders it into ds-content beside the sidebar; mobile puts
 // the same string in a full-screen sheet. Two renderers reading one function is the only way the
 // two stay identical — see the desktop/mobile drift note.
 function _lgHTML_(){
+  // A selected season REPLACES the page body. Same shape as the Athletic Life month selection: one
+  // module-level handle, set it and repaint, rather than a second renderer that could drift.
+  if(_LG_SEL){
+    try{ return _lgSeasonDetailHTML_(); }
+    catch(e){ try{ console.error('[legacy-season]', e&&e.message); }catch(_e){}
+      _LG_SEL=null; /* fall through to the rails rather than showing a blank page */ }
+  }
   var ICO_BIKE='<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h3l2.5 6.5M5.5 17.5l4-9h5l3.5 9"/>';
   var ICO_RUN='<circle cx="13" cy="4" r="1.6"/><path d="M7 20l3-6 3 2 1-5 3 3h2"/><path d="M9 9l4-2 3 3"/>';
 
   // ---- CYCLING ----
-  var cyc=[]; try{ cyc=(typeof _msCycling_==='function')?(_msCycling_()||[]):[]; }catch(e){ cyc=[]; }
+  // Through _lgRowsFor_, not an inline call, so the rail and the season detail are the SAME array.
+  var cyc=_lgRowsFor_('cyc');
   var cycFirst=cyc.length?cyc[0].date:null;
   var cent=cyc.filter(function(r){ return r.mi>=100; });
   var cycProv='';
@@ -21873,7 +22204,18 @@ function _msCycling_(){
   return ded.filter(function(r){ return r&&r.date&&isRide(r); }).map(function(r){
     var d=_ryDate_(r.date), mi=parseFloat(r.distance)||0, sec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
     var mph=parseFloat(r.avgSpeed); if(!(mph>0)) mph=(mi>0&&sec>0)?mi/(sec/3600):0;
-    return { d:d, mi:mi, sec:sec, mph:mph, elev:parseFloat(r.elev)||0, date:String(r.date).slice(0,10) };
+    // IDENTITY TRAVELS WITH THE PROJECTION. This used to emit six numbers and nothing else, which
+    // was fine while the only consumer was milestonesCompute_ — it wants aggregates. The Legacy
+    // season drill-down LISTS these rows, and a row with no name renders as the "Ride - 18.9 mi"
+    // fallback while a row with no stravaId resolves to nothing, so every cycling activity was
+    // unnamed and unclickable: 340 of 340. Exactly the defect _runRefFor_ documents on the run
+    // side — "the snapshot projection can satisfy neither of the first two paths" — arrived at by
+    // the same route, a projection that kept the measurements and dropped the record.
+    //
+    // Three fields, all straight off the source record, all ignored by every existing reader:
+    // name and sportType so actNameInfo_ can apply its own rule, stravaId so the ref resolves.
+    return { d:d, mi:mi, sec:sec, mph:mph, elev:parseFloat(r.elev)||0, date:String(r.date).slice(0,10),
+             name:r.name, sportType:(r.sportType||r.type), stravaId:r.stravaId };
   }).filter(function(x){ return x.d && !isNaN(x.d.getTime()) && x.mi>0; }).sort(function(a,b){ return a.d-b.d; });
 }
 // PURE + testable. rides = cycling rides sorted asc by date; nowRef = today. Everything is scoped to
@@ -40757,7 +41099,17 @@ function _ptFactors_(days){
 // The ridge itself. Three layers, deliberately unequal: fitness is a filled area with a bright
 // stroke on top (the skyline), load is a softer fill beneath it, and form is a thin band on the
 // baseline that can sit either side of zero. Drawn as one SVG with no library.
-function _ptChart_(pts, w, h){
+// COLOURWAY, NOT A SECOND CHART. The Run Training page needs the same ridge in its own accent, and
+// the one thing this app has repeatedly paid for is a second copy of a renderer drifting from the
+// first. So the colours are a parameter and there is still exactly one skyline. Omitted, it draws
+// the dashboard's green/blue/violet exactly as before.
+// ctlFill is a SEPARATE key on purpose: the ridge fill has always been the lighter #4ade80 under
+// a #22c55e stroke, and folding the two into one value would have quietly restyled the dashboard
+// card while 'only' extracting a constant.
+var _PT_COLS={ ctl:'#22c55e', ctlFill:'#4ade80', atl:'#60a5fa', tsb:'#a78bfa' };
+function _ptChart_(pts, w, h, cols){
+  cols=cols||_PT_COLS;
+  var _cf=cols.ctlFill||cols.ctl;
   if(!pts || pts.length<2) return '<div style="height:'+h+'px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--d-t4)">Not enough history to draw a trajectory yet.</div>';
   var n=pts.length, pad=6, iw=w, ih=h-pad*2;
   var ctl=pts.map(function(p){ return +p.ctl||0; });
@@ -40774,19 +41126,22 @@ function _ptChart_(pts, w, h){
   var by=pad+ih;
   var tband=''; for(var i=0;i<n;i++){ tband+=(i?'L':'M')+x(i).toFixed(1)+' '+(by-(tsb[i]/tmax)*10).toFixed(1); }
   tband+='L'+x(n-1).toFixed(1)+' '+by.toFixed(1)+'L0 '+by.toFixed(1)+'Z';
-  var uid='ptg'+String(n)+String(Math.round(hi));
+  // The gradient id carries the COLOURWAY as well as the shape. Two skylines in one document with
+  // the same point count and peak would otherwise share an id, and the second defs block would
+  // silently lose to the first - one card drawn in the other's colours.
+  var uid='ptg'+String(n)+String(Math.round(hi))+String(cols.ctl).replace(/[^A-Za-z0-9]/g,'');
   return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
     +'<defs>'
-    +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ade80" stop-opacity=".55"/><stop offset="1" stop-color="#4ade80" stop-opacity=".04"/></linearGradient>'
-    +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa" stop-opacity=".45"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".03"/></linearGradient>'
+    +'<linearGradient id="'+uid+'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+_cf+'" stop-opacity=".55"/><stop offset="1" stop-color="'+_cf+'" stop-opacity=".04"/></linearGradient>'
+    +'<linearGradient id="'+uid+'b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+cols.atl+'" stop-opacity=".45"/><stop offset="1" stop-color="'+cols.atl+'" stop-opacity=".03"/></linearGradient>'
     +'</defs>'
     +'<path d="'+area(ctl)+'" fill="url(#'+uid+'a)"/>'
     +'<path d="'+area(atl)+'" fill="url(#'+uid+'b)"/>'
-    +'<path d="'+tband+'" fill="#a78bfa" fill-opacity=".38"/>'
+    +'<path d="'+tband+'" fill="'+cols.tsb+'" fill-opacity=".38"/>'
     // The skyline stroke is drawn LAST so the ridge reads as the subject. vector-effect keeps it
     // 2px after the non-uniform viewBox scale, which would otherwise squash it to a hairline.
-    +'<path d="'+line(ctl)+'" fill="none" stroke="#22c55e" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
-    +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="#22c55e" vector-effect="non-scaling-stroke"/>'
+    +'<path d="'+line(ctl)+'" fill="none" stroke="'+cols.ctl+'" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
+    +'<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(ctl[n-1]).toFixed(1)+'" r="3" fill="'+cols.ctl+'" vector-effect="non-scaling-stroke"/>'
     +'</svg>';
 }
 function _ptCardHTML_(lbl, link){
@@ -40925,6 +41280,437 @@ function _ptCardHTML_(lbl, link){
     // with a space, each written without knowledge of the other.
     +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_ptInsight_(d, w, fact)+'</span></div>';
   return inner;
+}
+// ==================== RUNNING PERFORMANCE TRAJECTORY ====================
+//
+// The Dashboard's Performance Trajectory answers "am I getting fitter" across EVERYTHING. It is a
+// good answer to a different question than a runner asks, and it is dominated by cycling: this
+// library holds 340 rides in the last two seasons against 13 runs in the last year, so run form
+// moves the all-sport ridge barely at all. This is the same card, same philosophy - one ridge, a
+// verdict in words, drivers underneath - scoped to running alone. The Dashboard card is untouched.
+//
+// WHY THE LOAD IS SCORED HERE RATHER THAN READ. pmcSeries_ sums constRideTSS_, which reads a STORED
+// r.tss. applyRunHrTss_ writes that field, but only onto st.rides records - the 2,209 runs served
+// from the /store_v2 snapshot are a different object graph and were never written to. Measured on
+// the live library: of 2,371 runs the app can see, 175 carry a stored TSS and 2,137 can be scored
+// from avgHR against LTHR. Reading the stored field would therefore draw a ridge shaped by which
+// STORE a run happens to live in, which is not a fact about running.
+//
+// So this scores each run at read time through hrTssFor_ - the app's own hrTSS, the same formula
+// that produced the 175 stored values, so the two can never disagree. Nothing is written back:
+// repricing the library is a different change with different blast radius, and this card is read
+// only. It does mean the run ridge and the all-sport ridge are built from different coverage of the
+// same runs, and the card says so rather than leaving two CTLs to be silently compared.
+var _RT_RANGES=[['7D',7],['30D',30],['90D',90],['1Y',365],['ALL',0]];
+var _rtRange='90D';
+var _RT_COLS={ ctl:'#fb923c', ctlFill:'#fdba74', atl:'#60a5fa', tsb:'#a78bfa' };
+// A PERCENTAGE NEEDS A BASE WORTH DIVIDING BY, and the running base is a tenth of the cycling one.
+// The Dashboard uses 15, argued as roughly 105 TSS a week. Running alone here is currently 8 runs in
+// 30 days at a mean 50.8 TSS - about 95 TSS a week, settling run CTL near 13 - while the 2019-2024
+// running seasons ran four-plus a week. 10 is about 70 TSS a week, roughly two solid runs: below
+// that a ratio is dividing by a base that is still being rebuilt, and the card shows the two
+// absolute numbers instead. Suppressed, never rebased - a range labelled 1Y that quietly starts in
+// July is a different lie.
+var _RT_BASE_FLOOR=10;
+// The same idea one level down, for the volume driver. 2.5 miles a week against 0.2 is +1192%,
+// and that number describes a prior window containing a single run rather than a change in
+// training. 1.0 mi/week is about one short run a week - under that there is no rate to divide by
+// and the row shows the two figures instead.
+var _RT_VOL_FLOOR=1.0;
+var _rtCache={ key:null, out:null };
+function _rtInvalidate_(){ _rtCache={ key:null, out:null }; }
+// Run-only daily load. hrTssFor_ FIRST, because it is a measurement from fields every run carries;
+// a stored hr-sourced tss is the fallback for the handful with a load but no readable avgHR. A
+// stored POWER tss on a run is never used - that is the stale value healPowerTssOnNonRides_ exists
+// to strip, and it would put a ride-shaped number into a run curve.
+function _rtDailyTss_(){
+  var runs=(typeof _runAll_==='function')?(_runAll_()||[]):[];
+  var L=(typeof stLthr_==='function')?stLthr_():null;
+  var by={};
+  runs.forEach(function(r){
+    if(!r || r.deleted || !r.date) return;
+    var t=(typeof hrTssFor_==='function')?hrTssFor_(r, L):null;
+    if(!(t>0) && r.tssSource==='hr'){ var sv=parseFloat(r.tss); if(sv>0) t=sv; }
+    if(!(t>0)) return;
+    var k=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    if(!k) return;
+    by[k]=(by[k]||0)+t;
+  });
+  return by;
+}
+// The run CTL/ATL/TSB curve. Same EWMA constants as the all-sport PMC - a second set of time
+// constants would make the two incomparable for no reason - and the same round-the-pair-first rule,
+// so Fitness minus Fatigue always equals the Form printed beside them.
+function _rtSeries_(){
+  var runs=(typeof _runAll_==='function')?(_runAll_()||[]):[];
+  var key=runs.length+':'+((typeof st!=='undefined'&&st&&st.lthr)||0)+':'+((typeof st!=='undefined'&&st&&st.lastUpdate)||0);
+  if(_rtCache.key===key && _rtCache.out) return _rtCache.out;
+  var by=_rtDailyTss_(), days=Object.keys(by).sort();
+  if(!days.length){ _rtCache={ key:key, out:[] }; return []; }
+  var d=new Date(days[0]+'T00:00:00'), end=new Date(); end.setHours(0,0,0,0);
+  var kc=Math.exp(-1/_PMC_CTL_D), ka=Math.exp(-1/_PMC_ATL_D);
+  var ctl=0, atl=0, out=[], guard=0;
+  while(d<=end && guard++<20000){
+    var k=(typeof dayKey_==='function')?dayKey_(d)
+        :(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+    var t=by[k]||0;
+    ctl=ctl*kc + t*(1-kc);
+    atl=atl*ka + t*(1-ka);
+    var rc=Math.round(ctl*10)/10, ra=Math.round(atl*10)/10;
+    out.push({ date:k, ctl:rc, atl:ra, tsb:Math.round((rc-ra)*10)/10 });
+    d.setDate(d.getDate()+1);
+  }
+  _rtCache={ key:key, out:out };
+  return out;
+}
+function _rtWindow_(key){
+  var days=0; _RT_RANGES.forEach(function(r){ if(r[0]===key) days=r[1]; });
+  var all=_rtSeries_();
+  if(!all.length) return { pts:[], days:days, all:all };
+  var pts=(days>0 && all.length>days) ? all.slice(-days) : all.slice();
+  return { pts:pts, days:days, all:all };
+}
+function _rtDelta_(pts){
+  if(!pts || pts.length<2) return null;
+  var a=+pts[0].ctl, b=+pts[pts.length-1].ctl;
+  if(!isFinite(a) || !isFinite(b)) return null;
+  var weak=!(a>=_RT_BASE_FLOOR);
+  return { from:Math.round(a*10)/10, to:Math.round(b*10)/10, weakBase:weak,
+           dir:(b>a?1:(b<a?-1:0)),
+           pct: weak?null:Math.round((b-a)/a*100) };
+}
+// THE LONGEST BREAK INSIDE THE WINDOW, in days, or 0. This is the single most important thing the
+// running card can say and the cycling card never needs to: run history here is punctuated by real
+// layoffs - 154 days from Aug 2025, 107 days from Apr 2026 - and a fitness curve across one of them
+// is describing a calendar, not a decline in form. Measured from the days that actually carry load,
+// so it cannot disagree with the ridge drawn from the same map.
+function _rtLayoff_(days){
+  try{
+    var by=_rtDailyTss_(), keys=Object.keys(by).sort();
+    if(keys.length<2) return { gap:0, from:null, to:null };
+    var lo=null;
+    if(days>0){ var c=new Date(); c.setHours(0,0,0,0); c.setDate(c.getDate()-days);
+      lo=c.getFullYear()+'-'+('0'+(c.getMonth()+1)).slice(-2)+'-'+('0'+c.getDate()).slice(-2); }
+    var best=0, bf=null, bt=null, prev=null;
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i];
+      if(lo && k<lo){ prev=k; continue; }
+      if(prev){
+        var g=Math.round((new Date(k+'T00:00:00')-new Date(prev+'T00:00:00'))/86400000);
+        // A gap that STARTS before the window is clipped to the part inside it, so a 1Y view cannot
+        // claim a 154-day break that mostly happened before the year began.
+        if(lo && prev<lo) g=Math.round((new Date(k+'T00:00:00')-new Date(lo+'T00:00:00'))/86400000);
+        if(g>best){ best=g; bf=prev; bt=k; }
+      }
+      prev=k;
+    }
+    // The trailing gap counts too: nothing since April is a layoff even though no later run closes it.
+    if(prev){
+      var td=new Date(); td.setHours(0,0,0,0);
+      var gt=Math.round((td-new Date(prev+'T00:00:00'))/86400000);
+      if(gt>best){ best=gt; bf=prev; bt=null; }
+    }
+    return { gap:best, from:bf, to:bt };
+  }catch(e){ return { gap:0, from:null, to:null }; }
+}
+function _rtVerdict_(d){
+  if(!d) return { head:'Not enough running history yet', tone:'flat' };
+  if(d.weakBase){
+    return { head:(d.dir>0?'Running fitness is rebuilding'
+                  :(d.dir<0?'Running fitness is below where this window starts':'Running fitness is level')),
+             tone:(d.dir>0?'up':(d.dir<0?'down':'flat')) };
+  }
+  var p=d.pct;
+  var head = p>=15 ? 'Running fitness is climbing fast'
+           : p>=5  ? 'Running fitness is building'
+           : p>=1  ? 'Running fitness is edging up'
+           : p<=-15? 'Running fitness is dropping sharply'
+           : p<=-5 ? 'Running fitness is fading'
+           : p<=-1 ? 'Running fitness is easing back'
+           :         'Running fitness is holding steady';
+  return { head:head, tone:(p>=1?'up':(p<=-1?'down':'flat')) };
+}
+// EASY, DEFINED THE WAY THIS APP ALREADY DEFINES IT - plan first, then heart rate. Not reinvented,
+// and deliberately NOT the RUN_ZONES Easy band: that band is 113-121 bpm and across 2,371 runs only
+// 32 fall inside it, 1 in the last year. It is the stale hardcoded pair, and a driver computed from
+// one run is a fabrication with a percent sign on it.
+//
+// hrIF is avgHR/LTHR, the same ratio hrTssFor_ squares - so "easy" here means the same thing the
+// load model means by it. The measured distribution across 2,027 runs with HR is p10 0.83, median
+// 0.89, p90 0.94: a narrow band, so 0.85 keeps roughly the easiest quarter rather than an arbitrary
+// slice. _runPlannedEasy_ wins when the plan has an answer, exactly as the shin watch treats it.
+var _RT_EASY_HRIF=0.85;
+function _rtIsEasy_(r){
+  try{
+    var dk=(typeof normDate==='function')?normDate(r&&r.date):String((r&&r.date)||'').slice(0,10);
+    var planned=(typeof _runPlannedEasy_==='function')?_runPlannedEasy_(dk):null;
+    if(planned===true) return true;
+    if(planned===false) return false;
+  }catch(e){}
+  var hr=parseFloat(r&&r.avgHR), L=(typeof stLthr_==='function')?stLthr_():0;
+  if(!(hr>0) || !(L>0)) return false;
+  return (hr/L)<_RT_EASY_HRIF;
+}
+// The lines under the verdict, each as a before -> after pair. Same window discipline as the
+// Dashboard card: this window against the equally long one before it, and a metric that cannot be
+// computed on BOTH sides is NAMED as missing rather than dropped. An absent measurement and no
+// change are different facts, and a silent omission is indistinguishable from a bug.
+//
+// TWO THINGS ARE DELIBERATELY NOT PERCENTAGES:
+//   FORM (TSB) is a signed difference that crosses zero. "+240%" on a swing from -5 to +7 is
+//     arithmetic, not information, and the sign flip makes it unreadable. Shown in points.
+//   PACE is inverted - a smaller number is better - so the arrow is computed from improvement, not
+//     from the sign of the change. Getting that wrong paints a 30-second-per-mile gain bright red.
+function _rtDrivers_(days){
+  var res={ rows:[], miss:[], missWhy:'', haveBoth:false };
+  try{
+    var span=(days>0?days:365);
+    var ser=_rtSeries_();
+    var today=new Date(); today.setHours(0,0,0,0);
+    var ago=function(ds){ var dd=new Date(String(ds).slice(0,10)+'T00:00:00'); return isFinite(dd)?Math.round((today-dd)/86400000):null; };
+
+    // ---- Fitness + Form, off the same series the ridge draws ----
+    if(ser.length>span){
+      var a=ser[ser.length-1-span], b=ser[ser.length-1];
+      if(a && b){
+        res.haveBoth=true;
+        var fp=(a.ctl>=_RT_BASE_FLOOR)?Math.round((b.ctl-a.ctl)/a.ctl*100):null;
+        res.rows.push({ label:'Fitness (CTL)', col:_RT_COLS.ctl, pct:fp,
+                        delta:Math.round((b.ctl-a.ctl)*10)/10, better:(b.ctl>=a.ctl),
+                        detail:a.ctl+' &rarr; '+b.ctl,
+                        unit:(fp==null?'pts':'%') });
+        // Form has no good side on its own - deeply negative is a hard block, strongly positive is
+        // fresh OR detrained. The row states the move; any reading of it belongs in the insight line.
+        res.rows.push({ label:'Form (TSB)', col:_RT_COLS.tsb, pct:null,
+                        delta:Math.round((b.tsb-a.tsb)*10)/10, better:(b.tsb>=a.tsb),
+                        detail:a.tsb+' &rarr; '+b.tsb, unit:'pts', neutral:true });
+      }
+    } else {
+      res.miss.push('Fitness and Form');
+    }
+
+    // ---- Miles per week: the actual cause of a run CTL ----
+    var runs=(typeof _runAll_==='function')?(_runAll_()||[]):[];
+    var secOf=function(r){ return (typeof _durSec_==='function')?_durSec_(r):(+r.movingSecs||0); };
+    var cMi=0,pMi=0,cN=0,pN=0, ez=[], ezP=[];
+    runs.forEach(function(r){
+      if(!r || r.deleted || !r.date) return;
+      var g=ago(r.date); if(g==null || g<0) return;
+      var mi=parseFloat(r.distance)||0, sec=secOf(r);
+      var cur=(g<=span), prv=(!cur && g<=span*2);
+      if(!cur && !prv) return;
+      if(cur){ cMi+=mi; cN++; } else { pMi+=mi; pN++; }
+      if(mi>0 && sec>0 && _rtIsEasy_(r)){ (cur?ez:ezP).push(sec/mi); }
+    });
+    var wk=span/7;
+    if(cN>0 && pN>0){
+      var cw=cMi/wk, pw=pMi/wk;
+      // A PERCENTAGE NEEDS A BASE WORTH DIVIDING BY - the same rule as the CTL floor, applied to
+      // volume, because it fails the same way. The live 90D view compares 2.5 mi/week against 0.2
+      // and reports "+1192%", which is not a fact about training: it is the smallness of a window
+      // that contained one run. Below the floor the ROW STILL SHOWS, with the two absolute figures
+      // instead of a ratio, which loses nothing and claims nothing.
+      var pctV=(pw>=_RT_VOL_FLOOR)?Math.round((cw-pw)/pw*100):null;
+      res.rows.push({ label:'Miles / week', col:'#4ade80',
+                      pct:pctV,
+                      delta:Math.round((cw-pw)*10)/10, better:(cw>=pw),
+                      detail:(Math.round(pw*10)/10)+' &rarr; '+(Math.round(cw*10)/10),
+                      unit:(pctV!=null?'%':'mi') });
+    } else {
+      res.miss.push('Miles / week');
+    }
+
+    // ---- Avg easy pace. Needs a sample on BOTH sides or it is not a comparison. ----
+    var mean=function(arr){ if(!arr.length) return null; var s=0; arr.forEach(function(x){ s+=x; }); return s/arr.length; };
+    var cP=mean(ez), pP=mean(ezP);
+    if(cP!=null && pP!=null){
+      var pace=function(s){ var m=Math.floor(s/60), ss=Math.round(s%60); if(ss===60){m++;ss=0;} return m+':'+(ss<10?'0':'')+ss; };
+      res.rows.push({ label:'Avg easy pace', col:'#60a5fa',
+                      pct:Math.round((cP-pP)/pP*100),
+                      delta:Math.round(cP-pP), better:(cP<=pP),   // FASTER IS BETTER: inverted on purpose
+                      detail:pace(pP)+' &rarr; '+pace(cP)+' /mi', unit:'%',
+                      inverted:true, sample:(ez.length+' vs '+ezP.length+' easy runs') });
+    } else {
+      res.miss.push('Avg easy pace');
+      res.missWhy=(cP==null && pP==null) ? 'no run in either half of this range was easy enough to compare'
+                : (pP==null ? 'no easy runs in the '+span+' days before this window to compare against'
+                            : 'no easy runs inside this window yet');
+    }
+  }catch(e){}
+  return res;
+}
+// ONE WRITER, ONE THOUGHT - the same rule the Dashboard card had to learn after printing a caution
+// and a celebration glued together with a space. The layoff is the running-specific fact: a drop
+// across a 107-day break is a statement about the calendar, and "some of that is taper" would be
+// nonsense there.
+function _rtInsight_(d, w, f, lay){
+  if(!d) return 'Log a few more runs and this fills in - a trajectory needs weeks of history behind it.';
+  var span=(w.days>0?w.days:(w.all.length||0));
+  var unit=(w.days===0)?'when these records begin':(w.days>=365?'a year ago':(span+' days ago'));
+  var gapTxt='';
+  if(lay && lay.gap>=21){
+    gapTxt=' You were not running for '+lay.gap+' days of that stretch'
+      +(lay.to?'':' and have only just started again')+', which is most of what the line is showing.';
+  }
+  if(d.weakBase){
+    return 'Your running fitness is '+d.to+' now, against '+d.from+' at the start of this range - '
+      +'too low a base to turn into a percentage, so this shows the two numbers instead.'+gapTxt
+      +(gapTxt?'':' Keep the easy runs coming and the ridge builds itself.');
+  }
+  var stem=(d.pct>0?'Your running fitness is '+Math.abs(d.pct)+'% higher than '+unit
+           : d.pct<0?'Your running fitness is '+Math.abs(d.pct)+'% lower than '+unit
+           : 'Your running fitness is level with '+unit);
+  var atPeak=false;
+  try{
+    var all=w.all||[], cur=+all[all.length-1].ctl, best=0, bi=-1;
+    for(var i=0;i<all.length;i++){ if(+all[i].ctl>best){ best=+all[i].ctl; bi=i; } }
+    atPeak=(bi>=0 && cur>=best-0.5);
+  }catch(e){}
+  var s=stem+'.';
+  if(gapTxt) return s+gapTxt;
+  if(atPeak) return s+' That is the highest your running fitness has been in this library.';
+  // Endurance is the claim a run card can actually support from volume, so it is made from volume.
+  var vol=null;
+  try{ ((f&&f.rows)||[]).forEach(function(r){ if(r.label==='Miles / week') vol=r; }); }catch(e){}
+  if(d.pct>=5) return s+((vol&&vol.better)?' You are building endurance - the weekly miles are going up with it.':' You are building endurance.');
+  if(d.pct<=-5) return s+' Check the weekly miles below before reading that as lost form - a lighter block looks the same on this line.';
+  return s+' Steady is not nothing: holding a base is what makes the next build possible.';
+}
+function _rtRepaint_(){
+  try{
+    if(document.getElementById('DS-RUN')) dsShowRun();
+    else if(typeof renderRun==='function') renderRun();
+  }catch(e){}
+}
+function rtSetRange_(k){
+  if(!k || k===_rtRange) return;
+  _rtRange=k;
+  _rtRepaint_();
+}
+try{ if(typeof window!=='undefined'){ window.rtSetRange_=rtSetRange_; window._rtSeries_=_rtSeries_; window._rtInvalidate_=_rtInvalidate_; } }catch(e){}
+// The card. One self-contained HTML string so BOTH Run Training surfaces mount the same thing - the
+// drift this app keeps paying for is a card that shipped on one surface only.
+function _rtCardHTML_(){
+  var w=_rtWindow_(_rtRange);
+  var d=_rtDelta_(w.pts);
+  var v=_rtVerdict_(d);
+  var lay=_rtLayoff_(w.days);
+  var f=_rtDrivers_(w.days);
+  var tail=w.pts.length?w.pts[w.pts.length-1]:null;
+  var arrow=(v.tone==='up')?'&uarr;':(v.tone==='down'?'&darr;':'&rarr;');
+  var col=(v.tone==='up')?'#22c55e':(v.tone==='down'?'#ef4444':'var(--d-t3,var(--t3))');
+  var pctTxt=!d?'&mdash;':(d.weakBase?(d.from+' &rarr; '+d.to):((d.pct>0?'+':'')+d.pct+'%'));
+  var vsTxt=(_rtRange==='ALL')?'across your whole run history'
+           :(_rtRange==='1Y'?'vs a year ago':('vs '+w.days+' days ago'));
+
+  var toggle='<div style="display:flex;gap:2px;background:var(--d-inset,var(--s2));border:1px solid var(--d-edge,var(--b1));border-radius:9px;padding:2px">';
+  _RT_RANGES.forEach(function(r){
+    var on=(r[0]===_rtRange);
+    toggle+='<span data-rtrange="'+r[0]+'" style="cursor:pointer;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;'
+      +(on?('background:var(--d-panel,var(--s1));color:'+_RT_COLS.ctl+';border:1px solid rgba(251,146,60,.45)'):'color:var(--d-t3,var(--t3));border:1px solid transparent')+'">'+r[0]+'</span>';
+  });
+  toggle+='</div>';
+
+  var num=function(x){ return (x==null||!isFinite(x))?'&mdash;':Math.round(x); };
+  var legend='';
+  [['Fitness (CTL)',_RT_COLS.ctl,tail?tail.ctl:null],
+   ['Training Load (ATL)',_RT_COLS.atl,tail?tail.atl:null],
+   ['Form (TSB)',_RT_COLS.tsb,tail?tail.tsb:null]].forEach(function(row){
+    legend+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--d-t3,var(--t3))"><span style="width:7px;height:7px;border-radius:50%;background:'+row[1]+';flex-shrink:0"></span>'+row[0]+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--d-t1,var(--t1))">'+num(row[2])+'</span></div>';
+  });
+
+  var periodTxt=(_rtRange==='ALL'||_rtRange==='1Y')?'vs the previous year':('vs the previous '+w.days+' days');
+  var rows='';
+  f.rows.forEach(function(x){
+    // Direction comes from the row's own better flag, never from the sign - pace is inverted and Form
+    // has no good side at all.
+    var up=!!x.better;
+    var tone=x.neutral?'var(--d-t2,var(--t2))':(up?'#22c55e':'#ef4444');
+    var glyph=x.neutral?((x.delta>=0)?'&uarr;':'&darr;'):(up?'&uarr;':'&darr;');
+    var mag=(x.unit==='%'&&x.pct!=null)?(Math.abs(x.pct)+'%')
+           :(x.unit==='%'?String(Math.abs(x.delta)):(Math.abs(x.delta)+' '+x.unit));
+    rows+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3,var(--t3));min-width:0">'
+        +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
+        +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
+      +'<span style="font-size:11px;font-weight:700;color:'+tone+';flex-shrink:0">'+glyph+' '+mag+'</span></div>'
+      +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4,var(--t3));margin:-3px 0 6px 13px">'+x.detail
+          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'');
+  });
+  var andList=function(a){
+    if(a.length<=1) return a[0]||'';
+    if(a.length===2) return a[0]+' and '+a[1];
+    return a.slice(0,-1).join(', ')+' and '+a[a.length-1];
+  };
+  var missNote='';
+  if(f.miss.length){
+    missNote='<div style="font-size:9.5px;color:var(--d-t4,var(--t3));line-height:1.45;margin-top:7px;padding-top:7px;border-top:1px dashed var(--d-edge,var(--b1))">'
+      +andList(f.miss)+(f.miss.length>1?' need':' needs')+' a comparable stretch on both sides of this range'
+      +(f.missWhy?(' &mdash; '+f.missWhy):'')+'.</div>';
+  }
+  var head2='<div style="font-size:10px;font-weight:700;color:var(--d-dim,var(--t3));text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">The numbers behind it</div>';
+  var driversHTML=f.rows.length
+    ? (head2+'<div style="font-size:9.5px;color:var(--d-t4,var(--t3));margin-bottom:7px">'+periodTxt+'</div>'+rows+missNote)
+    : (head2+'<div style="font-size:11px;color:var(--d-t4,var(--t3));line-height:1.5">Not enough matched running history in this range to compare yet.</div>'+missNote);
+
+  var H='<div style="background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));border-radius:14px;padding:15px 16px">'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<span style="font-size:11px;font-weight:800;color:var(--d-t3,var(--t3));text-transform:uppercase;letter-spacing:.05em">Running Trajectory</span>'
+      +'<div style="flex:1"></div>'+toggle
+    +'</div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">'
+    +'<div style="flex:1 1 190px;min-width:180px;display:flex;flex-direction:column">'
+      +'<div style="font-size:18px;font-weight:800;color:var(--d-head,var(--t1));line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
+      +'<div style="font-size:20px;font-weight:800;color:'+col+';line-height:1;margin:7px 0 1px">'+arrow+' '+pctTxt+'</div>'
+      +'<div style="font-size:10px;color:var(--d-t4,var(--t3));margin-bottom:10px">'+vsTxt+'</div>'
+      +legend
+      +'<div style="font-size:9.5px;color:var(--d-t4,var(--t3));margin-top:auto;line-height:1.45">Running only, 7-day averages. '
+      +'Scored from heart rate against an LTHR of '+((typeof stLthr_==='function')?stLthr_():'&mdash;')
+      +' &mdash; so these are not the Dashboard numbers, which count every sport.</div>'
+    +'</div>'
+    +'<div style="flex:2 1 300px;min-width:240px;display:flex;flex-direction:column">'
+      +'<div style="flex:1;min-height:150px">'+_ptChart_(w.pts, 600, 150, _RT_COLS)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4,var(--t3));margin-top:2px">'
+        +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
+    +'</div>'
+    +'<div style="flex:1 1 210px;min-width:200px;display:flex;flex-direction:column">'+driversHTML+'</div>'
+    +'</div>'
+    // The interpretive line, in its own band, exactly as the Dashboard card frames it.
+    +'<div style="display:flex;align-items:center;gap:10px;margin-top:11px;padding:9px 12px;background:var(--d-inset,var(--s2));border:1px solid var(--d-edge,var(--b1));border-radius:10px">'
+      +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+_RT_COLS.ctl+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
+      +'<span style="font-size:11.5px;color:var(--d-t2,var(--t2));line-height:1.45">'+_rtInsight_(d, w, f, lay)+'</span></div>'
+    +'</div>';
+  return H;
+}
+// Mounts the card and binds its range toggle. Called from renderRunInto_, so ONE call site serves
+// both surfaces. A range change re-renders the whole page rather than patching the card: the
+// verdict, the percentage, the axis labels, the drivers and the insight sentence all depend on the
+// window, and repainting one piece would leave the rest describing a different range.
+function _rtMount_(scr){
+  try{
+    var ser=_rtSeries_();
+    // NOTHING TO DRAW IS SAID, NOT SHOWN AS ZERO. A ridge at zero reads as a collapse in form;
+    // "no scoreable runs" reads as what it is.
+    if(!ser.length){
+      var e=document.createElement('div');
+      e.style.cssText='margin:0 16px 16px';
+      e.innerHTML='<div style="background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));border-radius:14px;padding:15px 16px">'
+        +'<div style="font-size:11px;font-weight:800;color:var(--d-t3,var(--t3));text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Running Trajectory</div>'
+        +'<div style="font-size:12.5px;color:var(--d-t3,var(--t3));line-height:1.55">No run carries enough to be scored yet. '
+        +'This needs an average heart rate and a duration on the run, and a threshold heart rate in Settings.</div></div>';
+      scr.appendChild(e);
+      return;
+    }
+    var card=document.createElement('div');
+    card.style.cssText='margin:0 16px 16px';
+    card.innerHTML=_rtCardHTML_();
+    scr.appendChild(card);
+    card.querySelectorAll('[data-rtrange]').forEach(function(el){
+      el.addEventListener('click', function(){ rtSetRange_(el.getAttribute('data-rtrange')); });
+    });
+  }catch(e){ try{ console.error('[run-trajectory]', e&&e.message); }catch(_e){} }
 }
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
@@ -47307,26 +48093,177 @@ function _runCard_(title, sub, bodyHTML){
 }
 function _runEsc_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':(c==='<'?'&lt;':'&gt;'); }); }
 // 1. SHIN EARLY WARNING
+// ---- 1b. DRIFT NEEDS A VERDICT, NOT A LIST -------------------------------------------------------
+//
+// The card listed eight runs in red and stopped. A list of red rows with no reading attached is a
+// warning by implication, and the implication was wrong: MEASURED on the live library, the eight
+// runs this card flags are THE SAME EIGHT RUNS the run-ahead card above it is reading as progress -
+// same window, same dates, same set. One behaviour, shown twice, once as good news and once as a
+// red list, with nothing on the page connecting them.
+//
+// So this asks the three questions a reader would ask, and answers each with what is actually
+// stored - or says plainly that nothing is:
+//
+//   1 IS THIS THE SAME THING THE CARD ABOVE IS CALLING PROGRESS?  _runAheadFlag_ carries the run
+//     dates it counted (as .dk). Set overlap is an identity, not a correlation, so this is the one
+//     answer here that needs no statistics at all.
+//   2 IS IT LANDING ON POOR-RECOVERY DAYS?  st.hrvDaily is real and populated - 31 dated rows of
+//     {hrv, rhr} written by fetchLiveIntervalsWellness - and it covers every one of the eight. The
+//     baseline is the MEDIAN, matching what the readiness rules already use; a mean would be pulled
+//     by the two 44s.
+//   3 IS THE SHIN INVOLVED?  Nothing about the shin is stored anywhere - 0 mentions across every
+//     ride name, note and plan entry. The old subtitle invoked "the last shin flare-up" as though
+//     the card were watching for it. It is not, it cannot, and saying so is the fix.
+//
+// WHAT THIS DELIBERATELY DOES NOT CLAIM. The correlation between drift and HRV on these eight runs
+// is +0.55, which points the reassuring way - he pushes on the days he feels good. Eight points do
+// not support that and it is not printed. What IS printed is the split (how many drift days sat
+// under his own median) and the sample size, so the reader can see the evidence is thin rather than
+// being handed a conclusion drawn from it.
+var DRIFT_HRV_BASE_MIN=10;   // fewer dated wellness rows than this and there is no baseline to judge against
+var DRIFT_HRV_MIN_N=6;       // fewer drift runs than this and a split is noise, and the card says so
+function _runDriftHrvBaseline_(){
+  try{
+    var h=(typeof st!=='undefined' && st && st.hrvDaily)?st.hrvDaily:null;
+    if(!h || typeof h!=='object') return null;
+    var vals=[], n=0;
+    Object.keys(h).forEach(function(k){
+      var r=h[k], v=(r && typeof r==='object')?r.hrv:r;
+      if(v!=null && isFinite(+v) && +v>0){ vals.push(+v); n++; }
+    });
+    if(n<DRIFT_HRV_BASE_MIN) return { n:n, median:null };
+    // MEDIAN, through the accessor the readiness rules already use, so two surfaces cannot end up
+    // with two different ideas of the same athlete's normal.
+    var med=(typeof _ovwMedian_==='function')?_ovwMedian_(vals)
+          :(function(a){ a=a.slice().sort(function(x,y){ return x-y; });
+              var m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; })(vals);
+    return { n:n, median:med };
+  }catch(e){ return null; }
+}
+function _runHrvOn_(dateKey){
+  try{
+    var h=(typeof st!=='undefined' && st && st.hrvDaily)?st.hrvDaily:null;
+    if(!h) return null;
+    var r=h[dateKey];
+    var v=(r && typeof r==='object')?r.hrv:r;
+    return (v!=null && isFinite(+v) && +v>0) ? +v : null;
+  }catch(e){ return null; }
+}
+function _runDriftVerdict_(w, now){
+  var out={ same:{ n:0, of:0, checked:false }, hrv:{ have:false, base:null, baseN:0, below:0, rated:0, thin:true },
+            shinRecorded:false, tone:'neutral', head:'', body:[] };
+  try{
+    w=w||_runShinWatch_();
+    if(!w || !w.sample) return out;
+    var drift=w.rows.filter(function(r){ return r.drifted; });
+    out.of=w.sample;
+
+    // ---- 1. the same runs? ----
+    try{
+      var ra=(typeof _runAheadFlag_==='function')?_runAheadFlag_(now||new Date()):null;
+      if(ra && ra.runs && ra.runs.length){
+        out.same.checked=true;
+        var ahead={}; ra.runs.forEach(function(p){ if(p && p.dk) ahead[p.dk]=1; });
+        out.same.of=w.rows.length;
+        out.same.n=w.rows.filter(function(r){ return ahead[r.date]; }).length;
+        out.same.aheadN=ra.streak;
+      }
+    }catch(e){}
+
+    // ---- 2. recovery ----
+    var bl=_runDriftHrvBaseline_();
+    if(bl && bl.median!=null){
+      out.hrv.have=true; out.hrv.base=bl.median; out.hrv.baseN=bl.n;
+      drift.forEach(function(r){
+        var v=_runHrvOn_(r.date);
+        if(v==null) return;
+        out.hrv.rated++;
+        if(v<bl.median) out.hrv.below++;
+      });
+      out.hrv.thin=(out.hrv.rated<DRIFT_HRV_MIN_N);
+    }
+
+    // ---- 3. the shin. Nothing is stored, so nothing is claimed. ----
+    out.shinRecorded=false;
+
+    // ---- the reading ----
+    // A MAJORITY OVERLAP MAKES THIS ONE FACT, NOT TWO. Half or less and the two cards really are
+    // describing different runs, and the drift stands on its own.
+    var sameSignal=(out.same.checked && out.same.n*2>out.same.of);
+    // Concern needs BOTH a usable sample and a lopsided split. 4 of 8 is a coin flip, and calling
+    // that a pattern is exactly the fabrication this card is being fixed for.
+    var hrvConcern=(out.hrv.have && !out.hrv.thin && out.hrv.below*3>out.hrv.rated*2);
+
+    if(hrvConcern){
+      out.tone='watch';
+      out.head='Worth easing off: the drift is landing on your lower-recovery days.';
+    } else if(sameSignal){
+      out.tone='ok';
+      out.head='This is the same running the card above is calling progress.';
+    } else if(w.flag){
+      out.tone='neutral';
+      out.head='Your easy runs are running harder than easy, and nothing here explains why.';
+    } else {
+      out.tone='ok';
+      out.head='Easy runs are staying easy.';
+    }
+
+    if(out.same.checked){
+      out.body.push(out.same.n+' of these '+out.same.of+' are the same runs counted above as going '
+        +'longer than the plan asked for. Running further and running harder than prescribed is one '
+        +'behaviour, not two findings.');
+    }
+    if(out.hrv.have){
+      out.body.push(out.hrv.below+' of the '+out.hrv.rated+' drifted runs fell on a day with HRV below '
+        +'your '+out.hrv.base+' ms median (from '+out.hrv.baseN+' days). '
+        +(out.hrv.thin
+            ? 'That is too few runs to tell a pattern from chance, so no relationship is claimed either way.'
+            : (hrvConcern ? 'That is most of them, which is the direction worth acting on.'
+                          : 'That is close to an even split - no relationship visible either way.')));
+    } else {
+      out.body.push('No recovery baseline yet: this needs at least '+DRIFT_HRV_BASE_MIN
+        +' days of HRV readings before it can say whether the drift lands on tired days.');
+    }
+    // THE HONEST LIMIT, STATED. The old subtitle invoked the last shin flare-up, which reads as a
+    // claim that the card is watching for it. It is not: nothing about the shin is recorded
+    // anywhere in the app, so the one thing the athlete most wants correlated is the one thing that
+    // cannot be. Better said out loud than implied by a red list.
+    out.body.push('Nothing about the shin is recorded anywhere in the app, so this cannot tell you '
+      +'whether any of it is reaching your leg. That judgement is still yours to make.');
+  }catch(e){}
+  return out;
+}
 function _runShinCardHTML_(){
   var w=_runShinWatch_();
   if(!w.sample) return '';
   if(!w.enough){
     return _runCard_('Easy-run drift','not enough easy runs with a zone breakdown yet',
       '<div style="font-size:12.5px;color:var(--t2);line-height:1.5">'
-      +w.sample+' of the last '+w.minSample+' needed. This watches for easy runs creeping into tempo, '
-      +'which is the pattern that ran ahead of the last shin flare-up.</div>');
+      +w.sample+' of the last '+w.minSample+' needed. This watches for easy runs creeping into tempo. '
+      +'It reads the heart-rate zone split only &mdash; it has no record of how your leg feels.</div>');
   }
+  var v=_runDriftVerdict_(w);
+  var tone=(v.tone==='watch')?'var(--c-red)':(v.tone==='ok'?'var(--c-green)':'var(--t1)');
+  // THE VERDICT LEADS. The count is still here, but as evidence UNDER a reading rather than as the
+  // whole card - a bare "7 of 8 crept into tempo" is a number the reader has to interpret alone,
+  // and the interpretation they reach for is "something is wrong", which is not what the data says.
+  var head='<div style="font-size:13.5px;font-weight:800;color:'+tone+';margin-bottom:6px">'+_runEsc_(v.head)+'</div>'
+    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.55;margin-bottom:9px">'
+    +v.body.map(function(t){ return _runEsc_(t); }).join(' ')+'</div>'
+    +'<div style="font-size:11.5px;font-weight:700;color:var(--t3);margin-bottom:2px">'
+    +w.drifted+' of the last '+w.sample+' easy runs went over '+w.driftPct+'% above the conversational band</div>';
   var rows=w.rows.map(function(r){
+    var hv=_runHrvOn_(r.date);
+    // The HRV that day sits ON the row, so the claim above is checkable line by line rather than
+    // being a summary the reader has to take on trust.
+    var lowMark=(v.hrv.have && hv!=null && hv<v.hrv.base);
     var col=r.drifted?'var(--c-red)':'var(--c-green)';
     return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0">'
       +'<span style="color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_runEsc_(r.date)+' '+_runEsc_(r.name)+'</span>'
-      +'<span style="color:'+col+';font-weight:700;flex-shrink:0">'+r.above+'% above easy</span></div>';
+      +'<span style="flex-shrink:0;white-space:nowrap">'
+      +(hv!=null?('<span style="color:'+(lowMark?'var(--c-red)':'var(--t3)')+';font-size:11px;margin-right:8px">HRV '+hv+'</span>'):'')
+      +'<span style="color:'+col+';font-weight:700">'+r.above+'% above easy</span></span></div>';
   }).join('');
-  var head=w.flag
-    ? ('<div style="font-size:13.5px;font-weight:800;color:var(--c-red);margin-bottom:5px">'
-       +w.drifted+' of your last '+w.sample+' easy runs crept into tempo</div>')
-    : ('<div style="font-size:13.5px;font-weight:800;color:var(--c-green);margin-bottom:5px">'
-       +'Easy runs are staying easy &mdash; '+w.drifted+' of '+w.sample+' drifted</div>');
   return _runCard_('Easy-run drift',
     'share of each run above the conversational band &middot; drift = over '+w.driftPct+'%',
     head+rows);
@@ -47387,7 +48324,10 @@ function _runWhyCardHTML_(){
     +'Every row is a measured change in one input. Ordered by size, not by story.</div>'+rows);
 }
 function _runPhase2Mount_(scr){
-  [_runShinCardHTML_, _run10kCardHTML_, _runWhyCardHTML_].forEach(function(fn){
+  // 10k race pace is NOT in this list any more: it mounts directly under the Personal Bests
+  // board, where the distances it targets are already ranked. Listed in both places it would
+  // render twice.
+  [_runShinCardHTML_, _runWhyCardHTML_].forEach(function(fn){
     var html='';
     try{ html=fn()||''; }catch(e){ try{ console.error('[run-p2]', e && e.message); }catch(_e){} }
     if(!html) return;
@@ -47406,9 +48346,57 @@ function renderRun(){
   renderRunInto_(scr, 'mobile');
   document.body.appendChild(scr);
 }
+// DISMISS WITHOUT MOVING THE PAGE UNDER THE READER.
+//
+// "Not yet" called raCard.remove() and nothing else. That does dismiss the card, but the card sits
+// at the TOP of the page: deleting it pulls every card below it upward by its full height, so the
+// content the reader was actually looking at jumps. The removal was correct; what was missing is
+// that a scroller's scrollTop is measured from the top of its content, and shortening the content
+// above the viewport silently changes what that offset points at.
+//
+// So: measure the height about to disappear, note whether it sat ABOVE the current scroll offset,
+// remove, then take the same number back off scrollTop. Content below the card stays exactly where
+// it was on screen. When the reader is already at the top there is nothing above them to
+// compensate for and the clamp leaves scrollTop at 0.
+//
+// The scroller is found by walking up, not assumed: mobile scrolls #RUN-SCREEN (a fixed overlay),
+// desktop scrolls the .aiq-vscroll wrapper inside #ds-content, and hardcoding either would silently
+// no-op on the other surface - the exact class of drift this page keeps being repaired for.
+function _runScrollParent_(el){
+  try{
+    var n=el&&el.parentElement;
+    while(n && n!==document.body){
+      var cs=getComputedStyle(n), oy=cs.overflowY;
+      if((oy==='auto'||oy==='scroll') && n.scrollHeight>n.clientHeight+1) return n;
+      n=n.parentElement;
+    }
+  }catch(e){}
+  return document.scrollingElement||document.documentElement;
+}
+function _runRemoveKeepScroll_(el){
+  try{
+    if(!el) return;
+    var sc=_runScrollParent_(el);
+    var before=sc.scrollTop||0;
+    // Full outer height, margins included - a card dismissed with a 16px bottom margin removes 16px
+    // more than its border box, and compensating by the border box alone leaves a visible nudge.
+    var h=el.offsetHeight||0;
+    try{ var cs=getComputedStyle(el); h+=(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0); }catch(e){}
+    // Was it above the fold? offsetTop is relative to the offset parent, so compare like with like
+    // by measuring both against the scroller's own box.
+    var above=false;
+    try{
+      var er=el.getBoundingClientRect(), sr=(sc===document.scrollingElement||sc===document.documentElement)
+        ? {top:0} : sc.getBoundingClientRect();
+      above=(er.bottom<=sr.top+1);
+    }catch(e){ above=(before>0); }
+    el.remove();
+    if(above && before>0){ try{ sc.scrollTop=Math.max(0, before-h); }catch(e){} }
+  }catch(e){ try{ el && el.remove(); }catch(_e){} }
+}
+try{ if(typeof window!=='undefined'){ window._runRemoveKeepScroll_=_runRemoveKeepScroll_; } }catch(e){}
 // THE run page. Every card on both surfaces is built here.
 function renderRunInto_(scr, surface){
-  var _rgDefer=null;   // the Running Growth card, mounted at the end (see below)
 
 
 
@@ -47468,27 +48456,42 @@ function renderRunInto_(scr, surface){
         // condition that raised it is still true, and a flag that can be dismissed into silence is
         // how a real signal gets lost. It comes back on the next visit, or stops on its own the
         // moment a run lands inside the prescription again.
-        if(n) n.onclick=function(){ try{ raCard.remove(); }catch(e){} };
+        if(n) n.onclick=function(){ _runRemoveKeepScroll_(raCard); };
       },0);
     }
   }catch(e){ try{ console.error('[run-ahead] '+((e&&e.message)||e)); }catch(_e){} }
 
-  // History exhibit, above the live stats. Renders nothing when the snapshot is unprimed or run
-  // cannot be ranked — the same do-not-claim contract _covFor_ returns.
-  try{
-    // Built here so its data call keeps its place in the render, but MOUNTED LAST: cumulative
-    // miles by year is context, not a week-to-week decision - it mostly records the move from
-    // running to cycling (1,908 mi in 2019 against 35.9 in 2026). The actionable cards go first.
-    var _rg=(typeof _rgSection_==='function')?_rgSection_():'';
-    if(_rg){ _rgDefer=document.createElement('div'); _rgDefer.innerHTML=_rg; }
-  }catch(e){ try{ console.error('[run-growth] ' + ((e&&e.message)||e)); }catch(_e){} }
+  // RUNNING TRAJECTORY, directly under the one card that asks for a decision. It answers "am I
+  // getting better as a runner" and everything below it is detail on that question, so it leads.
+  // Mounted through the SHARED renderer for the same reason the run-ahead flag is: a card that
+  // ships on one surface only is the bug this app keeps paying for.
+  //
+  // Deliberately NOT the Dashboard's Performance Trajectory. That card stays exactly as it is and
+  // keeps answering the all-sport question; this one is running-only and says so on its own face.
+  _rtMount_(scr);
 
-  // PR board, below the history exhibit. Same do-not-claim contract: renders nothing when the
-  // snapshot is unprimed, when run cannot be ranked, or when no event has a band entry.
+  // THE RUNNING GROWTH CHART IS NOT MOUNTED HERE ANY MORE. Cumulative miles by year is history,
+  // not a week-to-week decision, and what it mostly records is the move from running to cycling
+  // (1,908 mi in 2019 against 35.9 in 2026) — which the Running Trajectory above now says directly
+  // and in the window the athlete actually chose. _rgSection_ itself is untouched and still mounts
+  // inside You vs. You, where a long-range history exhibit is the point of the page.
+
+  // PR board. Do-not-claim contract: renders nothing when the snapshot is unprimed, when run
+  // cannot be ranked, or when no event has a band entry.
   try{
     var _pr=(typeof _prSection_==='function')?_prSection_():'';
     if(_pr){ var _prw=document.createElement('div'); _prw.innerHTML=_pr; scr.appendChild(_prw); }
   }catch(e){ try{ console.error('[run-pr] ' + ((e&&e.message)||e)); }catch(_e){} }
+
+  // 10k RACE PACE, DIRECTLY UNDER THE PR BOARD rather than as its own block further down. It is a
+  // target time read against the same distances the board ranks, so the two belong to one thought:
+  // separated, the reader had to hold a 10k best from one card in their head to make sense of a
+  // target on another. Mounted here and removed from _runPhase2Mount_, so it still renders exactly
+  // once and both surfaces get it from this one call.
+  try{
+    var _10k=(typeof _run10kCardHTML_==='function')?(_run10kCardHTML_()||''):'';
+    if(_10k){ var _kw=document.createElement('div'); _kw.innerHTML=_10k; while(_kw.firstChild) scr.appendChild(_kw.firstChild); }
+  }catch(e){ try{ console.error('[run-10k] ' + ((e&&e.message)||e)); }catch(_e){} }
 
   var runs=getRuns();
   var now=new Date();
@@ -47535,31 +48538,50 @@ function renderRunInto_(scr, surface){
     avgPace=am+':'+(as2<10?'0':'')+as2;
   }
 
-  // Stats row 1
-  var s1=document.createElement('div');
-  s1.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 16px 6px';
-  [{l:'Miles YTD',v:ytdMi.toFixed(1),s:'running',c:'#0F6E56'},{l:'This month',v:monthMi.toFixed(1),s:'mi'},{l:'YTD runs',v:ytdRuns.length,s:'activities'},{l:'Streak',v:weekStreak,s:'weeks',c:weekStreak>=3?'#0F6E56':'var(--t1)'}].forEach(function(st2){
-    var c=document.createElement('div');
-    c.style.cssText='background:var(--s2);border-radius:10px;padding:8px 4px;text-align:center';
-    c.innerHTML='<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:2px">'+st2.l+'</div>'
-      +'<div style="font-size:16px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'
-      +'<div style="font-size:9px;color:var(--t3);margin-top:2px">'+st2.s+'</div>';
-    s1.appendChild(c);
-  });
-  scr.appendChild(s1);
-
-  // Stats row 2
-  var s2=document.createElement('div');
-  s2.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 16px 10px';
-  [{l:'Longest run',v:longestRun?longestRun.toFixed(1):'—',s:'miles'},{l:'Best pace',v:bestPace||'—',s:'min/mile'},{l:'Avg pace',v:avgPace||'—',s:'min/mile'},{l:'Elev YTD',v:Math.round(totalElev),s:'ft gained'}].forEach(function(st2){
-    var c=document.createElement('div');
-    c.style.cssText='background:var(--s2);border-radius:10px;padding:8px 4px;text-align:center';
-    c.innerHTML='<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:2px">'+st2.l+'</div>'
-      +'<div style="font-size:16px;font-weight:800;color:var(--t1);line-height:1">'+st2.v+'</div>'
-      +'<div style="font-size:9px;color:var(--t3);margin-top:2px">'+st2.s+'</div>';
-    s2.appendChild(c);
-  });
-  scr.appendChild(s2);
+  // ONE STRIP, NOT TWO GRIDS OF BOXES.
+  //
+  // These eight figures used to be eight bordered tiles across two rows, each with a label above the
+  // number and a unit below it - three stacked lines and a panel of its own to say "7.5". That is
+  // roughly 150px of page for eight scalars, on the surface that has the least height to give, and
+  // it was the single biggest block between the top of the page and anything that says something.
+  //
+  // Now: value and unit on ONE line, label under it, divided by hairlines rather than boxed. Same
+  // eight numbers, same order, same colour rules - about a third of the height. It wraps rather than
+  // scrolling sideways, so a narrow phone reflows to two rows of four instead of hiding figures off
+  // the right edge, and every cell keeps a real min-width so a long value ("10:43") cannot collapse
+  // its own column. Measure the box before blaming the number: that clip is a bug this app has
+  // already paid for once.
+  //
+  // BOTH rows are condensed, not just the first. They are the same component rendered twice and sit
+  // flush against each other; tightening one and leaving the other as chunky tiles would have read
+  // as an unfinished page rather than a tidier one.
+  var statRow=function(items, mb){
+    var wrap=document.createElement('div');
+    wrap.style.cssText='display:flex;flex-wrap:wrap;background:var(--s2);border-radius:10px;'
+      +'padding:9px 4px;margin:0 16px '+mb+'px';
+    items.forEach(function(it, i){
+      var c=document.createElement('div');
+      c.style.cssText='flex:1 1 88px;min-width:82px;padding:2px 8px;text-align:center'
+        +(i?';border-left:1px solid var(--b1)':'');
+      c.innerHTML='<div style="font-size:15px;font-weight:800;color:'+(it.c||'var(--t1)')+';line-height:1.1;white-space:nowrap">'
+          +it.v+(it.s?('<span style="font-size:9.5px;font-weight:600;color:var(--t3);margin-left:3px">'+it.s+'</span>'):'')+'</div>'
+        +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.l+'</div>';
+      wrap.appendChild(c);
+    });
+    return wrap;
+  };
+  scr.appendChild(statRow([
+    {l:'Miles YTD', v:ytdMi.toFixed(1),   s:'mi', c:'#0F6E56'},
+    {l:'This month',v:monthMi.toFixed(1), s:'mi'},
+    {l:'YTD runs',  v:ytdRuns.length,     s:''},
+    {l:'Streak',    v:weekStreak,         s:'wk', c:weekStreak>=3?'#0F6E56':'var(--t1)'}
+  ], 6));
+  scr.appendChild(statRow([
+    {l:'Longest run',v:longestRun?longestRun.toFixed(1):'—', s:longestRun?'mi':''},
+    {l:'Best pace',  v:bestPace||'—',  s:bestPace?'/mi':''},
+    {l:'Avg pace',   v:avgPace||'—',   s:avgPace?'/mi':''},
+    {l:'Elev YTD',   v:Math.round(totalElev).toLocaleString(), s:'ft'}
+  ], 10));
 
   // Zone pills
   var zoneLbl=document.createElement('div');
@@ -47713,55 +48735,16 @@ function renderRunInto_(scr, surface){
         rcard.appendChild(zb);
       }
 
-      // Load Map button if stravaId but no GPS
-      if(r.stravaId && !(r.gpsLats && r.gpsLats.length > 5)){
-        // r here is a getRuns() PROJECTION, not an st.rides record, so indexOf can never match
-        // it — which is why this used a stravaId findIndex. This branch is already gated on
-        // r.stravaId, so rideHandle_ yields the reliable s<id> form; the fragile k: form (which
-        // would read movingSecs/duration the projection does not carry) is unreachable here.
-        var rideIdx = (STORE_V2_HANDLES && typeof rideHandle_==='function')
-          ? rideHandle_(r)
-          : st.rides.findIndex(function(x){return x.stravaId===r.stravaId;});
-        if(rideRefOk_(rideIdx)){
-          var loadMapBtn=document.createElement('button');
-          loadMapBtn.style.cssText='margin-bottom:8px;font-size:11px;color:var(--c-blue);background:none;border:1px solid #4D9FFF;border-radius:8px;padding:4px 12px;cursor:pointer;font-family:inherit';
-          loadMapBtn.textContent='Load GPS Map';
-          (function(sid,ri){loadMapBtn.onclick=function(){fetchStravaGPS(sid,ri);};})(r.stravaId,rideIdx);
-          rcard.appendChild(loadMapBtn);
-        }
-      }
-
-      // Mini GPS map — run GPS now lives in /gps/{rideKey} (lazy-load); legacy
-      // runs with inline gpsLats still draw immediately.
-      var mapSlot=document.createElement('div');
-      rcard.appendChild(mapSlot);
-      (function(rr, slot){
-        function drawMap(){
-          var glats=rr.gpsLats||rr.lats, glons=rr.gpsLons||rr.lons;
-          if(glats && glats.length>5 && glons && glons.length>5){
-            var mapWrap=document.createElement('div');
-            mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1);height:160px';
-            // THIS IS WHY THE RUN MAP WAS AN EMPTY BOX. showScreen() sweeps every
-            // .leaflet-container in the document (see the sweep and its data-keep-map opt-out),
-            // and buildRouteMap hands Leaflet its OWN div — so the map element itself carries the
-            // class and the sweep deletes it, leaving this 160px bordered wrapper standing empty.
-            // The run card loses the race in a way the ride detail map does not: this map is drawn
-            // from ensureRideStreams().then(), which resolves a second or more after render —
-            // squarely inside the window where the store_v2 tail load calls showHomeDash() no
-            // matter which surface is showing. Same root cause the desktop Segment Map hit.
-            // The card owns this map's lifecycle (renderRun rebuilds the list, and showScreen
-            // removes RUN-SCREEN wholesale), so opting out of the sweep leaks nothing.
-            try{ mapWrap.setAttribute('data-keep-map','1'); }catch(e){}
-            try{
-              mapWrap.innerHTML=buildRouteMap(glats, glons, [], 0).replace('height:260px','height:160px');
-              slot.appendChild(mapWrap);
-            }catch(e){}
-          }
-        }
-        var have=(rr.gpsLats&&rr.gpsLats.length>5)||(rr.lats&&rr.lats.length>5);
-        if(have){ drawMap(); }
-        else if(rr.stravaId && typeof ensureRideStreams==='function'){ ensureRideStreams(rr).then(drawMap); }  // keyed off empty track, fetches latlng
-      })(r, mapSlot);
+      // NO MAP HERE, BY DECISION. This card used to draw a 160px Leaflet mini-map per run, plus a
+      // 'Load GPS Map' button whose only purpose was to feed it. Both are gone: the Activities tab
+      // already opens the full route for any run, so this was the same track drawn twice, and the
+      // duplicate cost the page real height on the surface that has the least of it.
+      //
+      // The button went with the map rather than being left behind. It fetched GPS for the sole
+      // purpose of drawing the thing above it; kept without the map it would be a control whose
+      // effect is invisible, which is worse than no control. Nothing else on this page read the
+      // track. The ride-detail path still fetches GPS through ensureRideStreams on open, so a run
+      // opened from Activities still backfills exactly as before.
 
       // HR warning
       if(hrWarn){
@@ -47881,7 +48864,6 @@ function renderRunInto_(scr, surface){
   // No auto-seeded demo race — an empty list stays empty until the user adds one.
 
   // Running Growth goes here, after the actionable cards.
-  try{ if(_rgDefer) scr.appendChild(_rgDefer); }catch(e){}
 
   // Mounting belongs to the CALLER: mobile drops this on the body as a full-screen overlay,
   // desktop nests it inside the desktop shell. The shared renderer only fills the container.

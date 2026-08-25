@@ -1512,6 +1512,58 @@ try {
     fail('the Zwift folder link can stop verifying, or a blocked pick can fail silently (see above).');
   }
 
+  // STEP 94 - the Legacy season drill-down. A season card opens the season, and the page it opens
+  //           re-reads the SAME row array the card aggregated - which is the only reason activity
+  //           level detail is possible here at all. The risks are all quiet ones: the .mi/.distance
+  //           coercion trap that once zeroed every cycling season, a cycling record's FORMATTED
+  //           "1:11:16" duration digit-stripping to 11116, an in-progress year padded to December
+  //           printing real zeros for months that have not happened, and a row that cannot resolve
+  //           rendering as a dead click instead of plain text.
+  console.log(`${D}. checking the Legacy season drill-down...${X}`);
+  try {
+    const so = execSync('node scripts/legacy-season-detail-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a season detail can disagree with the card that opened it, or offer a dead click (see above).');
+  }
+
+  // STEP 95 - the Running Trajectory card. Scoping the Dashboard's ridge to running opened four
+  //           failure modes the cycling version never has to survive: the load being READ from a
+  //           stored r.tss that only 175 of 2,371 runs carry (so the ridge would be shaped by which
+  //           store a run lives in); a percentage drawn across a 107-day layoff, which is a fact
+  //           about the calendar; pace, where a smaller number is better and a sign-driven arrow
+  //           paints a gain red; and Form, a signed quantity that crosses zero and can never be a
+  //           percentage. Also pins that _ptChart_'s new colourway parameter left the Dashboard
+  //           card's own colours untouched.
+  console.log(`${D}. checking the Running Trajectory card...${X}`);
+  try {
+    const so = execSync('node scripts/run-trajectory-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Running Trajectory can misread a layoff, invert a pace, or restyle the Dashboard (see above).');
+  }
+
+  // STEP 96 - the Run Training page cleanup, and the Easy-Run Drift verdict. The card printed eight
+  //           runs in red and stopped, which reads as a warning; measured on the live library those
+  //           are THE SAME eight runs the card above them calls progress. The verdict now says so,
+  //           and this pins the three ways it could start lying: reading the run-ahead card's dates
+  //           from the wrong field (silent zero overlap), calling a 4-of-8 coin flip an HRV pattern,
+  //           and implying it watches a shin that is recorded nowhere in the app. Also pins the four
+  //           layout changes, including "Not yet" no longer yanking the page under the reader.
+  console.log(`${D}. checking the Run Training cleanup and drift verdict...${X}`);
+  try {
+    const so = execSync('node scripts/run-page-cleanup-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the drift card can claim a pattern it does not have, or the page cleanup regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
