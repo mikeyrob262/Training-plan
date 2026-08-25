@@ -176,6 +176,20 @@ console.log('\n' + Y + '=== NOTHING advances itself ===' + X);
     (src.match(/runRungAccept_\(/g) || []).length === 2);   // the definition and the one button
 }
 
+console.log('\n' + Y + '=== a same-day correction supersedes rather than forking ===' + X);
+{
+  // The failure this pins: accept in the morning, back off by hand in the afternoon. With the target
+  // inside the id that minted a SECOND record for one day and the correction resolved by array order.
+  const M = load({ runs: runsOn([['2026-08-31', 38], ['2026-09-02', 41]]) });
+  M.runRungAccept_(NOW);
+  eq('the acceptance is on file', M.st.runRungs.length, 1);
+  M.runSetWeekdayTarget_(30, NOW, 'backed off by hand');
+  eq('correcting the same day leaves ONE record, not two', M.st.runRungs.length, 1);
+  eq('...carrying the corrected value', M.st.runRungs[0].top, 30);
+  eq('...and the plan follows the correction, not the acceptance',
+    M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['28-30 min']);
+}
+
 console.log('\n' + Y + '=== accepting advances the block, FORWARD ONLY ===' + X);
 {
   const M = load({ runs: runsOn([['2026-08-31', 38], ['2026-09-02', 41]]) });
@@ -183,7 +197,22 @@ console.log('\n' + Y + '=== accepting advances the block, FORWARD ONLY ===' + X)
   ok('it returns what it acted on', !!done && done.struct === '34-36 min');
   eq('one rung recorded', M.st.runRungs.length, 1);
   eq('dated today, not backdated', M.st.runRungs[0].from, '2026-09-07');
-  ok('the id is content-derived, so two devices converge', M.st.runRungs[0].id === 'rr-2026-09-07-36');
+  // THE ID IS KEYED ON THE DAY, NOT ON THE DAY PLUS THE TARGET.
+  //
+  // This assertion used to require the opposite - a content-derived id, so that two devices accepting
+  // the SAME target on the same day minted the same record and converged. That was a real property
+  // and it is deliberately superseded, because it bought convergence at the price of CORRECTION:
+  // accepting 36 in the morning and setting 30 by hand in the afternoon produced two records for one
+  // day, and _runRungStruct_ broke the tie on array order. That is the ftpHistory fork exactly - the
+  // value was in the identity, so the correction could never win.
+  //
+  // Convergence is now the merge's job rather than the id's: runRungs is registered in _LWW_ARRAYS
+  // keyed on `from`, so two devices writing the same day resolve by editedAt whether they agree or
+  // not. Keyed on the day we get both properties; keyed on day+value we got only the weaker one.
+  ok('the id is keyed on the DAY, so a same-day correction supersedes',
+    M.st.runRungs[0].id === 'rr-2026-09-07');
+  ok('...and the store declares how it merges, which is what now provides convergence',
+    /runRungs:\{ keys:\['from'\], val:'top' \}/.test(src));
 
   eq('a future weekday takes the new range',
     M.blockPlanFor_('2026-09-09').sessions.filter(s => s.intent === 'easyRun').map(s => s.struct), ['34-36 min']);

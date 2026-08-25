@@ -1596,6 +1596,46 @@ try {
     fail('the injury debrief reaches shared code, or can invent a suggestion (see above).');
   }
 
+  // STEPS 99-101 - THE THREE STRUCTURAL GUARDS.
+  //
+  // These do not test a feature. They test a CLASS of bug that has recurred here for months: the
+  // same fact living in two places that can disagree, fixed one store at a time and never
+  // generalised. Every previous attempt was a convention or a comment, and none survived the next
+  // field. These are syntactic, so they cost nothing to run and cannot be forgotten.
+  //
+  // Each carries a printed BASELINE of real findings that are not yet fixed. That is deliberate: a
+  // guard that silently carries an exception stops being a guard, and a guard that blocks every push
+  // over out-of-scope work gets deleted. New findings fail; old ones are read out on every run.
+  console.log(`${D}. checking record identities do not carry their own values...${X}`);
+  try {
+    const so = execSync('node scripts/identity-guard.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a record id carries a value the record can change - a correction will fork instead of superseding (see above).');
+  }
+
+  console.log(`${D}. checking dated value logs declare their merge semantics...${X}`);
+  try {
+    const so = execSync('node scripts/valuelog-guard.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a dated value log is missing from _LWW_ARRAYS, so it will be unioned rather than resolved (see above).');
+  }
+
+  console.log(`${D}. checking full-screen sheets clear the desktop shell...${X}`);
+  try {
+    const so = execSync('node scripts/stacking-guard.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a sheet would open behind the desktop shell - invisible and unclickable (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

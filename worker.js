@@ -6514,8 +6514,16 @@ function mergeStateRoot_(local, remote){
 // weightLog next door always keyed on ['date'] alone, which is why a corrected weigh-in sticks and
 // a corrected FTP did not. Same family as the plan-session duplication: identity defined wrong, so
 // an edit forks instead of overwriting.
+// runRungs is the weekday easy-run target log: the same shape as weightLog and ftpHistory - one
+// dated value per day, corrected in place. It was missing from this map, so mergeState_ UNIONED it
+// and two same-day records both survived with the tie broken on array order. Registered after
+// scripts/valuelog-guard.mjs asked why a dated value log was not here.
+//
+// KEEP THIS LITERAL COMPACT. my-foods-meals-test matches it with a 400-character cap, so a comment
+// inside the braces silently breaks that test rather than this one.
 var _LWW_ARRAYS = { weightLog:{ keys:['date'], val:'weight' },
                     ftpHistory:{ keys:['date'], val:'ftp' },
+                    runRungs:{ keys:['from'], val:'top' },
                     races:{ keys:['id'] },
                     myFoods:{ keys:['id'] },
                     myMeals:{ keys:['id'] } };
@@ -50975,7 +50983,12 @@ function runSetWeekdayTarget_(top, now, why){
     if(!(top>0)) return null;
     var from=_tbDK_(now||new Date());
     if(!st.runRungs) st.runRungs=[];
-    var rec={ id:'rr-'+from+'-'+top, from:from, top:top,
+    // KEYED ON THE DAY ALONE. top used to be part of the id, which meant accepting 36 in the
+    // morning and correcting down to 30 in the afternoon minted a SECOND record for the same day
+    // rather than replacing the first - and the correction could never win, because the thing
+    // being corrected was the thing being keyed on. That is the ftpHistory fork exactly, which is
+    // why ftpHistory is keyed on date and not on date+ftp. Caught by scripts/identity-guard.mjs.
+    var rec={ id:'rr-'+from, from:from, top:top,
               struct:(top-RUN_BAND_WIDTH)+'-'+top+' min', why:String(why||''),
               at:Date.now(), editedAt:Date.now() };
     // Same id for the same day and target, so accepting twice on one day is idempotent rather than
