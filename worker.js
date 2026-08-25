@@ -41800,11 +41800,13 @@ function _rtMount_(scr){
     // THE ABSORBER. flex-grow lets this card take whatever height the page does not otherwise use,
     // and its ridge is the one thing here that reads better larger - the chart is
     // preserveAspectRatio="none", so it stretches to any box without distorting what it says.
-    // Capped at 460px so a very tall screen gets a better chart rather than one enormous card, and
-    // it keeps its natural size on a laptop, where there is no slack at all.
+    // Capped so a very tall screen gets a better chart rather than one enormous card. 560, because
+    // 460 left 56px unfilled on the tallest device measured (iPad Pro portrait, 1366px) - the cap
+    // was binding before the space ran out. It keeps its natural size on a laptop, where there is no
+    // slack for flex-grow to take.
     card.style.cssText='margin:0 16px 11px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
       +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'
-      +'flex:1 1 auto;max-height:460px';
+      +'flex:1 1 auto;max-height:560px';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
     card.querySelectorAll('[data-rtrange]').forEach(function(el){
