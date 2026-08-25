@@ -1496,6 +1496,22 @@ try {
     fail('the run prescription can advance itself, ramp too fast, or fire off one good run (see above).');
   }
 
+  // STEP 93 - one-click send to Zwift. Zwift keeps workouts under %LOCALAPPDATA%, which is on
+  //           Chrome's File System Access blocklist, so the picker refuses the one folder that
+  //           matters. The way through is a Documents junction; that only works because
+  //           zwiftVerify_ keys on Zwift's own workouts.files marker rather than the rider-id
+  //           folder name. Pins that, pins the mklink command's backslashes surviving the served
+  //           template, and pins that a pick which sets nothing now explains itself.
+  console.log(`${D}. checking the Zwift folder link...${X}`);
+  try {
+    const so = execSync('node scripts/zwift-folder-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Zwift folder link can stop verifying, or a blocked pick can fail silently (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

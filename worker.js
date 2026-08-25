@@ -33489,6 +33489,41 @@ function idbSetKey_(k,v){
 // quote serves as an escaped quote and takes the entire script out at load.
 function _zwiftPathHint_(){ var BS=String.fromCharCode(92);
   return 'AppData'+BS+'Local'+BS+'Zwift'+BS+'Workouts'+BS+ZWIFT_EXPECT_ID+BS; }
+// CHROME WILL NOT OPEN THE ZWIFT FOLDER, AND THAT IS NOT A BUG IN THE PICKER.
+//
+// The File System Access API refuses a blocklisted directory outright — "Can't open this folder
+// because it contains system files" — and everything under %LOCALAPPDATA% is on that list. Zwift
+// keeps its workouts there by default, so the folder the athlete needs is precisely the folder
+// Chrome will not hand over. No flag or permission changes this; the blocklist is enforced in the
+// browser and is not user-configurable.
+//
+// A DIRECTORY JUNCTION IS THE WAY THROUGH. Windows can present the same folder at a second path,
+// and Chrome's check runs on the path it is GIVEN — a junction under Documents is not on the
+// blocklist. Writes through it land in the real Zwift folder because it IS the real folder, not a
+// copy: nothing to sync, nothing to keep in step, no second place for a file to go stale.
+//
+// It verifies for free. zwiftVerify_ accepts any folder containing workouts.files — the marker
+// ZWIFT itself writes — so the junction passes on evidence rather than on being named after the
+// rider id. That check was already right; this just relies on it.
+var ZWIFT_LINK_NAME='ZwiftWorkouts';
+function _zwiftLinkHint_(){
+  var BS=String.fromCharCode(92), Q=String.fromCharCode(34);
+  return 'cmd /c mklink /J '+Q+'%USERPROFILE%'+BS+'Documents'+BS+ZWIFT_LINK_NAME+Q
+        +' '+Q+'%LOCALAPPDATA%'+BS+'Zwift'+BS+'Workouts'+BS+ZWIFT_EXPECT_ID+Q;
+}
+// The remedy, as a dialog rather than a console line. The old catch logged and returned false, so a
+// blocked pick looked identical to a cancelled one and the athlete was told nothing at all.
+function _zwiftBlockedHelp_(){
+  var NL=String.fromCharCode(10), BS=String.fromCharCode(92);
+  try{
+    uiAlert('Chrome will not open a folder inside AppData — it blocks those, and Zwift keeps its '
+      +'workouts there. Nothing is wrong with your pick.'+NL+NL
+      +'Make a link to it once, then choose the link instead. Paste this into Command Prompt:'+NL+NL
+      +_zwiftLinkHint_()+NL+NL
+      +'Then click Set up again and choose Documents'+BS+ZWIFT_LINK_NAME+'. It is the same folder, '
+      +'not a copy — files written there are in Zwift immediately.');
+  }catch(e){}
+}
 function zwiftSupported_(){ try{ return typeof window!=='undefined' && typeof window.showDirectoryPicker==='function'; }catch(e){ return false; } }
 function zwiftGetHandle_(){ return idbGetKey_(ZWIFT_DIR_KEY).catch(function(){ return null; }); }
 function zwiftForgetFolder_(){ return idbSetKey_(ZWIFT_DIR_KEY,null).then(function(){
@@ -33540,9 +33575,18 @@ function zwiftPickFolder_(){
       });
     });
   }).catch(function(e){
-    if(e && e.name==='AbortError') return false;              // the athlete cancelled; not an error
+    // A BLOCKED PICK AND A CANCELLED ONE ARRIVE THE SAME WAY. Chrome shows its own "contains system
+    // files" dialog inside the picker; whatever happens next, the promise settles as AbortError. So
+    // the old branch returned silently and the one case that needs explaining got nothing.
+    //
+    // The exception cannot tell them apart, so INTENT does: an athlete with no folder set was trying
+    // to set one, and a pick that ended with nothing set is the case worth explaining. Once a folder
+    // IS set, a cancel is just a cancel and stays silent — no modal for changing your mind.
     try{ console.error('[zwift-dir] '+((e&&e.message)||e)); }catch(_e){}
-    return false;
+    return zwiftGetHandle_().then(function(existing){
+      if(!existing) _zwiftBlockedHelp_();
+      return false;
+    }).catch(function(){ _zwiftBlockedHelp_(); return false; });
   });
 }
 // Write one .zwo. Re-verifies first, every time. Returns true only when the bytes actually landed.
