@@ -296,6 +296,11 @@ console.log('\n' + Y + '=== both surfaces, from one renderer ===' + X);
   })()));
   ok('the coach is told about it too', src.indexOf('runAhead:(typeof _runAheadFlag_') >= 0);
   ok('the coach panel states it without offering to act', src.indexOf('it is on the Run Training page when you want it') >= 0);
+  // The emitted card body, extracted once and used by every assertion below - so none of them can
+  // be satisfied by a comment elsewhere in the file.
+  const rn = exFn('renderRunInto_');
+  const card = rn.slice(rn.indexOf('raCard.innerHTML='), rn.indexOf('scr.appendChild(raCard)'));
+
   // THE CARD WAS DELIBERATELY CUT DOWN. It used to make one point in four sentences - the runs, the
   // median, that nothing moves on its own, and that it cannot feel the leg - and the athlete asked
   // for the re-justification to go: the four buttons already say nothing happens automatically.
@@ -307,7 +312,20 @@ console.log('\n' + Y + '=== both surfaces, from one renderer ===' + X);
   // not - it is asserted on the CODE further up this file (one writer, reachable only from the
   // accept button and the manual sheet, and nothing else pushing a rung record), which is a stronger
   // check than a sentence being present.
-  ok('with nothing on file the card says so', src.indexOf('No injury on file') >= 0);
+  // FALSE GREEN, CAUGHT. This used to assert the source contained "No injury on file" - and it
+  // passed for two commits after that copy was DELETED, because the phrase survived inside a comment
+  // explaining its removal. A whole-file grep cannot tell rendered copy from a note about rendered
+  // copy. Scoped to the emitted card from here on.
+  //
+  // And the contract itself changed on purpose: with no injury and a sound base the line is now
+  // ABSENT, because a line whose content is the absence of content is not worth a row. So what is
+  // asserted is the silence, and that the branch which produces it exists.
+  {
+    const seg = card;
+    ok('NEG: with nothing on file the line is absent, not filled with nothing',
+       seg.indexOf('No injury on file') < 0);
+    ok('...and the empty case really returns nothing', /return msg \? \(/.test(seg));
+  }
   ok('with a report on file it says what it read', src.indexOf("_runEsc_(String(_inj.rec.area))+' issue '") >= 0);
   ok('...and what that does to the proposal',
      src.indexOf('Nothing proposed until you mark it easing') >= 0);
@@ -315,8 +333,6 @@ console.log('\n' + Y + '=== both surfaces, from one renderer ===' + X);
      src.indexOf('no longer holding this back') >= 0);
   // The card must still be short. A regression here is the whole complaint coming back.
   {
-    const rn = exFn('renderRunInto_');
-    const card = rn.slice(rn.indexOf('raCard.innerHTML='), rn.indexOf('scr.appendChild(raCard)'));
     const sentences = (card.match(/[a-z]\. /g) || []).length;
     ok('the card body stays terse (' + sentences + ' sentence breaks in the emitted copy)', sentences <= 6);
     ok('NEG: the cut explanatory lines have not crept back',

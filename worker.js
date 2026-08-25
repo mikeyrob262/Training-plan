@@ -48705,7 +48705,7 @@ function renderRunInto_(scr, surface){
       // two buttons should not be sharing a row. Lifted out of the balanced host by dsShowRun -
       // a Run-Training-only mechanism, so no shared layout code is involved.
       raCard.setAttribute('data-runfull','1');
-      raCard.style.cssText='margin:0 16px 11px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:14px 16px';
+      raCard.style.cssText='margin:0 16px 10px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:10px 14px';
       var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
       var _t=_ra.target||{};
       var _inj=_ra.injury;
@@ -48734,8 +48734,14 @@ function renderRunInto_(scr, surface){
         //
         // NO INTERNAL VOCABULARY. "prescription" is what this codebase calls the thing; the plan
         // asks and he runs, which is the sentence.
-        '<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">The plan is behind you</div>'
-        +'<div style="font-size:14.5px;color:var(--t1);line-height:1.55">'
+        // ONE ROW. The label, the sentence and the four buttons were three stacked bands costing
+        // 118px; at this width the sentence is a single line and the buttons are about 440px, so
+        // they sit beside each other and the card costs 64. The label rides at the head of the
+        // sentence rather than owning a band of its own - it is four words of identity, not a
+        // heading a reader navigates by. Wraps on a narrow column, where stacking is correct again.
+        '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+        +'<div style="flex:1 1 340px;min-width:0;font-size:13.5px;color:var(--t1);line-height:1.45">'
+          +'<span style="font-size:10.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-right:7px">The plan is behind you</span>'
           +'Last '+_ra.streak+' weekday runs: <b>'+days+'</b> against a '+_ra.current+' target.'
           +(_t.blocked
               ? ' <b>No increase proposed</b> while that is on file.'
@@ -48745,10 +48751,18 @@ function renderRunInto_(scr, surface){
                                   : (' &mdash; target <b>'+_t.band+'</b>.')))
                   : ' '+(_t.why||'Not enough yet to read a trend')+'.'))
         +'</div>'
-        // THE SECOND LINE ONLY WHEN IT HAS SOMETHING TO SAY. It exists for the one input the reader
-        // cannot check by looking - an injury on file, or a base too thin to trust. With neither, it
-        // was printing "Read off 8 runs. No injury on file." every time: a line whose content is the
-        // absence of content. Silence is the right rendering of nothing to report.
+        +'<div style="display:flex;gap:7px;flex-wrap:wrap;flex-shrink:0">'
+          +((_t.proposedTop && !_t.blocked)
+            ? ('<button id="run-rung-yes" style="padding:7px 11px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_t.band+'</button>')
+            : '')
+          +'<button id="run-rung-no" style="padding:7px 11px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Not yet</button>'
+          +'<button id="run-set-manual" style="padding:7px 11px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Set it myself</button>'
+          +'<button id="run-report-issue" style="padding:7px 11px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Report an issue</button>'
+        +'</div>'
+        +'</div>'
+        // The second line still only appears when it has something to say - an injury on file, or a
+        // base too thin to trust. Unchanged, and still the only thing here a reader cannot check by
+        // looking at the numbers above.
         +(function(){
            var msg='', col='var(--t3)';
            if(_inj && _inj.rec){
@@ -48759,20 +48773,10 @@ function renderRunInto_(scr, surface){
                   +(_inj.rec.status==='active' ? ' Nothing proposed until you mark it easing.'
                                                : ' Steps held to '+Math.round(RUN_STEP_INJ_PCT*100)+'%.'));
            } else if(_ra.thin){
-             // A thin base IS worth a line: the pattern is real but it is read off few runs, and
-             // that is a different claim from one read off many.
              msg='Read off '+_ra.sample+' runs &mdash; a thin base.';
            }
-           return msg ? ('<div style="font-size:11.5px;color:'+col+';line-height:1.5;margin-top:7px">'+msg+'</div>') : '';
-         })()
-        +'<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">'
-          +((_t.proposedTop && !_t.blocked)
-            ? ('<button id="run-rung-yes" style="padding:8px 13px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">Move to '+_t.band+'</button>')
-            : '')
-          +'<button id="run-rung-no" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Not yet</button>'
-          +'<button id="run-set-manual" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Set it myself</button>'
-          +'<button id="run-report-issue" style="padding:8px 13px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Report an issue</button>'
-        +'</div>';
+           return msg ? ('<div style="font-size:11px;color:'+col+';line-height:1.45;margin-top:6px">'+msg+'</div>') : '';
+         })();
       scr.appendChild(raCard);
       setTimeout(function(){
         var y=document.getElementById('run-rung-yes'), n=document.getElementById('run-rung-no');
