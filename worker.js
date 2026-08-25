@@ -48568,14 +48568,21 @@ function renderRunInto_(scr, surface){
   var statRow=function(items, mb){
     var wrap=document.createElement('div');
     wrap.style.cssText='display:flex;flex-wrap:wrap;background:var(--s2);border-radius:10px;'
-      +'padding:9px 4px;margin:0 16px '+mb+'px';
+      +'padding:8px 3px;margin:0 16px '+mb+'px';
     items.forEach(function(it, i){
+      // SIZED FROM THE BUDGET, NOT FROM TASTE. A 390px phone leaves 358px after the page margins
+      // and 352px inside the panel padding, so four cells get 88px each. At the first attempt the
+      // basis was 88 with a 82px floor, which needs 98px per cell once its own padding is counted -
+      // so it wrapped to two rows of two and the strip came out TALLER than the boxed grid it
+      // replaced. Measured in the browser at 85px a strip against about 54px a row before.
+      // 62px + 10px of padding is 288px for four, which fits with room to spare, and flex lets each
+      // cell grow into the space that is actually there.
       var c=document.createElement('div');
-      c.style.cssText='flex:1 1 88px;min-width:82px;padding:2px 8px;text-align:center'
+      c.style.cssText='flex:1 1 70px;min-width:62px;padding:1px 5px;text-align:center'
         +(i?';border-left:1px solid var(--b1)':'');
-      c.innerHTML='<div style="font-size:15px;font-weight:800;color:'+(it.c||'var(--t1)')+';line-height:1.1;white-space:nowrap">'
-          +it.v+(it.s?('<span style="font-size:9.5px;font-weight:600;color:var(--t3);margin-left:3px">'+it.s+'</span>'):'')+'</div>'
-        +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.l+'</div>';
+      c.innerHTML='<div style="font-size:14px;font-weight:800;color:'+(it.c||'var(--t1)')+';line-height:1.15;white-space:nowrap">'
+          +it.v+(it.s?('<span style="font-size:9px;font-weight:600;color:var(--t3);margin-left:2px">'+it.s+'</span>'):'')+'</div>'
+        +'<div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.l+'</div>';
       wrap.appendChild(c);
     });
     return wrap;

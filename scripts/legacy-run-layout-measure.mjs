@@ -301,16 +301,29 @@ try {
     var txt=scr?scr.innerText:'';
     // Same innerText rule as desktop, and the style attribute is matched loosely because cssText
     // normalises "flex-wrap:wrap" to "flex-wrap: wrap" with a space when the browser reserialises it.
+    // OUTERMOST match only. A text filter over every div matches the strip, its cells and their
+    // label spans alike, and reports eight "strips" that are mostly each other's children.
     var strips=[].slice.call(scr.querySelectorAll('div')).filter(function(d){
       var t=(d.innerText||'').toUpperCase();
-      return (t.indexOf('MILES YTD')>=0 || t.indexOf('LONGEST RUN')>=0) && t.length<120; });
+      if(!(t.indexOf('MILES YTD')>=0 || t.indexOf('LONGEST RUN')>=0) || t.length>=120) return false;
+      // Keep it only if no ANCESTOR also matched - that ancestor is the real strip.
+      for(var p=d.parentElement; p && p!==scr; p=p.parentElement){
+        var pt=(p.innerText||'').toUpperCase();
+        if((pt.indexOf('MILES YTD')>=0 || pt.indexOf('LONGEST RUN')>=0) && pt.length<120) return false;
+      }
+      return true; });
     return { screen:!!scr, page:__PAGEWIDE(),
              scrOverX:scr?(scr.scrollWidth>scr.clientWidth+1):null,
              hasTrajectory:(txt.indexOf('RUNNING TRAJECTORY')>=0 || txt.indexOf('Running Trajectory')>=0),
              nToggles:scr.querySelectorAll('[data-rtrange]').length,
              ridgeH:(function(){ var s=scr.querySelector('svg[viewBox="0 0 600 150"]'); return s?Math.round(s.getBoundingClientRect().height):null; })(),
              nStrips:strips.length,
-             stripRows:strips.map(function(s){ return { h:Math.round(s.getBoundingClientRect().height), overX:(s.scrollWidth>s.clientWidth+1) }; }),
+             stripRows:strips.map(function(s){
+               // Distinct cell TOPS = how many rows the strip actually wrapped onto. Height alone
+               // cannot tell a tall single row from two short ones.
+               var tops={}; [].slice.call(s.children).forEach(function(c){ tops[Math.round(c.getBoundingClientRect().top)]=1; });
+               return { h:Math.round(s.getBoundingClientRect().height), cells:s.children.length,
+                        rows:Object.keys(tops).length, overX:(s.scrollWidth>s.clientWidth+1) }; }),
              clips:__CLIP(scr,'div[style*="white-space:nowrap"]').filter(function(c){ return c.clipped; }),
              noMap:(scr.querySelectorAll('.leaflet-container').length===0),
              driftVerdict:(txt.indexOf('Nothing about the shin is recorded')>=0),
@@ -323,6 +336,10 @@ try {
   ok('the ridge drew', mRun.ridgeH > 100);
   ok('both stat strips rendered', mRun.nStrips === 2);
   ok('neither strip overflows at 390px', mRun.stripRows.every(s => !s.overX));
+  // THE POINT OF THE REDESIGN. Wrapping to two rows makes the strip taller than the boxed grid it
+  // replaced, which is the opposite of what was asked for.
+  ok('all four stats fit on ONE row at 390px', mRun.stripRows.every(s => s.rows === 1 && s.cells === 4));
+  ok('...and a strip costs well under the old two-grid layout', mRun.stripRows.every(s => s.h <= 56));
   ok('no stat value clipped at 390px', mRun.clips.length === 0);
   ok('no map on mobile either', mRun.noMap);
   ok('the drift verdict is on mobile too', mRun.driftVerdict);

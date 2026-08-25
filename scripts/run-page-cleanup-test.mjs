@@ -218,7 +218,13 @@ console.log('\n' + Y + '=== 6. the page cleanup ===' + X);
     ok('the strip is one panel with hairline dividers', /border-left:1px solid var\(--b1\)/.test(strip));
   }
   ok('it wraps rather than scrolling sideways', /flex-wrap:wrap/.test(rn.slice(rn.indexOf('var statRow='), rn.indexOf('var statRow=') + 600)));
-  ok('every cell keeps a min-width so a long value cannot clip', /min-width:82px/.test(rn));
+  // The floor is SIZED FROM THE 390px BUDGET, not picked: 358px after page margins, 352px inside
+  // the panel padding, four cells -> 88px each, and each cell spends 10px of that on its own
+  // padding. 62 is the floor that lets four fit on one row; the first attempt used 82 and wrapped
+  // to two, making the strip taller than the boxed grid it replaced. The exact number is asserted
+  // because raising it silently reintroduces the wrap.
+  ok('the cell floor still fits four across at 390px', /min-width:62px/.test(rn));
+  ok('...and the basis leaves room to grow into the space that is there', /flex:1 1 70px/.test(rn));
 
   // "Not yet" must not yank the page.
   ok('dismiss goes through the scroll-preserving helper', /_runRemoveKeepScroll_\(raCard\)/.test(rn));
