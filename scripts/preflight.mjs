@@ -1580,6 +1580,22 @@ try {
     fail('code another page renders has been modified (see above) - that needs asking first.');
   }
 
+  // STEP 98 - the injury debrief. Two promises: it is Run-page-local (fetchSmurkelReply_, which also
+  //           serves the ride debrief and pre-ride, must stay byte-identical, and _SM_PERSONA is
+  //           READ not edited), and its suggestion parse fails closed - no marker, an unknown token,
+  //           trailing words or an out-of-band minute count all yield NO proposal, because a number
+  //           guessed out of prose is fabricated authority. Also pins that nothing Dr. Smurkel says
+  //           moves the plan without a button press.
+  console.log(`${D}. checking the injury debrief...${X}`);
+  try {
+    const so = execSync('node scripts/run-injury-debrief-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the injury debrief reaches shared code, or can invent a suggestion (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

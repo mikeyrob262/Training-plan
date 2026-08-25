@@ -619,10 +619,10 @@ check('NEG: the retired badges are really gone, not half-removed',
       (flatSrc.match(/border-radius:100px/g) || []).length, 0);
 check('the run type still shows on the compact row',
       /r\.type\?\('\s*&middot;\s*'\+_runEsc_\(String\(r\.type\)\)\)/.test(flatSrc), true);
-// 9 since the Run Training injury work added two more bottom sheets - 'Set it myself' and 'Report
-// an issue'. The count is asserted rather than bounded so a sheet appearing somewhere unnoticed
-// still trips it; raise it deliberately when a sheet is deliberately added.
-check('bottom-sheet corners are untouched', (flatSrc.match(/border-radius:20px 20px 0 0/g) || []).length, 9);
+// 10 since the Run Training injury work added three bottom sheets - 'Set it myself', 'Report an
+// issue', and the Dr. Smurkel injury debrief. The count is asserted rather than bounded so a sheet
+// appearing somewhere unnoticed still trips it; raise it deliberately when one is deliberately added.
+check('bottom-sheet corners are untouched', (flatSrc.match(/border-radius:20px 20px 0 0/g) || []).length, 10);
 // The button this rule came from must itself be compliant, sized to its label, and beside its text.
 const todayBtn = codeLines.find(L => /data-act="plan"/.test(L) && /View</.test(L));
 check('the Today\'s Plan control exists', !!todayBtn, true);

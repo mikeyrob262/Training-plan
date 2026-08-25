@@ -50520,6 +50520,302 @@ function runSetWeekdayTarget_(top, now, why){
   }catch(e){ return null; }
 }
 try{ if(typeof window!=='undefined'){ window.runSetWeekdayTarget_=runSetWeekdayTarget_; } }catch(e){}
+// ==================== INJURY DEBRIEF WITH DR. SMURKEL (Run Training only) ====================
+//
+// RUN-PAGE-LOCAL BY CONSTRUCTION. This composes its OWN prompt and makes its OWN request. It reads
+// _SM_PERSONA - a constant - so the voice is the same Dr. Smurkel everywhere, and it touches nothing
+// else: fetchSmurkelReply_ is untouched, and so are the ride-debrief and pre-ride surfaces that
+// share it. That was the explicit trade: some duplication here in exchange for a change that cannot
+// reach a page nobody asked to modify.
+//
+// The model matches every other Smurkel call in this app. Using a different one here would make the
+// injury debrief behave and cost differently from the rest of his voice for no reason anybody asked
+// for, which is a decision for the athlete rather than for this file.
+var _RUN_INJ_MODEL='claude-sonnet-4-6';
+var _RUN_INJ_ENDPOINT='https://mikey-food-api2.mgrobinson07.workers.dev/claude';
+// THE SUGGESTION CONTRACT. He is asked to end with one machine-readable line so a proposal can be
+// offered as a BUTTON rather than left as prose the athlete has to translate into an action. The
+// parser is deliberately strict and fails closed: no line, or a line it does not recognise, means no
+// proposal is offered at all. It never infers an adjustment out of the surrounding sentences - a
+// number guessed from prose is exactly the kind of fabricated authority this app keeps removing.
+// PARSED BY SCAN, NOT BY REGEX. This file is served inside a template literal, which eats one
+// backslash level - a source \s arrives at the browser as a literal s and the pattern silently
+// stops matching whitespace. Same reason constAllDigits_ is a scan. Caught by served-escape-test
+// before it shipped, which is what that guard is for.
+var _RUN_INJ_MARK='SUGGESTION:';
+function _runInjTrim_(x){
+  // Whitespace by CHARACTER CODE, not by escape sequence: a source backslash-t arrives at the
+  // browser as a literal t once the template has eaten a level, so the test would silently start
+  // trimming the letter t off words. String.fromCharCode is what the rest of this file uses for
+  // exactly this reason.
+  var s2=String(x==null?'':x), a=0, b2=s2.length;
+  var ws=function(c){ var n=s2.charCodeAt(c); return n===32||n===9||n===13||n===10; };
+  while(a<b2 && ws(a)) a++;
+  while(b2>a && ws(b2-1)) b2--;
+  return s2.slice(a,b2);
+}
+
+// What he is given to reason from. MEASURED FACTS ONLY, the same discipline as every other prompt
+// here: what was run, what the plan asks, what the trend says, and what the athlete himself reported
+// about the injury. No diagnosis, no invented history.
+function _runInjFacts_(rec){
+  var NL=String.fromCharCode(10), L=[];
+  try{
+    L.push('THE REPORT HE FILED');
+    L.push('- area: '+rec.area+'   severity: '+rec.severity+'/10   status: '+rec.status);
+    L.push('- since: '+rec.from);
+    if(rec.note) L.push('- in his words: '+String(rec.note));
+    var f=(typeof _runAheadFlag_==='function')?_runAheadFlag_(new Date()):null;
+    L.push('');
+    L.push('WHAT THE PLAN ASKS AND WHAT HE ACTUALLY RUNS');
+    if(f){
+      L.push('- weekday easy-run target now: '+f.current+' (top '+f.curTop+' min)');
+      L.push('- his last '+f.streak+' weekday runs, newest first: '+f.runs.map(function(r){ return r.ranMin+' min'; }).join(', '));
+      if(f.target && f.target.trendTop) L.push('- median of those: '+f.target.trendTop+' min');
+      if(f.target && f.target.blocked) L.push('- no increase is currently being proposed, because of this report');
+    } else {
+      L.push('- he is not currently running ahead of the weekday target');
+    }
+    // The drift reading, because "easy runs are not staying easy" is the single most relevant
+    // training fact to an overuse complaint and it is already computed.
+    try{
+      var w=(typeof _runShinWatch_==='function')?_runShinWatch_():null;
+      if(w && w.sample){
+        L.push('- of his last '+w.sample+' easy runs, '+w.drifted+' went more than '+w.driftPct
+          +'% above the conversational heart-rate band');
+      }
+    }catch(e){}
+    // Recovery, where there is a baseline to read it against.
+    try{
+      var bl=(typeof _runDriftHrvBaseline_==='function')?_runDriftHrvBaseline_():null;
+      var hv=(typeof _runHrvOn_==='function')?_runHrvOn_((typeof getTodayKey==='function')?getTodayKey():''):null;
+      if(bl && bl.median!=null) L.push('- HRV median over '+bl.n+' days: '+bl.median+' ms'+(hv!=null?('; today '+hv+' ms'):''));
+    }catch(e){}
+    // Run fitness, so "back off" or "hold" is said against a real load picture.
+    try{
+      var ser=(typeof _rtSeries_==='function')?_rtSeries_():[];
+      if(ser.length){ var t=ser[ser.length-1];
+        L.push('- running fitness (CTL) '+t.ctl+', fatigue '+t.atl+', form '+t.tsb+' - running only'); }
+    }catch(e){}
+  }catch(e){}
+  return L.join(NL);
+}
+function _runInjPrompt_(rec, turns){
+  var NL=String.fromCharCode(10);
+  var hist=(turns||[]).filter(function(t){ return t && t.text; })
+    .map(function(t){ return (t.who==='you'?'Athlete: ':'You: ')+t.text; }).join(NL);
+  return _SM_PERSONA+NL+NL
+    +'He has reported an INJURY OR PAIN ISSUE and wants to talk it through with you. This is not a '
+    +'session debrief and there is no ride or run to grade.'+NL+NL
+    +_runInjFacts_(rec)+NL+NL
+    +'Conversation so far:'+NL+(hist||'(he has just opened the report)')+NL+NL
+    +'Rules:'+NL
+    +'- You are a coach, not a doctor. You do not diagnose, name conditions, or rule anything out. '
+    +'If what he describes sounds like it needs a physio or a scan, say so plainly and early.'+NL
+    +'- Ask at most one question per reply, and only when the answer would change your advice.'+NL
+    +'- Speak to the numbers above where they are relevant. Do not invent any others, and do not '
+    +'refer to data you were not given.'+NL
+    +'- Two to five sentences. No headings, no bullet lists, no asterisk-bolding.'+NL
+    +'- Then, on a FINAL LINE BY ITSELF, exactly one of:'+NL
+    +'    SUGGESTION: HOLD        (keep the current weekday target, do not increase)'+NL
+    +'    SUGGESTION: <minutes>   (a specific weekday easy-run target, a whole number of minutes)'+NL
+    +'    SUGGESTION: NONE        (you do not have enough to suggest a change yet)'+NL
+    +'  Suggest a number ONLY if you would stand behind it. He has to accept it by hand either way; '
+    +'nothing you say changes his plan on its own.';
+}
+// The request. Its own fetch, the same shape the rest of the app sends.
+function _runInjAsk_(rec, turns, cb){
+  var prompt;
+  try{ prompt=_runInjPrompt_(rec, turns); }
+  catch(e){ cb('Could not build the question for Dr. Smurkel.', null); return; }
+  var ac=(typeof AbortController!=='undefined')?new AbortController():null;
+  var to=setTimeout(function(){ if(ac) ac.abort(); }, 30000);
+  fetch(_RUN_INJ_ENDPOINT,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:_RUN_INJ_MODEL, max_tokens:700,
+                          messages:[{role:'user', content:prompt}] }),
+    signal:ac?ac.signal:undefined
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){ clearTimeout(to);
+    var t=d && d.content && d.content[0] && d.content[0].text;
+    t=(t||'').trim();
+    if(!t){ cb('Dr. Smurkel had nothing to add.', null); return; }
+    cb(null, t);
+  })
+  .catch(function(){ clearTimeout(to); cb('Could not reach Dr. Smurkel right now.', null); });
+}
+// FAILS CLOSED. Returns the visible text with the marker line stripped, plus a suggestion only when
+// the contract was met exactly. Anything else - no line, a word it does not know, a minute count
+// outside a sane band - yields no suggestion and the prose is shown untouched.
+function _runInjParseSuggestion_(text){
+  var out={ text:String(text||'').trim(), kind:'none', top:null };
+  var lines=out.text.split(String.fromCharCode(10));
+  for(var i=lines.length-1;i>=0;i--){
+    var ln=_runInjTrim_(lines[i]);
+    if(ln.slice(0,_RUN_INJ_MARK.length).toUpperCase()!==_RUN_INJ_MARK) continue;
+    var v=_runInjTrim_(ln.slice(_RUN_INJ_MARK.length)).toUpperCase();
+    // The whole remainder must be the token. "HOLD for now" is not the contract and yields nothing.
+    if(!v) continue;
+    var allDigits=v.length>0;
+    for(var q=0;q<v.length;q++){ var cc=v.charCodeAt(q); if(cc<48||cc>57){ allDigits=false; break; } }
+    if(v!=='HOLD' && v!=='NONE' && !allDigits) continue;
+    if(v==='HOLD') out.kind='hold';
+    else if(v==='NONE') out.kind='none';
+    else {
+      var n=parseInt(v,10);
+      // A SANE BAND, because a model typo is a real failure mode and a 5-minute or 300-minute
+      // "suggestion" must not reach a button. Out of band is treated as no suggestion at all.
+      if(n>=10 && n<=180){ out.kind='target'; out.top=n; }
+    }
+    lines.splice(i,1);
+    out.text=lines.join(String.fromCharCode(10)).trim();
+    break;
+  }
+  return out;
+}
+try{ if(typeof window!=='undefined'){ window._runInjAsk_=_runInjAsk_;
+  window._runInjParseSuggestion_=_runInjParseSuggestion_; window._runInjPrompt_=_runInjPrompt_; } }catch(e){}
+
+// THE DEBRIEF IS PART OF THE RECORD, not a chat that evaporates. Every turn is appended to the
+// injury entry itself, so what he told Dr. Smurkel and what was said back is readable later, syncs
+// like everything else, and is there the next time the guardrail has to explain itself.
+function injAppendTurn_(id, who, text){
+  try{
+    var list=(st&&Array.isArray(st.injuries))?st.injuries:[];
+    for(var i=0;i<list.length;i++){
+      if(list[i] && list[i].id===id){
+        if(!Array.isArray(list[i].debrief)) list[i].debrief=[];
+        list[i].debrief.push({ who:(who==='you'?'you':'sm'), text:String(text||'').slice(0,4000), at:Date.now() });
+        // Bounded, so one long conversation cannot grow a synced record without limit.
+        if(list[i].debrief.length>60) list[i].debrief=list[i].debrief.slice(-60);
+        list[i].editedAt=Date.now();
+        if(typeof sv==='function') sv();
+        return list[i];
+      }
+    }
+  }catch(e){}
+  return null;
+}
+function _injById_(id){
+  var l=(typeof _injAll_==='function')?_injAll_():[];
+  for(var i=0;i<l.length;i++) if(l[i].id===id) return l[i];
+  return null;
+}
+function runInjDebriefOpen_(id){
+  var rec=_injById_(id);
+  if(!rec) return;
+  var modal=document.createElement('div');
+  modal.id='run-inj-debrief';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:330;display:flex;align-items:flex-end;justify-content:center';
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px 32px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;display:flex;flex-direction:column';
+  modal.appendChild(sheet);
+  modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
+  document.body.appendChild(modal);
+
+  var pending=null;                       // the parsed suggestion from his latest reply, if any
+  var draw=function(){
+    rec=_injById_(id)||rec;
+    var turns=Array.isArray(rec.debrief)?rec.debrief:[];
+    var body='';
+    turns.forEach(function(t){
+      var mine=(t.who==='you');
+      body+='<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin-bottom:8px">'
+        +'<div style="max-width:86%;padding:9px 12px;border-radius:13px;font-size:13px;line-height:1.5;white-space:pre-wrap;'
+        +(mine?'background:rgba(252,76,2,.12);color:var(--t1)':'background:var(--s2);color:var(--t2)')+'">'
+        +_runEsc_(t.text)+'</div></div>';
+    });
+    if(!turns.length){
+      body='<div style="font-size:12.5px;color:var(--t3);line-height:1.6;padding:6px 0 10px">'
+        +'Tell him what is going on and he will read it against your actual running &mdash; what the plan '
+        +'asks, what you have been running, how much of it drifted above easy, and your recovery '
+        +'numbers. He is a coach, not a doctor: he will not diagnose it.</div>';
+    }
+    var sugHTML='';
+    if(pending && pending.kind==='hold'){
+      sugHTML='<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--b1);border-radius:11px;background:var(--s2)">'
+        +'<div style="font-size:12.5px;color:var(--t1);font-weight:700;margin-bottom:7px">He suggests holding the current target</div>'
+        +'<button id="inj-sug-hold" style="padding:8px 12px;border-radius:9px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Mark it easing and hold</button></div>';
+    } else if(pending && pending.kind==='target'){
+      sugHTML='<div style="margin-top:10px;padding:10px 12px;border:1px solid rgba(252,76,2,.35);border-radius:11px;background:var(--s2)">'
+        +'<div style="font-size:12.5px;color:var(--t1);font-weight:700;margin-bottom:7px">He suggests a weekday target of '
+        +(pending.top-RUN_BAND_WIDTH)+'&ndash;'+pending.top+' min</div>'
+        +'<div style="font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:8px">Nothing changes until you press this.</div>'
+        +'<button id="inj-sug-take" style="padding:8px 12px;border-radius:9px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">Set '
+        +(pending.top-RUN_BAND_WIDTH)+'&ndash;'+pending.top+' min</button></div>';
+    }
+    sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 14px"></div>'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:2px">'
+      +'<div style="font-size:17px;font-weight:800;color:var(--t1)">'+_runEsc_(rec.area)+' &middot; talking to Dr. Smurkel</div>'
+      +'<button id="inj-dbr-close" style="background:none;border:none;color:var(--t3);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Done</button></div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-bottom:12px">'+rec.severity+'/10 &middot; since '+_runEsc_(rec.from)+' &middot; '+_runEsc_(rec.status)
+      +' &mdash; this conversation is saved on the report.</div>'
+      +'<div id="inj-dbr-body" style="flex:1;min-height:120px;max-height:44vh;overflow-y:auto;padding-right:2px">'+body+'</div>'
+      +sugHTML
+      +'<div style="display:flex;gap:8px;margin-top:12px;align-items:flex-end">'
+      +'<textarea id="inj-dbr-in" rows="2" placeholder="What does it feel like, and when?" '
+      +'style="flex:1;padding:10px 12px;border-radius:11px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;resize:vertical"></textarea>'
+      +'<button id="inj-dbr-send" style="padding:10px 14px;border-radius:10px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Send</button>'
+      +'</div>';
+    var b=document.getElementById('inj-dbr-body'); if(b) b.scrollTop=b.scrollHeight;
+    var cl=document.getElementById('inj-dbr-close');
+    if(cl) cl.onclick=function(){ modal.remove(); try{ renderRun(); }catch(e){} };
+    var send=document.getElementById('inj-dbr-send'), inp=document.getElementById('inj-dbr-in');
+    var go=function(){
+      var txt=(inp.value||'').trim();
+      // The FIRST turn may be empty - opening the conversation is itself the question, and his
+      // report is already in the facts. Every later turn needs something to answer.
+      var turnsNow=Array.isArray((_injById_(id)||{}).debrief)?_injById_(id).debrief:[];
+      if(!txt && turnsNow.length) return;
+      if(txt) injAppendTurn_(id,'you',txt);
+      pending=null;
+      send.disabled=true; send.textContent='…';
+      var t2=Array.isArray((_injById_(id)||{}).debrief)?_injById_(id).debrief:[];
+      _runInjAsk_(_injById_(id), t2, function(err, reply){
+        if(err){ injAppendTurn_(id,'sm',err); draw(); return; }
+        var p=_runInjParseSuggestion_(reply);
+        injAppendTurn_(id,'sm',p.text);
+        pending=(p.kind==='none')?null:p;
+        draw();
+      });
+      draw();
+    };
+    if(send) send.onclick=go;
+    if(inp) inp.onkeydown=function(e){ if(e.key==='Enter' && (e.metaKey||e.ctrlKey)) go(); };
+    // ACCEPTING IS STILL A BUTTON PRESS, and it writes through the SAME target writer the card and
+    // the manual sheet use. Nothing Dr. Smurkel says moves anything on its own.
+    var sh=document.getElementById('inj-sug-hold');
+    if(sh) sh.onclick=function(){
+      injSetStatus_(id,'easing');
+      try{ toast('Marked easing — no increases will be proposed'); }catch(e){}
+      pending=null; draw();
+    };
+    var stk=document.getElementById('inj-sug-take');
+    if(stk) stk.onclick=function(){
+      var r=(typeof runSetWeekdayTarget_==='function')
+        ? runSetWeekdayTarget_(pending.top, new Date(), 'from the injury debrief') : null;
+      if(r){ try{ toast('Weekday runs set to '+r.struct); }catch(e){} }
+      pending=null; draw();
+    };
+  };
+  draw();
+  // Open with his first read, so the sheet is useful before the athlete types anything.
+  if(!(Array.isArray(rec.debrief) && rec.debrief.length)){
+    var s0=document.getElementById('inj-dbr-send');
+    if(s0){ s0.disabled=true; s0.textContent='…'; }
+    _runInjAsk_(rec, [], function(err, reply){
+      if(err){ injAppendTurn_(id,'sm',err); draw(); return; }
+      var p=_runInjParseSuggestion_(reply);
+      injAppendTurn_(id,'sm',p.text);
+      pending=(p.kind==='none')?null:p;
+      draw();
+    });
+  }
+}
+try{ if(typeof window!=='undefined'){ window.runInjDebriefOpen_=runInjDebriefOpen_;
+  window.injAppendTurn_=injAppendTurn_; } }catch(e){}
+
 // ---- SET IT MYSELF ------------------------------------------------------------------------------
 // The proposal path only ever moves UP - it fires when the runs are ahead of the plan and never
 // otherwise - so backing off had no route at all. This is that route, and it is the same writer, so
@@ -50608,6 +50904,8 @@ function runOpenIssueSheet_(){
         +'<div style="font-size:10.5px;color:var(--t3);margin-top:1px">from '+_runEsc_(r.from)+' &middot; '+_runEsc_(r.status)
         +(r.note?(' &middot; '+_runEsc_(String(r.note).slice(0,60))):'')+'</div></div>'
         +'<div style="display:flex;gap:6px;flex-shrink:0">'
+        +'<button data-inj-talk="'+_runEsc_(r.id)+'" style="padding:5px 9px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Talk'
+        +((r.debrief&&r.debrief.length)?(' &middot; '+r.debrief.length):'')+'</button>'
         +(r.status!=='resolved'?('<button data-inj-res="'+_runEsc_(r.id)+'" style="padding:5px 9px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Resolved</button>'):'')
         +'<button data-inj-del="'+_runEsc_(r.id)+'" style="padding:5px 9px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--c-red);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Remove</button>'
         +'</div></div>';
@@ -50635,16 +50933,15 @@ function runOpenIssueSheet_(){
     +'<textarea id="inj-note" rows="3" placeholder="When it flares, what it feels like, anything you have changed."'
     +' style="width:100%;margin-top:6px;padding:11px 12px;border-radius:10px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;resize:vertical"></textarea>'
     +'<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
-    +'<button id="inj-save" style="flex:1;min-width:130px;padding:11px;border-radius:10px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Log it</button>'
-    +'<button id="inj-cancel" style="flex:1;min-width:110px;padding:11px;border-radius:10px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'<button id="inj-save" style="flex:1;min-width:120px;padding:11px;border-radius:10px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Log it</button>'
+    +'<button id="inj-save-talk" style="flex:1;min-width:150px;padding:11px;border-radius:10px;border:1px solid #FC4C02;background:rgba(252,76,2,.10);color:#FC4C02;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Log it &amp; talk it through</button>'
+    +'<button id="inj-cancel" style="flex:1;min-width:100px;padding:11px;border-radius:10px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'
     +'</div>'
-    // WHAT THIS DOES NOT DO YET, said here rather than discovered. Talking it through with Dr.
-    // Smurkel, and having him propose the adjustment, needs the shared chat engine to understand an
-    // injury context - and that engine also serves the ride debrief and the pre-ride surfaces, which
-    // are not this page. That is a change to ask about before making.
+    // WHAT HE CAN AND CANNOT DO, said here rather than discovered halfway through the conversation.
     +'<div style="font-size:10.5px;color:var(--t3);line-height:1.5;margin-top:14px;padding-top:12px;border-top:1px solid var(--b1)">'
-    +'This logs the report and lets it govern what the plan proposes. Talking it through with Dr. '
-    +'Smurkel, and having him suggest the adjustment, is not built yet.</div>'
+    +'Dr. Smurkel reads this against your actual running and can suggest a target. He is a coach, '
+    +'not a doctor &mdash; he will not diagnose it, and nothing he suggests changes your plan until '
+    +'you press the button.</div>'
     +histHTML;
   modal.appendChild(sheet);
   modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
@@ -50662,8 +50959,10 @@ function runOpenIssueSheet_(){
   var drawSev=function(){ if(sl) sl.textContent=sev.value+' / 10 · '+word(+sev.value); };
   if(sev){ sev.oninput=drawSev; drawSev(); }
   var c=document.getElementById('inj-cancel'); if(c) c.onclick=function(){ modal.remove(); };
-  var sv2=document.getElementById('inj-save');
-  if(sv2) sv2.onclick=function(){
+  // ONE SAVE PATH, two exits. "Log it" records and stops; "Log it and talk it through" records and
+  // opens the debrief on the record it just wrote - so the conversation is always attached to a
+  // real entry rather than floating free and needing to be reconciled afterwards.
+  var doSave=function(thenTalk){
     var rec=injSave_({
       from:document.getElementById('inj-from').value||today,
       area:document.getElementById('inj-area').value,
@@ -50673,8 +50972,17 @@ function runOpenIssueSheet_(){
     });
     modal.remove();
     if(rec){ try{ toast(rec.area+' issue logged'); }catch(e){} }
+    if(rec && thenTalk && typeof runInjDebriefOpen_==='function'){ runInjDebriefOpen_(rec.id); return; }
     try{ renderRun(); }catch(e){}
   };
+  var sv2=document.getElementById('inj-save');
+  if(sv2) sv2.onclick=function(){ doSave(false); };
+  var svt=document.getElementById('inj-save-talk');
+  if(svt) svt.onclick=function(){ doSave(true); };
+  sheet.querySelectorAll('[data-inj-talk]').forEach(function(b){
+    b.onclick=function(){ var rid=b.getAttribute('data-inj-talk'); modal.remove();
+      if(typeof runInjDebriefOpen_==='function') runInjDebriefOpen_(rid); };
+  });
   sheet.querySelectorAll('[data-inj-res]').forEach(function(b){
     b.onclick=function(){ injSetStatus_(b.getAttribute('data-inj-res'),'resolved'); modal.remove();
       try{ toast('Marked resolved'); }catch(e){} try{ renderRun(); }catch(e){} };
