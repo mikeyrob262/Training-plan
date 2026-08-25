@@ -14258,6 +14258,10 @@ function _lgRefFor_(r, sport){
 function _lgRepaint_(){
   try{
     if(document.getElementById('LEGACY')) showLegacy();
+    // The RENDERED page first, nav state only as a fallback. See the LEGACY-DS mark in dsShowLegacy:
+    // _dsCurView is set by dsNav alone, and dsShowLegacy has other callers, so a nav-state test
+    // silently no-ops after one of those and every season click becomes a dead click.
+    else if(document.getElementById('LEGACY-DS')) dsShowLegacy();
     else if(typeof _dsCurView!=='undefined' && _dsCurView==='legacy') dsShowLegacy();
   }catch(e){}
 }
@@ -14658,6 +14662,12 @@ function dsShowLegacy(){
   var mc=document.getElementById('ds-content'); if(!mc) return;
   mc.innerHTML='';
   var wrap=document.createElement('div');
+  // THE PAGE'S OWN MARK, so a repaint can ask "is Legacy on screen" instead of inferring it from nav
+  // state. _lgRepaint_ used to test _dsCurView==='legacy', which only dsNav sets - and dsShowLegacy
+  // is also called DIRECTLY from elsewhere. After one of those calls the page was on screen with a
+  // stale _dsCurView, so clicking a season set _LG_SEL and repainted nothing: a dead click with no
+  // error anywhere. Measured in the browser, not reasoned about.
+  wrap.id='LEGACY-DS';
   wrap.style.cssText='padding:22px 24px 40px;overflow-y:auto;height:100%;box-sizing:border-box';
   wrap.innerHTML='<div style="font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Legacy</div>'
     +'<div style="font-size:13px;color:#8b93a7;margin:3px 0 18px">Your journey. Your story.</div>'
