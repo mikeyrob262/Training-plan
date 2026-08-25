@@ -48701,6 +48701,28 @@ function _runPhase2Mount_(scr){
   });
 }
 // Mobile entry point. Owns only its own chrome; every card comes from renderRunInto_.
+// RE-RENDER THE SURFACE THAT IS ACTUALLY SHOWING.
+//
+// renderRun() is the MOBILE renderer: it appends RUN-SCREEN, a position:fixed inset:0 overlay, to
+// document.body. Called while the DESKTOP Run page is open it does not refresh that page - it pastes
+// a whole second copy of every card on top of it, and every id on the page now exists TWICE.
+//
+// That is the reported bug. The plan card binds its four buttons with document.getElementById, which
+// returns the copy that comes FIRST in document order - the desktop one, underneath. The buttons the
+// athlete can actually see belong to the overlay and were never wired, so pressing them does nothing.
+// It explains the exact pattern reported: Move to 34-36 min worked, because when it was pressed there
+// was still only one copy; pressing it is what created the second one, and from that moment the other
+// three were dead.
+//
+// Nine call sites did this - the accept button, the target sheet, the issue sheet, the injury debrief
+// and the run log. All of them mean refresh the Run page, none of them mean open the mobile one.
+function _runRerender_(){
+  try{
+    if(document.getElementById('DS-RUN') && typeof dsShowRun==='function'){ dsShowRun(); return; }
+    if(typeof renderRun==='function') renderRun();
+  }catch(e){ try{ console.error('[run-rerender] '+((e&&e.message)||e)); }catch(_e){} }
+}
+try{ if(typeof window!=='undefined'){ window._runRerender_=_runRerender_; } }catch(e){}
 function renderRun(){
   var existing=document.getElementById('RUN-SCREEN');
   if(existing) existing.remove();
@@ -48982,12 +49004,18 @@ function renderRunInto_(scr, surface){
          })();
       scr.appendChild(raCard);
       setTimeout(function(){
-        var y=document.getElementById('run-rung-yes'), n=document.getElementById('run-rung-no');
-        var mset=document.getElementById('run-set-manual'), rep=document.getElementById('run-report-issue');
+        // BOUND THROUGH THE CARD, NEVER THROUGH document.getElementById. An id is only unique if
+        // nothing else on the page draws the same card, and the mobile renderer used to be able to
+        // paste a second copy of this whole page over the desktop one - at which point getElementById
+        // returned the copy underneath and the buttons the athlete could see had no handlers at all.
+        // _runRerender_ stops that happening; querying inside raCard means it cannot matter again.
+        var q=function(k){ return raCard.querySelector('#'+k); };
+        var y=q('run-rung-yes'), n=q('run-rung-no');
+        var mset=q('run-set-manual'), rep=q('run-report-issue');
         if(y) y.onclick=function(){
           var done=(typeof runRungAccept_==='function')?runRungAccept_(new Date()):null;
           if(done){ try{ toast('Weekday runs moved to '+done.struct); }catch(e){} }
-          try{ renderRun(); }catch(e){}
+          try{ _runRerender_(); }catch(e){}
         };
         // SET IT MYSELF. The athlete does not need a proposal to change the plan, and sometimes the
         // move is DOWN - which this card, by design, will never propose: it only ever fires when the
@@ -49586,7 +49614,7 @@ function openRunLog(){
       var shoe=shoeAdd_(run.shoe, 400, 0);
       if(shoe) shoe.miles=Math.round((parseFloat(shoe.miles||0)+run.distance)*10)/10;
     }
-    st.runs.push(run); sv(); modal.remove(); renderRun(); toast('Run logged! 🏃');
+    st.runs.push(run); sv(); modal.remove(); _runRerender_(); toast('Run logged! 🏃');
   };
   var cancelBtn=document.createElement('button');
   cancelBtn.style.cssText='width:100%;padding:12px;background:none;border:none;color:var(--t3);font-size:14px;cursor:pointer;font-family:inherit;margin-top:4px';
@@ -51201,7 +51229,7 @@ function runInjDebriefOpen_(id){
       +'</div>';
     var b=document.getElementById('inj-dbr-body'); if(b) b.scrollTop=b.scrollHeight;
     var cl=document.getElementById('inj-dbr-close');
-    if(cl) cl.onclick=function(){ modal.remove(); try{ renderRun(); }catch(e){} };
+    if(cl) cl.onclick=function(){ modal.remove(); try{ _runRerender_(); }catch(e){} };
     var send=document.getElementById('inj-dbr-send'), inp=document.getElementById('inj-dbr-in');
     var go=function(){
       var txt=(inp.value||'').trim();
@@ -51310,7 +51338,7 @@ function runOpenTargetSheet_(){
     var rec=(typeof runSetWeekdayTarget_==='function')?runSetWeekdayTarget_(v, new Date(), 'set by hand'):null;
     modal.remove();
     if(rec){ try{ toast('Weekday runs set to '+rec.struct); }catch(e){} }
-    try{ renderRun(); }catch(e){}
+    try{ _runRerender_(); }catch(e){}
   };
 }
 // ---- REPORT AN ISSUE ---------------------------------------------------------------------------
@@ -51414,7 +51442,7 @@ function runOpenIssueSheet_(){
     modal.remove();
     if(rec){ try{ toast(rec.area+' issue logged'); }catch(e){} }
     if(rec && thenTalk && typeof runInjDebriefOpen_==='function'){ runInjDebriefOpen_(rec.id); return; }
-    try{ renderRun(); }catch(e){}
+    try{ _runRerender_(); }catch(e){}
   };
   var sv2=document.getElementById('inj-save');
   if(sv2) sv2.onclick=function(){ doSave(false); };
@@ -51426,13 +51454,13 @@ function runOpenIssueSheet_(){
   });
   sheet.querySelectorAll('[data-inj-res]').forEach(function(b){
     b.onclick=function(){ injSetStatus_(b.getAttribute('data-inj-res'),'resolved'); modal.remove();
-      try{ toast('Marked resolved'); }catch(e){} try{ renderRun(); }catch(e){} };
+      try{ toast('Marked resolved'); }catch(e){} try{ _runRerender_(); }catch(e){} };
   });
   sheet.querySelectorAll('[data-inj-del]').forEach(function(b){
     b.onclick=async function(){
       if(typeof uiConfirm==='function' && !(await uiConfirm('Remove this report?',{danger:true}))) return;
       injDelete_(b.getAttribute('data-inj-del')); modal.remove();
-      try{ renderRun(); }catch(e){}
+      try{ _runRerender_(); }catch(e){}
     };
   });
 }

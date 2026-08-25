@@ -55,10 +55,17 @@ try{
     };
   })()`);
 
+  const hasFix=await ev(`typeof _runArmWatch_==='function'`);
+  const build=await ev(`(typeof window.__BUILD__!=='undefined')?String(window.__BUILD__):'(none)'`);
+  console.log('served build: '+build+'   _runArmWatch_ present: '+hasFix);
+  const tStart=await ev(`(function(){window.__armT0=performance.now();return 1})()`);
   const t0=await snap();
   console.log('AT FIRST RENDER (snapshot not yet armed):'); console.log(JSON.stringify(t0,null,1));
 
-  for(let i=0;i<40;i++){ if(await ev(`!!(typeof _storeV2Runs!=='undefined'&&_storeV2Runs&&_storeV2Runs.length)`)) break; await wait(1500); }
+  for(let i=0;i<80;i++){ if(await ev(`!!(typeof _storeV2Runs!=='undefined'&&_storeV2Runs&&_storeV2Runs.length)`)) break; await wait(500); }
+  const armMs=await ev(`Math.round(performance.now()-window.__armT0)`);
+  console.log('');
+  console.log('snapshot armed '+armMs+'ms after the page was opened (watcher window is 20000ms)');
   await wait(1500);
   const t1=await snap();
   console.log('\nAFTER THE SNAPSHOT ARMS (page NOT re-rendered):'); console.log(JSON.stringify(t1,null,1));
