@@ -119,7 +119,10 @@ console.log('\n' + Y + '=== 2. an even split is NOT a pattern ===' + X);
   ok('the sample is big enough to speak to', v.hrv.thin === false);
   ok('NEG: a near-even split does NOT raise a concern', v.tone !== 'watch');
   ok('...and the card does not tell him to ease off', v.head.indexOf('easing off') < 0);
-  ok('the split is stated with its denominator', v.body.join(' ').indexOf('3 of the 7') > 0);
+  // Pins the DENOMINATOR being present, not the article in front of it - the copy was shortened to
+  // fit a 682px viewport and "3 of the 7" became "3 of 7". A bare "3 drifted runs" would still fail,
+  // which is the claim that matters: a count without its denominator is the fabrication this guards.
+  ok('the split is stated with its denominator', /\b3 of (the )?7\b/.test(v.body.join(' ')));
   ok('...and named as close to even', /even split/.test(v.body.join(' ')));
 
   // NEGATIVE CONTROL: make the split lopsided and the concern MUST fire, or the rule is inert.
@@ -142,7 +145,7 @@ console.log('\n' + Y + '=== 3. the overlap is an identity, and it is read from t
   eq('all eight are the same runs', [v.same.n, v.same.of], [8, 8]);
   eq('so the verdict is that this IS the progress', v.tone, 'ok');
   ok('...and says so in words', /same running the card above/.test(v.head));
-  ok('the body states the overlap with both counts', /8 of these 8 are the same runs/.test(v.body.join(' ')));
+  ok('the body states the overlap with both counts', /8 of these 8 are the (same )?runs/.test(v.body.join(' ')));
   ok('...and names it as one behaviour, not two findings', /one behaviour, not two findings/.test(v.body.join(' ')));
 
   // NEGATIVE CONTROL: the run-ahead card carries .dk, NOT .date. Reading .date yields zero overlap

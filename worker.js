@@ -41841,13 +41841,17 @@ function _rtCardHTML_(){
     var glyph=x.neutral?((x.delta>=0)?'&uarr;':'&darr;'):(up?'&uarr;':'&darr;');
     var mag=(x.unit==='%'&&x.pct!=null)?(Math.abs(x.pct)+'%')
            :(x.unit==='%'?String(Math.abs(x.delta)):(Math.abs(x.delta)+' '+x.unit));
-    rows+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
+    // ONE ELEMENT PER DRIVER, so they can lay out two across. Nothing is removed - the sub-line
+    // under each driver is the number it moved FROM, which is the whole point of a delta.
+    rows+='<div style="min-width:0">'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px">'
       +'<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--d-t3);min-width:0">'
         +'<span style="width:6px;height:6px;border-radius:50%;background:'+x.col+';flex-shrink:0"></span>'
         +'<span style="overflow-wrap:break-word">'+x.label+'</span></span>'
       +'<span style="font-size:11px;font-weight:700;color:'+tone+';flex-shrink:0">'+glyph+' '+mag+'</span></div>'
       +(x.detail?('<div style="font-size:9.5px;color:var(--d-t4);margin:-3px 0 6px 13px">'+x.detail
-          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'');
+          +(x.sample?(' &middot; '+x.sample):'')+'</div>'):'')
+      +'</div>';
   });
   var andList=function(a){
     if(a.length<=1) return a[0]||'';
@@ -41860,31 +41864,42 @@ function _rtCardHTML_(){
       +andList(f.miss)+(f.miss.length>1?' need':' needs')+' a comparable stretch on both sides of this range'
       +(f.missWhy?(' &mdash; '+f.missWhy):'')+'.</div>';
   }
-  var head2='<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">The numbers behind it</div>'
-    +'<div style="font-size:9.5px;color:var(--d-t4);margin-bottom:7px">'+periodTxt+'</div>';
+  // The heading and the period it compares against, on ONE line. They were stacked, and this column
+  // is the one that sets the height of the whole card - two 11px lines here cost 11px of the page.
+  var head2='<div style="display:flex;align-items:baseline;gap:7px;margin-bottom:6px;min-width:0">'
+    +'<span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;flex-shrink:0">The numbers behind it</span>'
+    +'<span style="font-size:9.5px;color:var(--d-t4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+periodTxt+'</span></div>';
+  // TWO ACROSS. Four drivers stacked cost 96px of the tallest column in the card; the right-hand
+  // panel is 344px wide, so two columns of 165 hold the same content in half the height. This is
+  // a reflow, not a cut - every label, delta and sub-line is still on the page.
+  var grid='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">'+rows+'</div>';
   var panels=head2+(f.rows.length
-    ? (rows+missNote)
+    ? (grid+missNote)
     : ('<div style="font-size:11px;color:var(--d-t4);line-height:1.5">Not enough matched running history in this range to compare yet.</div>'+missNote));
 
-  var H='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">RUNNING TRAJECTORY</span>'
-    +toggle+'</div>';
+  // The provenance caption rides in the HEADER ROW rather than at the foot of the left column.
+  // It was three wrapped lines inside a 186px column - 55px of the tallest thing in the card -
+  // and here it is one line of a band that already exists. It still says exactly what it said.
+  var prov='<span style="font-size:9.5px;color:var(--d-t4);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+    +'Running only, 7-day averages &middot; scored from heart rate against an LTHR of '
+    +((typeof stLthr_==='function')?stLthr_():'&mdash;')
+    +' &middot; not the Dashboard numbers, which count every sport</span>';
+  var H='<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:7px">'
+    +'<span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em;flex-shrink:0">RUNNING TRAJECTORY</span>'
+    +prov+'<span style="margin-left:auto;flex-shrink:0">'+toggle+'</span></div>';
   H+='<div style="display:flex;gap:16px;min-width:0;flex:1">';
   // LEFT: the verdict in words, then the three current values.
   H+='<div style="width:186px;flex-shrink:0;display:flex;flex-direction:column;min-width:0">'
-    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.2;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
+    +'<div style="font-size:15.5px;font-weight:800;color:var(--d-head);line-height:1.25;overflow-wrap:break-word">'+v.head+' <span style="color:'+col+'">'+arrow+'</span></div>'
     +'<div style="font-size:11px;color:var(--d-t4);margin:2px 0 10px">'+vsTxt+'</div>'
     +legend
-    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:auto;line-height:1.45">Running only, 7-day averages &middot; '
-    +'scored from heart rate against an LTHR of '+((typeof stLthr_==='function')?stLthr_():'&mdash;')
-    +'. Not the Dashboard numbers, which count every sport.</div>'
     +'</div>';
   // MIDDLE: the ridge.
   // 110px, not 150. The page has to fit a viewport and the ridge was the single largest block of
   // pure height on it; at 110 the shape - flat, then the restart climbing - reads exactly the same,
   // because what this chart says is a DIRECTION and direction survives compression. Worth ~40px.
   H+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'
-    +'<div style="flex:1;min-height:110px">'+_rtChart_(w.pts, 600, 110)+'</div>'
+    +'<div style="flex:1;min-height:86px">'+_rtChart_(w.pts, 600, 110)+'</div>'
     +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-t4);margin-top:2px">'
       +'<span>'+(w.days>0?(w.days+' days ago'):'start')+'</span><span>Today</span></div>'
     +'</div>';
@@ -41896,7 +41911,7 @@ function _rtCardHTML_(){
     +'</div>';
   H+='</div>';
   // The interpretive line, in its own band, so it reads as the coach speaking rather than a caption.
-  H+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
+  H+='<div style="display:flex;align-items:center;gap:10px;margin-top:7px;padding:7px 11px;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 18l6-8 4 5 3-4 5 7z"/></svg>'
     +'<span style="font-size:11.5px;color:var(--d-t2);line-height:1.45">'+_rtInsight_(d, w, f, lay)+'</span></div>';
   return H;
@@ -41941,8 +41956,8 @@ function _rtMount_(scr){
     // cutting the insight band off inside overflow:hidden. Measured 165px of card holding 310px of
     // content. A page that does not fit should SCROLL, which is visible; a card that quietly eats
     // its last line is the silent-clip failure this codebase has already paid for twice.
-    card.style.cssText='margin:0 16px 11px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
-      +'border-radius:13px;padding:11px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'
+    card.style.cssText='margin:0 16px 6px;background:var(--d-panel,var(--s1));border:1px solid var(--d-edge,var(--b1));'
+      +'border-radius:13px;padding:9px 14px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'
       +'flex:1 0 auto;max-height:560px';
     card.innerHTML=_rtCardHTML_();
     scr.appendChild(card);
@@ -48070,8 +48085,11 @@ function _prSection_(){
   });
   // ONE sentence, not three. The scope caveat is the load-bearing half - it says what the board is
   // NOT - so that is the half that survives the trim.
-  var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months. '
-    +'Events with no result since '+_PR_BAND_LABEL+' are left off.';
+  // One line instead of two. The claim is unchanged - what it is ranked against, and what is left
+  // off - but at 9.5px in a 300px column every extra clause is another 11px of the tallest card on
+  // the page, and this card sets the height of the whole lower region.
+  var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months &middot; '
+    +'nothing since '+_PR_BAND_LABEL+' is left off.';
   return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:12px 14px;margin:0 16px 12px">'
     +_runRail_('rn-pb', 1, cards, { title:'Personal Bests', sub:'running &middot; '+cards.length+' events' })
     // ONE UNIT. Race pace lives INSIDE this card, below the board, because it is a target read
@@ -48130,14 +48148,12 @@ function dsShowRun(){
   // showed on a laptop because there the content is TALLER than the viewport - no slack, nothing to
   // reveal. An iPad is tall relative to its width, three columns make the content short, and the
   // slack becomes a black band.
-  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:4px 2px 10px;display:flex;flex-direction:column';
-  var hdr=document.createElement('div');
-  // The title and its subtitle on ONE line. Two stacked lines plus a 16px gap cost 47px for six
-  // words; side by side they cost 30 and read the same.
-  hdr.style.cssText='margin-bottom:10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap';
-  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
-    +'<div style="font-size:12px;color:var(--d-t3,var(--t3))">Coach Parry &middot; Zone 2 base build</div>';
-  wrap.appendChild(hdr);
+  wrap.style.cssText='flex:1;min-height:0;overflow-y:auto;padding:2px 2px 6px;display:flex;flex-direction:column';
+  // NO IN-PAGE HEADER ON DESKTOP. The sidebar already names this page and highlights it, so the
+  // title was 38px of vertical space spent restating the nav item next to it - and on a 682px
+  // viewport that is 6% of the page. The subtitle moves nowhere: Coach Parry and the block are
+  // stated on the plan card and the trajectory card, which are about the plan. Mobile keeps its
+  // header, because there is no chrome above the page there to say what it is.
   var host=document.createElement('div');
   host.id='DS-RUN-BODY';
   wrap.appendChild(host);
@@ -48527,17 +48543,18 @@ function _runDriftVerdict_(w, now){
     }
 
     if(out.same.checked){
-      out.body.push(out.same.n+' of these '+out.same.of+' are the same runs counted above as going '
-        +'longer than the plan asked for. Running further and running harder than prescribed is one '
-        +'behaviour, not two findings.');
+      // Said in one line rather than three. The finding is that the two cards are describing ONE
+      // behaviour, and that survives being stated once.
+      out.body.push(out.same.n+' of these '+out.same.of+' are the runs counted above as going longer '
+        +'than asked &mdash; further and harder is one behaviour, not two findings.');
     }
     if(out.hrv.have){
-      out.body.push(out.hrv.below+' of the '+out.hrv.rated+' drifted runs fell on a day with HRV below '
-        +'your '+out.hrv.base+' ms median (from '+out.hrv.baseN+' days). '
+      out.body.push(out.hrv.below+' of '+out.hrv.rated+' drifted runs fell below your '+out.hrv.base
+        +' ms HRV median. '
         +(out.hrv.thin
-            ? 'That is too few runs to tell a pattern from chance, so no relationship is claimed either way.'
-            : (hrvConcern ? 'That is most of them, which is the direction worth acting on.'
-                          : 'That is close to an even split - no relationship visible either way.')));
+            ? 'Too few to tell a pattern from chance, so nothing is claimed.'
+            : (hrvConcern ? 'That is most of them - the direction worth acting on.'
+                          : 'Close to an even split - no relationship visible.')));
     } else {
       out.body.push('No recovery baseline yet: this needs at least '+DRIFT_HRV_BASE_MIN
         +' days of HRV readings before it can say whether the drift lands on tired days.');
@@ -48630,7 +48647,7 @@ function _run10kCardHTML_(asSection){
     var curOpen=(typeof rideRefOk_==='function' && rideRefOk_(pl.current.ref));
     body+=line('Current form',
                'average of your last '+pl.current.runs+' runs, back to '+pl.current.since
-                 +(curOpen?(' \u00b7 opens the most recent of the '+pl.current.runs):''),
+                 +(curOpen?' \u00b7 opens the newest':''),
                pl.current.secPerMi, pl.current.sec, pl.current.ref);
   }
   var sub='Oct 18 2026'+(pl.daysOut!=null?(' &middot; '+pl.daysOut+' days out'):'');
@@ -48639,7 +48656,7 @@ function _run10kCardHTML_(asSection){
   // make sense of a target on another - so it is a SECTION of that card, not a neighbour of it. The
   // standalone card form is kept for any caller that still wants it; today there is none.
   if(asSection){
-    return '<div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--d-edge)">'
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--d-edge)">'
       +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:2px">'
       +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">10k race pace</span>'
       +'<span style="font-size:10.5px;color:var(--d-dim)">'+sub+'</span></div>'
@@ -48809,6 +48826,10 @@ try{ if(typeof window!=='undefined'){ window._runRemoveKeepScroll_=_runRemoveKee
 // and three columns of ~360px still hold every card on this page - the rails floor their cards at
 // 110-170px and take two across rather than three, which is a smaller loss than a whole extra
 // column of height.
+// NO FOURTH COLUMN. Tried and measured: at 1512 it takes the lower region from 441 to 435 - six
+// pixels - because the cards WRAP HARDER in a narrower column and hand back what the packing
+// saves. Personal Bests went 375 to 435 on its own, HR zones 166 to 213, drift 215 to 227. The
+// estimate said this was the single biggest lever; the measurement said it was nearly nothing.
 var _RUN_BAL_MIN3=1040, _RUN_BAL_MIN2=860, _RUN_BAL_GAP=10;
 function _runBalCols_(host){
   if(!host) return;
@@ -48852,6 +48873,26 @@ function _runBalCols_(host){
     owner[ix]=lo;
     heights[lo]+=hs[ix]+_RUN_BAL_GAP;
   });
+  // GREEDY IS NOT OPTIMAL, and the gap is worth real pixels. Longest-first drops the 46px stat
+  // strip onto the Personal Bests column, making it 421 where the ideal split of this content is
+  // 397 - and the region costs the TALLEST column, so that difference comes straight off the page.
+  // One improvement pass: move a card off the tallest column whenever that LOWERS the tallest
+  // column. Bounded, and it only ever accepts a strict improvement, so it cannot oscillate.
+  var tallest=function(){ var t=0; for(var k=1;k<n;k++) if(heights[k]>heights[t]) t=k; return t; };
+  for(var pass=0; pass<40; pass++){
+    var t=tallest(), moved=false;
+    for(var ix2=0; ix2<cards.length && !moved; ix2++){
+      if(owner[ix2]!==t) continue;
+      var cost=hs[ix2]+_RUN_BAL_GAP;
+      for(var k2=0; k2<n; k2++){
+        if(k2===t) continue;
+        if(Math.max(heights[t]-cost, heights[k2]+cost) < heights[t]-0.5){
+          heights[t]-=cost; heights[k2]+=cost; owner[ix2]=k2; moved=true; break;
+        }
+      }
+    }
+    if(!moved) break;
+  }
   // ...but APPEND in authored order, so within a column the page still reads in the order it was
   // written. Only the assignment is by size; the sequence a reader sees is untouched.
   cards.forEach(function(c,ix){ cols[owner[ix]].appendChild(c); });
@@ -48938,7 +48979,7 @@ function renderRunInto_(scr, surface){
       // two buttons should not be sharing a row. Lifted out of the balanced host by dsShowRun -
       // a Run-Training-only mechanism, so no shared layout code is involved.
       raCard.setAttribute('data-runfull','1');
-      raCard.style.cssText='margin:0 16px 10px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:10px 14px';
+      raCard.style.cssText='margin:0 16px 6px;background:var(--s2);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:10px 14px';
       var days=_ra.runs.map(function(r){ return r.ranMin+' min'; }).join(', ');
       var _t=_ra.target||{};
       var _inj=_ra.injury;

@@ -175,8 +175,12 @@ console.log('\n' + Y + '=== current form links, and says what it opens ===' + X)
   const html = M._run10kCardHTML_();
   ok('the row is clickable', /_runOpenRef_\(/.test(html));
   ok('...and says the number is an average', /average of your last \d+ runs/.test(html));
+  // The WORDING was shortened to fit a 682px viewport ("opens the most recent of the 6" -> "opens
+  // the newest"). The PROPERTY is what this pins and it is unchanged: the row must still say that
+  // the click opens one of the averaged runs, so it cannot be read as opening the run that set the
+  // number - there is no such run, because the number is an average.
   ok('...and says the click opens ONE of them, not the source of the number',
-     /opens the most recent of the \d+/.test(html));
+     /opens the (most recent of the \d+|newest)/.test(html));
 }
 
 console.log('\n' + Y + '=== one opener, correct on both surfaces ===' + X);
