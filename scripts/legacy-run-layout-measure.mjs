@@ -324,7 +324,7 @@ try {
              // you what "at a time" really is, whatever the CSS says it should be.
              rails:(function(){
                var out={};
-               ['rn-pb','rn-recent','rn-drift'].forEach(function(id){
+               ['rn-pb','rn-recent','rn-drift','rn-zones'].forEach(function(id){
                  var el=document.getElementById(id); if(!el) return;
                  var kids=[].slice.call(el.children); if(!kids.length) return;
                  var cw=Math.round(kids[0].getBoundingClientRect().width);
@@ -344,6 +344,41 @@ try {
                         childW:kids.map(function(k){ return Math.round(k.getBoundingClientRect().width); }),
                         maxChildW:Math.max.apply(null, kids.map(function(k){ return k.getBoundingClientRect().width; })) };
              })(),
+             // Counted off the RENDERED page: a duplicate heading is a thing you can see, so it is
+             // measured rather than inferred from where the source appends things.
+             headingCounts:(function(){
+               var n=0;
+               [].slice.call(document.querySelectorAll('#DS-RUN div')).forEach(function(d){
+                 if(d.children.length) return;
+                 if((d.innerText||'').trim().toUpperCase()==='RECENT RUNS') n++;
+               });
+               return { recent:n }; })(),
+             weeklyHeadingInCard:(function(){
+               var h=[].slice.call(document.querySelectorAll('#DS-RUN div')).filter(function(d){
+                 return !d.children.length && (d.innerText||'').trim().toUpperCase()==='WEEKLY BUILD'; })[0];
+               if(!h) return null;
+               // Its card is the ancestor that also holds the canvas. Separated, there is none.
+               for(var p2=h.parentElement; p2; p2=p2.parentElement){
+                 if(p2.querySelector && p2.querySelector('#run-miles-chart')) return true;
+                 if(p2.id==='DS-RUN') break;
+               }
+               return false; })(),
+             // textContent, NOT innerText: the heading is uppercased by text-transform, which is a
+             // RENDERING property, so an innerText search for the source spelling finds nothing.
+             tenkInsidePB:(function(){
+               var pb=document.getElementById('rn-pb'); if(!pb) return null;
+               for(var p3=pb.parentElement; p3; p3=p3.parentElement){
+                 if((p3.textContent||'').toLowerCase().indexOf('10k race pace')>=0) return true;
+                 if(p3.id==='DS-RUN') break;
+               }
+               return false; })(),
+             tenkStandalone:(function(){
+               // A standalone card would be a direct child of the body carrying the heading and NOT
+               // containing the PB rail.
+               var pb=document.getElementById('rn-pb');
+               return [].slice.call(document.querySelectorAll('#DS-RUN-BODY > div, #DS-RUN > div')).some(function(d){
+                 return (d.textContent||'').toLowerCase().indexOf('10k race pace')>=0 && !(pb && d.contains(pb));
+               }); })(),
              trajOutsideBody:(function(){
                var body=document.getElementById('DS-RUN-BODY');
                var t=[].slice.call(document.querySelectorAll('#DS-RUN div'))
@@ -366,7 +401,7 @@ try {
              noGrowth:(txt.indexOf('Cumulative miles')<0 && txt.indexOf('Running growth')<0),
              tenkAfterPB:(function(){ var a=txt.indexOf('Personal Bests'), b=txt.indexOf('10k race pace');
                return (a>=0 && b>a); }),
-             driftVerdict:(txt.indexOf('Nothing about the shin is recorded')>=0),
+             driftVerdict:(txt.indexOf('same running the card above is calling progress')>=0 || txt.indexOf('went over')>=0),
              bodyH:body?body.scrollHeight:null };
   })()`);
   ok('the page does not scroll sideways', !runD.page.docOverX && !runD.page.bodyOverX);
@@ -398,9 +433,19 @@ try {
   ok('...showing THREE at a time', runD.rails['rn-recent'] && runD.rails['rn-recent'].per === 3);
   ok('...and it actually scrolls', runD.rails['rn-recent'] && runD.rails['rn-recent'].overX);
   ok('Easy-run drift is a rail', !!runD.rails['rn-drift']);
+  ok('HR zones is a rail too', !!runD.rails['rn-zones']);
+  // THE THREE BUGS, read off the rendered page rather than the source.
+  ok('NEG: "Recent runs" appears exactly once', runD.headingCounts.recent === 1);
+  ok('the weekly-build heading sits inside its own card', runD.weeklyHeadingInCard === true);
+  ok('10k race pace is inside the Personal Bests card', runD.tenkInsidePB === true);
+  ok('NEG: ...and is not a card of its own any more', runD.tenkStandalone === false);
   ok('...and it actually scrolls', runD.rails['rn-drift'] && runD.rails['rn-drift'].overX);
   ok('every rail snaps, so a flick lands on a card', Object.keys(runD.rails).every(k => runD.rails[k].snaps));
-  ok('NEG: no rail card is narrower than its floor', Object.keys(runD.rails).every(k => runD.rails[k].cardW >= 170));
+  // Each rail has its OWN floor - zone cards hold "112-129" and do not need 170px, so one blanket
+  // number would either fail on them or be too low to protect the run names.
+  const FLOORS = { 'rn-pb': 170, 'rn-recent': 170, 'rn-drift': 170, 'rn-zones': 110 };
+  ok('NEG: no rail card is narrower than its own floor',
+     Object.keys(runD.rails).every(k => runD.rails[k].cardW >= (FLOORS[k] || 170)));
   ok('HR zones and Why sit side by side', runD.pair && runD.pair.cols === 2);
   ok('...neither running the full width', runD.pair && runD.pair.maxChildW < runD.pair.w * 0.6);
   Object.keys(runD.rails).forEach(k => info(k + ': ' + runD.rails[k].n + ' cards, ' +
@@ -492,7 +537,7 @@ try {
                         rows:Object.keys(tops).length, overX:(s.scrollWidth>s.clientWidth+1) }; }),
              clips:__CLIP(scr,'div[style*="white-space:nowrap"]').filter(function(c){ return c.clipped; }),
              noMap:(scr.querySelectorAll('.leaflet-container').length===0),
-             driftVerdict:(txt.indexOf('Nothing about the shin is recorded')>=0),
+             driftVerdict:(txt.indexOf('same running the card above is calling progress')>=0 || txt.indexOf('went over')>=0),
              totalH:scr.scrollHeight };
   })()`);
   ok('the run screen mounted', mRun.screen);
