@@ -43,8 +43,8 @@ const DECLARED = {
   // OPEN, NOT EXCUSED. These are genuinely cycling-only and should not be. Written down so the guard
   // can pass on the current tree while a NEW one still fails, and so the list is read out every run
   // rather than living in someone memory.
-  aiRenderOverview_: 'OPEN: every card is cycling. The run library is read once, for the header count, '
-    + 'and nowhere else - reported by the athlete 2026-08-26. A running summary card is being added.',
+  aiRenderOverview_: 'the page shell; the cards are assembled in aiRenderTab_, which now mounts '
+    + '_ovwRunCardHTML_ alongside the cycling ones - closed 2026-08-26',
   aiRenderRacing_: 'OPEN: You vs. You is cycling-scoped. Unreviewed.',
   aiRenderTrends_: 'OPEN: Trends is cycling-scoped. Unreviewed.'
 };

@@ -30669,7 +30669,13 @@ function aiRenderTab_(tab, ded){
   // The five cards go out as ONE ordered list and _balCols_ assigns them to columns from their
   // measured heights after mount. The order here is the page's authored section order - Goals,
   // DNA, Performance, Coach, Signals - which is what a reader sees top to bottom.
-  var _balCards=[goals, dna, perf, coach, signals].filter(function(c){ return c; });
+  // RUNNING JOINS THE COLUMN SET. It goes in with the other five rather than being appended
+  // below them, so the balancer places it by height like everything else and it is not visually
+  // demoted to a footnote. Placed after Performance, which is the cycling card it mirrors.
+  var runCard='';
+  try{ runCard=(typeof _ovwRunCardHTML_==='function')?(_ovwRunCardHTML_()||''):''; }
+  catch(_re){ try{ console.error('[ovw-run] '+((_re&&_re.message)||_re)); }catch(_e2){} }
+  var _balCards=[goals, dna, perf, runCard, coach, signals].filter(function(c){ return c; });
   if(_balCards.length){
     html+='<div class="ov-bal" style="margin-bottom:10px">'+_balCards.join('')+'</div>';
   }
@@ -31592,6 +31598,87 @@ try{
   if(_balMq.addEventListener) _balMq.addEventListener('change', _balAll_);
   else if(_balMq.addListener) _balMq.addListener(_balAll_);
 }catch(e){}
+// A RUNNING SUMMARY FOR THE OVERVIEW.
+//
+// Every card on this page was cycling - climbing feet, CTL/ATL/TSB, FTP, W/kg, the power-curve DNA
+// radar, best 5-minute and 20-minute power, 80/100/160km bests - while the header cited 2,210 runs.
+// The run library was read exactly once on the whole page, to print that number, and never again.
+//
+// This is NOT the Run Training page moved here. It is the same density as the cycling Performance
+// card and answers three questions: what are the standing times, is running fitness rising, and how
+// much is being run now. Anything deeper stays on the page built for it.
+//
+// EVERY NUMBER COMES FROM AN EXISTING SOURCE. _prCompute_ is the run PR layer the Personal Bests
+// card is built from, _rtSeries_ is the Run Training page's running CTL, and _msRunning_ is the run
+// row source the run milestones are scored from. Nothing here computes a run best or a run fitness
+// figure of its own - a fourth way of working out a 5k PR is exactly how two surfaces end up
+// disagreeing, which is the thing this app keeps paying for.
+function _ovwRunCardHTML_(){
+  var rows=[], series=[], runRows=[];
+  try{ var g=(typeof _prCompute_==='function')?_prCompute_():null; if(g&&g.rows) rows=g.rows; }catch(e){}
+  try{ series=(typeof _rtSeries_==='function')?(_rtSeries_()||[]):[]; }catch(e){}
+  try{ runRows=(typeof _msRunning_==='function')?(_msRunning_()||[]):[]; }catch(e){}
+  if(!rows.length && !series.length && !runRows.length) return '';
+
+  var mmss=function(sec){ if(!(sec>0)) return '&mdash;';
+    var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), x=Math.round(sec%60);
+    return h?(h+':'+('0'+m).slice(-2)+':'+('0'+x).slice(-2)):(m+':'+('0'+x).slice(-2)); };
+
+  // STANDING TIMES. The band best, not the career best - the same tier the Personal Bests card
+  // leads with, because a time set eleven years ago is history rather than a current standard.
+  var best='';
+  rows.slice(0,4).forEach(function(r){
+    var pick=r.band||r.career; if(!pick) return;
+    var isTime=(r.ev&&r.ev.kind==='time');
+    best+='<div style="flex:1 1 74px;min-width:0">'
+      +'<div style="font-size:9.5px;color:var(--d-t4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+      +aiEsc_(String((r.ev&&(r.ev.label||r.ev.name))||''))+'</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head);white-space:nowrap;margin-top:1px">'
+      +(isTime?mmss(pick.val):(Math.round(pick.val*10)/10+' mi'))+'</div>'
+      +'<div style="font-size:9px;color:var(--d-t4);white-space:nowrap">'+String(pick.date).slice(0,7)+'</div>'
+      +'</div>';
+  });
+
+  // RUNNING FITNESS, and its direction over 90 days. Running CTL, never the all-sport number.
+  var fit='';
+  if(series.length){
+    var last=series[series.length-1];
+    var backIdx=Math.max(0, series.length-91), was=series[backIdx];
+    var d=(last&&was&&was.ctl!=null&&last.ctl!=null)?Math.round((last.ctl-was.ctl)*10)/10:null;
+    var col=(d==null)?'var(--d-t3)':(d>=0?'#22c55e':'#ef4444');
+    fit='<div style="flex:1 1 96px;min-width:0">'
+      +'<div style="font-size:9.5px;color:var(--d-t4)">Running fitness</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head);white-space:nowrap;margin-top:1px">'
+      +(last&&last.ctl!=null?last.ctl:'&mdash;')+'</div>'
+      +'<div style="font-size:9px;color:'+col+';white-space:nowrap">'
+      +(d==null?'no trend yet':((d>=0?'+':'')+d+' in 90d'))+'</div></div>';
+  }
+
+  // WEEKLY MILEAGE, last 4 weeks against the 4 before - the same shape the trend cards use.
+  var vol='';
+  if(runRows.length){
+    var now=new Date(), cut=function(w){ var c=new Date(now); c.setDate(c.getDate()-w*7); c.setHours(0,0,0,0); return c; };
+    var a=cut(4), b=cut(8), m1=0, m2=0;
+    runRows.forEach(function(r){ if(!r.d) return;
+      if(r.d>=a && r.d<=now) m1+=r.mi; else if(r.d>=b && r.d<a) m2+=r.mi; });
+    var w1=Math.round(m1/4*10)/10, w2=Math.round(m2/4*10)/10;
+    var dv=(w2>0)?Math.round((w1-w2)/w2*100):null;
+    vol='<div style="flex:1 1 96px;min-width:0">'
+      +'<div style="font-size:9.5px;color:var(--d-t4)">Miles / week</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head);white-space:nowrap;margin-top:1px">'+w1+'</div>'
+      +'<div style="font-size:9px;color:var(--d-t4);white-space:nowrap">'
+      +(dv==null?('vs nothing in the 4 before'):('vs '+w2+' the 4 weeks before'))+'</div></div>';
+  }
+
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:13px 15px;margin-top:12px">'
+    +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:9px">'
+      +'<span style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.07em">Running</span>'
+      +'<span style="font-size:10px;color:var(--d-t4)">best times, fitness and volume &middot; the Run Training page has the rest</span>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start">'+best+fit+vol+'</div>'
+    +'</div>';
+}
+try{ if(typeof window!=='undefined'){ window._ovwRunCardHTML_=_ovwRunCardHTML_; } }catch(e){}
 function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;

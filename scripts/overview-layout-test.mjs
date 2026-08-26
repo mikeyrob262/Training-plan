@@ -201,7 +201,12 @@ ok('...and no invented composite score is rendered',
 // NAMES works and trimming DNA would only shrink the gap. Assignment is made from measured heights
 // after mount instead, which is why the markup must emit ONE ordered list rather than two columns.
 ok('Overview emits one ordered list, not pre-split columns', /class="ov-bal"/.test(asm));
-ok('...in the authored section order', /\[goals, dna, perf, coach, signals\]/.test(asm));
+// Running joined the set on 2026-08-26 - the page cited 2,210 runs in its header and every card on
+// it was cycling. It sits after Performance, the cycling card it mirrors, so the authored reading
+// order still runs Goals, DNA, Performance, then the running summary, then Coach and Signals. The
+// assertion is the ORDER, which is what the reader sees; adding a card is allowed, reordering the
+// existing ones is not.
+ok('...in the authored section order', /\[goals, dna, perf, runCard, coach, signals\]/.test(asm));
 ok('...and no longer hard-codes which cards go in which column',
    asm.indexOf('col([goals') < 0 && asm.indexOf('col([dna') < 0);
 ok('...and no card is emitted as a full-width section below the row', !/if\(signals\) html\+=/.test(asm));
