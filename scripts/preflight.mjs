@@ -1697,6 +1697,21 @@ try {
     fail('a render surface covers one sport and has not said why (see above).');
   }
 
+  // STEP 106 - a session the block prescribes must be selectable. Strength C was fully built - a
+  //           SESSION_DEFS entry, an exercise group, a calendar colour, a member of STRENGTH_POOL_,
+  //           its own swap path - and was missing from SESSION_DEF_ORDER, the list the picker is
+  //           built from, so it could not be chosen when it needed rescheduling. Strength D had the
+  //           identical gap. Same shape as PLAN_SESSION_TYPES holding 4 of the library's 7 types.
+  console.log(`${D}. checking every defined session can be selected...${X}`);
+  try {
+    const so = execSync('node scripts/session-picker-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a defined session type cannot be selected, or the picker offers one that does not exist (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

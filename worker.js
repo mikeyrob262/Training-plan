@@ -30821,66 +30821,79 @@ function _ovwCurrentStateHTML_(){
     { k:'Form (TSB)',    teach:'tsb', v:(f&&f.loaded)?f.tsb:null, d:(f&&f.loaded&&wk)?(f.tsb-wk.tsb):null, up:true },
     { k:'FTP',           teach:'ftp', v:ftp, unit:' W', d:null, up:true }
   ];
-  var H=_ovwLbl_('Current state', (f&&f.stale)?('<span style="font-size:10px;color:#f59e0b">'+aiEsc_(f.ageLabel||'stale')+'</span>'):'');
-  H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">';
-  cells.forEach(function(c){
-    // A dotted underline on the LABEL is the app's existing 'this explains itself' affordance
-    // (see the inline glossary term); the whole tile is the target so it is tappable on a phone.
-    var _tk=c.teach?(' data-metric-teach="'+c.teach+'" role="button" tabindex="0" title="Tap to learn what this means" style="min-width:0;cursor:pointer"'):' style="min-width:0"';
-    H+='<div'+_tk+'>'
-      +'<div style="font-size:10.5px;color:var(--d-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
-        +(c.teach?';border-bottom:1px dotted var(--d-edge3,rgba(255,255,255,.25));display:inline-block':'')+'">'+c.k+'</div>'
-      +'<div style="display:flex;align-items:baseline;margin-top:3px">'
-      +'<span style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1">'+((c.v==null)?_ovwDash_():(c.v+(c.unit||'')))+'</span>'
-      +_ovwDelta_(c.d, c.up)+'</div>'
-      +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:3px">'+((c.d==null)?'&nbsp;':'vs 7 days ago')+'</div></div>';
-  });
-  H+='</div>';
-  // RECOVERY LIVES HERE NOW, not on the Dashboard. It is diagnostic rather than plan-actionable -
-  // the Dashboard keeps Readiness, which is the daily verdict you act on - and this is the section
-  // that already answers "where am I right now", so the two readings sit together instead of one
-  // being a card of its own on a page with no room for it.
+  // ONE STRIP, NOT TWO STACKED BLOCKS.
   //
-  // The composite comes from _recoveryNow_, so the number cannot diverge from wherever else it is
-  // read, and the entry point survives the move: openRecoveryEditor_ is global and the label links
-  // straight to it, which is what the Dashboard card's Edit affordance did.
-  try{
-    var rec=(typeof _recoveryNow_==='function')?_recoveryNow_():null;
-    if(rec){
-      H+='<div style="height:1px;background:var(--d-edge);margin:14px 0 12px"></div>';
-      H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-        +'<span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">Recovery</span>'
-        +'<span onclick="if(window.openRecoveryEditor_)openRecoveryEditor_()" style="font-size:11px;font-weight:600;color:var(--c-green);cursor:pointer">Log today</span>'
-        +'</div>';
-      if(!rec.have){
-        // ABSENT SAYS ABSENT. No substitute number, no readiness verdict wearing a recovery label.
-        H+='<div style="font-size:12px;color:var(--d-dim);line-height:1.5">No HRV or resting heart rate for today. '
-          +'Recovery is a composite of those two against your own baseline, so it needs both before it can say anything.</div>';
-      } else {
-        var rcells=[
-          // THE PERCENT SIGN IS LOAD-BEARING. HRV+RHR against a baseline genuinely is a 0-100
-          // composite of two measurements, so it reads as a percentage - unlike a form-readiness
-          // BAND, which is one input scored into a range and must never be dressed as one. That
-          // distinction is why the old Recovery card had two modes and why only this one moved.
-          { k:'Recovery', v:rec.score, unit:'%', col:rec.col, sub:rec.label },
-          { k:'HRV',      v:rec.hrv,   unit:' ms', col:'var(--d-head)', sub:(rec.bHRV?('baseline '+Math.round(rec.bHRV)+' ms'):'no baseline yet') },
-          { k:'Resting HR', v:rec.rhr, unit:' bpm', col:'var(--d-head)', sub:(rec.bRHR?('baseline '+Math.round(rec.bRHR)+' bpm'):'no baseline yet') }
-        ];
-        H+='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">';
-        rcells.forEach(function(c){
-          H+='<div><div style="font-size:10.5px;color:var(--d-dim)">'+c.k+'</div>'
-            +'<div style="font-size:22px;font-weight:800;color:'+c.col+';line-height:1;margin-top:3px">'+c.v+c.unit+'</div>'
-            +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:3px">'+c.sub+'</div></div>';
-        });
-        H+='</div>';
-        // THE BASELINE'S SIZE, STATED. "vs your baseline" with two days behind it and with
-        // twenty-eight are different claims, and the score alone cannot tell them apart.
-        H+='<div style="font-size:9.5px;color:var(--d-dim);margin-top:9px">'
-          +(rec.baselineN?('Scored against your '+rec.baselineN+'-day baseline'):'Building a baseline - the score is provisional until there is history behind it')
-          +(rec.src?(' &middot; '+rec.src):'')+'</div>';
-      }
-    }
-  }catch(e){}
+  // Current state was a four-tile grid at 22px with a delta and a 'vs 7 days ago' line under each,
+  // then a rule, then a Recovery heading, then a three-tile grid the same size again: 232px of a
+  // 900px viewport for seven numbers. They are seven readings of one question - where am I right now
+  // - so they are one row of seven cells, with a divider marking where the training load ends and
+  // the recovery readings begin.
+  //
+  // NOTHING IS DROPPED. The teach targets stay on the four load cells, the stale badge stays, the
+  // Log today entry point stays, the deltas stay, and each cell keeps its own sub-line. The type is
+  // smaller and the vertical stacking is gone; the content is not.
+  var rec=null;
+  try{ rec=(typeof _recoveryNow_==='function')?_recoveryNow_():null; }catch(e){ rec=null; }
+  var H=_ovwLbl_('Current state',
+      ((f&&f.stale)?('<span style="font-size:10px;color:#f59e0b;margin-right:10px">'+aiEsc_(f.ageLabel||'stale')+'</span>'):'')
+    + '<span onclick="if(window.openRecoveryEditor_)openRecoveryEditor_()" style="font-size:11px;font-weight:600;color:var(--c-green);cursor:pointer">Log today</span>');
+
+  // A CELL. Small label, the number, its delta, and one sub-line - the same four parts the tall
+  // version had, laid across instead of down.
+  var cell=function(c){
+    var tk=c.teach?(' data-metric-teach="'+c.teach+'" role="button" tabindex="0" title="Tap to learn what this means" style="flex:1 1 104px;min-width:0;cursor:pointer"')
+                  :' style="flex:1 1 104px;min-width:0"';
+    return '<div'+tk+'>'
+      +'<div style="font-size:9.5px;color:var(--d-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+        +(c.teach?';border-bottom:1px dotted var(--d-edge3,rgba(255,255,255,.25));display:inline-block':'')+'">'+c.k+'</div>'
+      +'<div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">'
+      +'<span style="font-size:17px;font-weight:800;color:'+(c.col||'var(--d-head)')+';line-height:1.05;white-space:nowrap">'
+      +((c.v==null)?_ovwDash_():(c.v+(c.unit||'')))+'</span>'
+      +(c.d!=null?_ovwDelta_(c.d, c.up):'')+'</div>'
+      +'<div style="font-size:9px;color:var(--d-dim);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+      +(c.sub||'&nbsp;')+'</div></div>';
+  };
+
+  var cells=[
+    { k:'Fitness (CTL)', teach:'ctl', v:(f&&f.loaded)?f.ctl:null, d:(f&&f.loaded&&wk)?(f.ctl-wk.ctl):null, up:true,  sub:(f&&f.loaded&&wk)?'vs 7d ago':'' },
+    { k:'Fatigue (ATL)', teach:'atl', v:(f&&f.loaded)?f.atl:null, d:(f&&f.loaded&&wk)?(f.atl-wk.atl):null, up:false, sub:(f&&f.loaded&&wk)?'vs 7d ago':'' },
+    { k:'Form (TSB)',    teach:'tsb', v:(f&&f.loaded)?f.tsb:null, d:(f&&f.loaded&&wk)?(f.tsb-wk.tsb):null, up:true,  sub:(f&&f.loaded&&wk)?'vs 7d ago':'' },
+    { k:'FTP',           teach:'ftp', v:ftp, unit:' W', d:null, up:true, sub:'' }
+  ];
+  // THE RECOVERY READINGS, in the same row behind a divider. Absent still says absent - three
+  // dashes and the reason, never a substitute number.
+  var rcells=[];
+  if(rec && rec.have){
+    rcells=[
+      { k:'Recovery',   v:rec.score, unit:'%',    col:rec.col, sub:rec.label },
+      { k:'HRV',        v:rec.hrv,   unit:' ms',  sub:(rec.bHRV?('base '+Math.round(rec.bHRV)+' ms'):'no baseline') },
+      { k:'Resting HR', v:rec.rhr,   unit:' bpm', sub:(rec.bRHR?('base '+Math.round(rec.bRHR)+' bpm'):'no baseline') }
+    ];
+  } else if(rec){
+    rcells=[
+      { k:'Recovery',   v:null, sub:'no HRV or resting HR today' },
+      { k:'HRV',        v:null, sub:'not logged today' },
+      { k:'Resting HR', v:null, sub:'not logged today' }
+    ];
+  }
+  H+='<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 14px">';
+  cells.forEach(function(c){ H+=cell(c); });
+  if(rcells.length){
+    H+='<div style="width:1px;align-self:stretch;background:var(--d-edge);flex:0 0 1px"></div>';
+    rcells.forEach(function(c){ H+=cell(c); });
+  }
+  H+='</div>';
+  // THE BASELINE'S SIZE, STATED. 'vs your baseline' with two days behind it and with twenty-eight
+  // are different claims, and the score alone cannot tell them apart.
+  if(rec && rec.have){
+    H+='<div style="font-size:9px;color:var(--d-dim);margin-top:7px">'
+      +(rec.baselineN?('Recovery scored against your '+rec.baselineN+'-day baseline'):'Recovery baseline still building - the score is provisional')
+      +(rec.src?(' &middot; '+rec.src):'')+'</div>';
+  } else if(rec){
+    H+='<div style="font-size:9px;color:var(--d-dim);margin-top:7px">'
+      +'No HRV or resting heart rate for today. Recovery is a composite of those two against your own '
+      +'baseline, so it needs both before it can say anything.</div>';
+  }
   return _ovwCard_(H);
 }
 
@@ -51070,7 +51083,19 @@ var SESSION_DEFS={
 // easyRun and run10k were defined in SESSION_DEFS but missing from this list, and this list is
 // what SESSION_PRESETS - the editor's Session dropdown - is built from. So the two run sessions
 // the block actually prescribes could not be picked by name on any day.
-var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','easyRun','run10k','rest'];
+// THIS LIST DRIVES THE SESSION PICKER, so anything missing from it cannot be chosen - however
+// completely it is defined everywhere else. Strength C and D were fully built: entries in
+// SESSION_DEFS with their own exercise groups, members of STRENGTH_POOL_, their own calendar
+// colours, and strengthC has a dedicated swap path. They were simply never added here, so a
+// session the block prescribes and the calendar draws could not be selected when it needed
+// rescheduling. Same shape as PLAN_SESSION_TYPES holding 4 of the library's 7 types.
+//
+// Strength C's own comment says it exists to be SWAPPED IN when the legs need protecting - which
+// is a manual choice, and manual choices are made through this picker. Being outside the
+// automatic rotation is not a reason to be unselectable; it is the reason it must be selectable.
+//
+// Guarded by scripts/session-picker-test.mjs: every SESSION_DEFS key appears here or is declared.
+var SESSION_DEF_ORDER=['strengthA','strengthB','strengthC','strengthD','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','easyRun','run10k','rest'];
 // The strength rotation. SEPARATE pool from mobility's, same mechanism.
 //
 // The phase tables schedule two strength slots a week - Tuesday AM and Friday - and both were

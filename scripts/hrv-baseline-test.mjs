@@ -57,8 +57,13 @@ ok('a day needs BOTH hrv and rhr', /hv==null \|\| !isFinite\(hv\) \|\| rv==null 
 ok('the mix is counted, so the composition is knowable', /if\(d\.src==='garmin'\) out\.garmin\+\+; else out\.manual\+\+;/.test(SRC));
 
 console.log('\n' + Y + '=== the card states how much baseline there is ===' + X);
-ok('the sub-line names the day count', /'Scored against your '\+rec\.baselineN\+'-day baseline'/.test(SRC));
-ok('...and still says when it is building', /Building a baseline - the score is provisional/.test(SRC));
+// The wording gained a "Recovery" prefix when Current state was condensed into a single strip on
+// 2026-08-26 - the line now sits under seven cells rather than under three, so it has to say which
+// of them it is talking about. What is pinned is unchanged: the day count must be named, because
+// "vs your baseline" with two days behind it and with twenty-eight are different claims and the
+// score alone cannot tell them apart.
+ok('the sub-line names the day count', /your '\+rec\.baselineN\+'-day baseline'/.test(SRC));
+ok('...and still says when it is building', /baseline still building - the score is provisional/.test(SRC));
 ok('the reading source is still named alongside it', /\+\(rec\.src\?\(' &middot; '\+rec\.src\):''\)/.test(SRC));
 
 console.log('\n' + Y + '=== the baseline, exercised ===' + X);

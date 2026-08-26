@@ -117,8 +117,11 @@ console.log('\n' + Y + '=== no surface prints the fill as a score ===' + X);
   // form-readiness BAND, which is one input scored into a range and must never be dressed as one.
   {
     const cs = fnBody(src, '_ovwCurrentStateHTML_');
+    // Whitespace-tolerant: Current state was condensed into a single strip on 2026-08-26 and the
+    // cell literals were re-indented. The GUARANTEE is the percent sign on the composite, not the
+    // column the property happens to sit in.
     ok('the recovery composite keeps its percentage on its new surface',
-       /\{ k:'Recovery', v:rec\.score, unit:'%'/.test(cs));
+       /k:'Recovery',\s*v:rec\.score,\s*unit:'%'/.test(cs));
     ok('...computed once, in the shared accessor', /_recoveryNow_\(\)/.test(cs));
     ok('...and an absent reading says absent rather than substituting a band',
        /No HRV or resting heart rate for today/.test(cs));
