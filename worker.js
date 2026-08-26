@@ -24583,7 +24583,14 @@ function aiRenderGhost_(){
   });
   H+='</div>';
 
-  var head=function(t){ return '<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">'+t+'</div>'; };
+  // THE HEADER NAMES BOTH YEARS. It used to name the metric only - "Miles this season" - and which
+  // year was the live one sat in a 10.5px caption above one of the two numbers, easy to miss
+  // entirely. The matchup is the point of the card, so it goes at the top of it.
+  var head=function(t){ return '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.07em">'+t+'</span>'
+    +'<span style="font-size:11px;font-weight:800;letter-spacing:.02em"><span style="color:var(--d-accent,#fc5200)">'+g.meYear+'</span>'
+    +'<span style="color:var(--d-dim)"> vs </span><span style="color:var(--d-t3)">'+g.rivalYear+'</span></span>'
+    +'</div>'; };
   var race=function(label, me, rival, unit, dp){
     var fmt=function(v){ if(v==null) return '&mdash;'; return (dp?(Math.round(v*10)/10):Math.round(v)).toLocaleString()+(unit||''); };
     var lead=(me!=null&&rival!=null)?(me-rival):null;
@@ -24594,10 +24601,10 @@ function aiRenderGhost_(){
     return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:14px 16px;margin-bottom:10px">'
       +head(label)
       +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px">'
-      +'<div><div style="font-size:10.5px;color:var(--d-dim)">You, '+g.meYear+'</div>'
+      +'<div><div style="font-size:10.5px;font-weight:700;color:var(--d-accent,#fc5200)">'+g.meYear+' (you)</div>'
       +'<div style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1.1">'+fmt(me)+'</div></div>'
       +'<div style="font-size:12px;font-weight:800;color:'+col+';padding-bottom:4px">'+verdict+'</div>'
-      +'<div style="text-align:right"><div style="font-size:10.5px;color:var(--d-dim)">'+g.rivalYear+' Mikey</div>'
+      +'<div style="text-align:right"><div style="font-size:10.5px;font-weight:700;color:var(--d-t3)">'+g.rivalYear+' (rival)</div>'
       +'<div style="font-size:26px;font-weight:800;color:var(--d-t3);line-height:1.1">'+fmt(rival)+'</div></div></div>';
   };
 
@@ -24629,8 +24636,9 @@ function aiRenderGhost_(){
     svg+='<path d="'+path('a')+'" fill="none" stroke="#fc5200" stroke-width="2.4" vector-effect="non-scaling-stroke"/>';
     svg+='</svg>';
     return svg+'<div style="display:flex;gap:14px;margin-top:6px;font-size:10px;color:var(--d-dim)">'
-      +'<span><span style="display:inline-block;width:14px;height:2px;background:#fc5200;vertical-align:middle;margin-right:5px"></span>you</span>'
-      +'<span><span style="display:inline-block;width:14px;height:2px;background:#64748b;vertical-align:middle;margin-right:5px"></span>'+g.rivalYear+'</span>'
+      +'<span><span style="display:inline-block;width:14px;height:2px;background:#fc5200;vertical-align:middle;margin-right:5px"></span>'
+      +g.meYear+' (you)</span>'
+      +'<span><span style="display:inline-block;width:14px;height:2px;background:#64748b;vertical-align:middle;margin-right:5px"></span>'+g.rivalYear+' (rival)</span>'
       +'<span style="margin-left:auto">to day '+g.doy+' of the season</span></div>';
   };
 
