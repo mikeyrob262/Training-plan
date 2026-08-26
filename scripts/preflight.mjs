@@ -1712,6 +1712,21 @@ try {
     fail('a defined session type cannot be selected, or the picker offers one that does not exist (see above).');
   }
 
+  // STEP 107 - the Overview packs its own columns, and the DNA page is not dragged along. The shared
+  //           balancer is first-fit in authored order, which left 850 against 638 on this page. The
+  //           fix is an Overview-LOCAL copy; this pins that _balCols_ stays byte-identical, that
+  //           dna-bal still routes to it, and that the copy's packing is strictly better on the real
+  //           card set.
+  console.log(`${D}. checking the Overview balancer, and that DNA's is untouched...${X}`);
+  try {
+    const so = execSync('node scripts/ovw-balance-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Overview balancer regressed, or the shared one was modified (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

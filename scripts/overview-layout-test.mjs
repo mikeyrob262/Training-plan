@@ -241,7 +241,16 @@ ok('below the breakpoint it is a single column with no split', /if\(!wide\)\{/.t
 ok('...and the threshold is a named constant', /_BAL_MIN_W/.test(bal));
 // Rebalancing on every resize tick is the masonry behaviour this is meant to avoid.
 ok('it re-runs only when the breakpoint is actually crossed', /matchMedia/.test(src) && /__balWide===wide/.test(bal));
-ok('DNA Insights routes through the SAME balancer', /class="dna-bal"/.test(src) && /'ov-bal','dna-bal'/.test(src));
+// They no longer share a balancer, by instruction: the shared one is first-fit in authored order and
+// left the Overview at 850 against 638, and repacking it would have moved the DNA page for a problem
+// it does not have. The Overview took its own copy on 2026-08-26.
+//
+// What is pinned now is the part that still matters - DNA Insights is STILL BALANCED, and it is
+// balanced by the shared function, unmodified. scripts/ovw-balance-test.mjs holds _balCols_
+// byte-identical and checks the routing from the other side.
+ok('DNA Insights is still balanced', /class="dna-bal"/.test(src));
+ok('...through the shared balancer, which the Overview copy did not touch', /\['dna-bal', _balCols_\]/.test(src));
+ok('...and the Overview uses its own', /'ov-bal',\s*\(typeof _ovwBalCols_/.test(src));
 // Power Curve is deliberately NOT in the balanced set: Era 165 + Signature 175 = 340 against its
 // 869, so no two-column assignment of the three balances (best split still wastes 529, greedy 859).
 // Full width wastes ~10 - it already lays itself out two-up, radar beside key.

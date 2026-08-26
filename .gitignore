@@ -11,3 +11,6 @@ live_now.html
 
 # wrangler build/dev temp output - never source
 .wrangler/tmp/
+
+# wrangler local dev state - a 4MB sqlite WAL that changes on every dev run
+.wrangler/state/

@@ -31650,13 +31650,100 @@ function _balCols_(host){
     else      { B.appendChild(c); hb+=hs[i]+_BAL_GAP; }
   });
 }
+// OVERVIEW'S OWN BALANCER. A DELIBERATE COPY of _balCols_, not a change to it.
+//
+// _balCols_ is shared with the DNA page, and improving the packing there would move that page's
+// cards around for a problem it does not have. Same trade as _runBalCols_: some duplication in
+// exchange for a change that cannot reach a page nobody asked about.
+//
+// WHAT IS DIFFERENT, and why it matters here. _balCols_ walks cards in AUTHORED order and puts each
+// in whichever column is currently shorter - first-fit. On this page that produces:
+//   goals 323 -> A, dna 416 -> B, perf 177 -> A, running 96 -> B, coach 320 -> A, signals 96 -> B
+// which lands 850 against 638. The left column carries Goals, Performance and AI Coach while the
+// right runs 200px short, and no amount of trimming a card fixes an assignment that never
+// considered size.
+//
+// Longest-first assignment plus an improvement pass gets the same six cards to 769/663. The cards
+// are unchanged; only which column each one lands in.
+var _OVW_BAL_MIN_W=860, _OVW_BAL_GAP=10;
+function _ovwBalCols_(host){
+  if(!host) return;
+  var cards=host.__balCards;
+  if(!cards){ cards=Array.prototype.slice.call(host.children); host.__balCards=cards; }
+  if(!cards.length) return;
+  var wide=(host.getBoundingClientRect().width>=_OVW_BAL_MIN_W);
+  if(host.__balWide===wide && host.__balDone) return;
+  host.__balWide=wide; host.__balDone=true;
+  while(host.firstChild) host.removeChild(host.firstChild);
+  if(!wide){
+    host.setAttribute('style','display:flex;flex-direction:column;gap:'+_OVW_BAL_GAP+'px');
+    cards.forEach(function(c){ host.appendChild(c); });
+    return;
+  }
+  host.setAttribute('style','display:flex;gap:'+_OVW_BAL_GAP+'px;align-items:flex-start');
+  var mk=function(){ var d=document.createElement('div');
+    d.setAttribute('style','flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:'+_OVW_BAL_GAP+'px');
+    return d; };
+  var cols=[mk(), mk()], n=2;
+  cols.forEach(function(c){ host.appendChild(c); });
+  // MEASURE AT COLUMN WIDTH. Both columns are flex:1 1 0, so a card measured in the full-width host
+  // reads at twice its final width and every wrapped-text card comes out too short.
+  cards.forEach(function(c){ cols[0].appendChild(c); });
+  var hs=cards.map(function(c){ return c.getBoundingClientRect().height; });
+  var heights=[0,0], owner=[];
+  // BIGGEST FIRST.
+  cards.map(function(c,ix){ return ix; })
+       .sort(function(a,b){ return hs[b]-hs[a]; })
+       .forEach(function(ix){
+         var lo=0; for(var k=1;k<n;k++) if(heights[k]<heights[lo]) lo=k;
+         owner[ix]=lo; heights[lo]+=hs[ix]+_OVW_BAL_GAP;
+       });
+  // ...THEN AN IMPROVEMENT PASS. Longest-first is not optimal; move a card off the tallest column
+  // whenever that LOWERS the tallest column, then try swapping a pair for the same reason. Both only
+  // ever accept a strict improvement, so neither can oscillate, and both are bounded.
+  var tallest=function(){ var t=0; for(var k=1;k<n;k++) if(heights[k]>heights[t]) t=k; return t; };
+  for(var pass=0; pass<40; pass++){
+    var t=tallest(), moved=false, i, j, k2;
+    for(i=0;i<cards.length && !moved;i++){
+      if(owner[i]!==t) continue;
+      var cost=hs[i]+_OVW_BAL_GAP;
+      for(k2=0;k2<n;k2++){
+        if(k2===t) continue;
+        if(Math.max(heights[t]-cost, heights[k2]+cost) < heights[t]-0.5){
+          heights[t]-=cost; heights[k2]+=cost; owner[i]=k2; moved=true; break;
+        }
+      }
+    }
+    if(moved) continue;
+    // A SWAP, for the case a move cannot reach: the tallest column's card is too big to relocate on
+    // its own but can trade places with a smaller one.
+    for(i=0;i<cards.length && !moved;i++){
+      if(owner[i]!==t) continue;
+      for(j=0;j<cards.length && !moved;j++){
+        if(owner[j]===t) continue;
+        var o=owner[j], ci=hs[i]+_OVW_BAL_GAP, cj=hs[j]+_OVW_BAL_GAP;
+        if(Math.max(heights[t]-ci+cj, heights[o]-cj+ci) < heights[t]-0.5){
+          heights[t]+=cj-ci; heights[o]+=ci-cj; owner[i]=o; owner[j]=t; moved=true;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+  // APPEND IN AUTHORED ORDER, so within a column the page still reads the way it was written. Only
+  // the assignment is by size; the sequence a reader sees is untouched.
+  cards.forEach(function(c,ix){ cols[owner[ix]].appendChild(c); });
+}
+try{ if(typeof window!=='undefined'){ window._ovwBalCols_=_ovwBalCols_; } }catch(e){}
 // Re-run only when the one-column/two-column threshold is actually crossed. Rebalancing on every
 // resize tick would move cards around under the reader's hand, which is the masonry behaviour this
 // is meant to avoid.
 function _balAll_(){
-  ['ov-bal','dna-bal'].forEach(function(cls){
-    Array.prototype.forEach.call(document.getElementsByClassName(cls), function(el){
-      try{ _balCols_(el); }catch(e){}
+  // ov-bal uses the Overview's own copy; dna-bal keeps the shared one, so the DNA page's layout is
+  // byte-for-byte what it was.
+  [['ov-bal', (typeof _ovwBalCols_==='function')?_ovwBalCols_:_balCols_],
+   ['dna-bal', _balCols_]].forEach(function(pair){
+    Array.prototype.forEach.call(document.getElementsByClassName(pair[0]), function(el){
+      try{ pair[1](el); }catch(e){}
     });
   });
 }
