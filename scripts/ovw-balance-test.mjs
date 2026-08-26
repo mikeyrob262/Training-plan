@@ -70,11 +70,25 @@ console.log(Y + '=== the packing itself ===' + X);
   ok('both only accept a STRICT improvement, so neither can oscillate',
      (b.match(/< heights\[t\]-0\.5/g) || []).length === 2);
   ok('and it is bounded', /pass<40/.test(b));
+  // The append loop gained the stretch line, so this is matched across it. What is pinned is the
+  // property: the walk is over `cards` in AUTHORED order and each goes to its assigned column - not
+  // a walk over the assignment, which would reorder what the reader sees.
   ok('cards are APPENDED in authored order, so reading order is unchanged',
-     /cards\.forEach\(function\(c,ix\)\{ cols\[owner\[ix\]\]\.appendChild\(c\); \}\)/.test(b));
+     /cards\.forEach\(function\(c,ix\)\{[\s\S]{0,200}?cols\[owner\[ix\]\]\.appendChild\(c\);/.test(b));
   ok('heights are measured at COLUMN width, not in the full-width host',
      /cards\.forEach\(function\(c\)\{ cols\[0\]\.appendChild\(c\); \}\)/.test(b));
   ok('below the threshold it is one column in authored order', /flex-direction:column/.test(b));
+  // CARDS FILL THEIR COLUMN. _ovwCard_ carries align-self:start, which in the hero GRID means
+  // top-aligned and is correct there. In a flex COLUMN align-self is the CROSS axis, so the same
+  // declaration made each card shrink to its own content: measured in a 655px column, Your goals was
+  // 255 wide, Recent signals 269 and Performance 483, while DNA and AI Coach filled it only because
+  // their content happens to be wide. Overridden here rather than in _ovwCard_, because the property
+  // is doing a different and correct job in the hero row.
+  ok('cards are stretched to the column width', (b.match(/alignSelf='stretch'/g) || []).length === 2);
+  ok('...including the single-column path, or a narrow viewport keeps the ragged edge',
+     /cards\.forEach\(function\(c\)\{ try\{ c\.style\.alignSelf='stretch'/.test(b));
+  ok('NEG: _ovwCard_ itself is unchanged, so the hero row still top-aligns',
+     /align-self:start/.test(body(src, '_ovwCard_') || ''));
 }
 
 console.log('');

@@ -31677,7 +31677,7 @@ function _ovwBalCols_(host){
   while(host.firstChild) host.removeChild(host.firstChild);
   if(!wide){
     host.setAttribute('style','display:flex;flex-direction:column;gap:'+_OVW_BAL_GAP+'px');
-    cards.forEach(function(c){ host.appendChild(c); });
+    cards.forEach(function(c){ try{ c.style.alignSelf='stretch'; }catch(e){} host.appendChild(c); });
     return;
   }
   host.setAttribute('style','display:flex;gap:'+_OVW_BAL_GAP+'px;align-items:flex-start');
@@ -31731,7 +31731,20 @@ function _ovwBalCols_(host){
   }
   // APPEND IN AUTHORED ORDER, so within a column the page still reads the way it was written. Only
   // the assignment is by size; the sequence a reader sees is untouched.
-  cards.forEach(function(c,ix){ cols[owner[ix]].appendChild(c); });
+  //
+  // AND STRETCH TO THE COLUMN. _ovwCard_ carries align-self:start, which in the hero GRID means
+  // top-aligned - correct there, and why it is set. In a flex COLUMN align-self is the CROSS axis,
+  // so the same declaration made each card shrink to its own content: measured in a 655px column,
+  // Your goals was 255 wide, Recent signals 269 and Performance 483, while DNA and AI Coach filled
+  // it only because their content happens to be wide. Three cards with a ragged right edge and
+  // 400px of dead space beside them.
+  //
+  // Overridden HERE rather than in _ovwCard_, because the property is doing a different and
+  // correct job in the hero row and this is the only place that wants the other behaviour.
+  cards.forEach(function(c,ix){
+    try{ c.style.alignSelf='stretch'; }catch(e){}
+    cols[owner[ix]].appendChild(c);
+  });
 }
 try{ if(typeof window!=='undefined'){ window._ovwBalCols_=_ovwBalCols_; } }catch(e){}
 // Re-run only when the one-column/two-column threshold is actually crossed. Rebalancing on every
