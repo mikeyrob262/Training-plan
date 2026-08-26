@@ -22322,11 +22322,20 @@ function _msRunning_(){
     if(!r || r.deleted || !r.date) return null;
     var d=(typeof _ryDate_==='function')?_ryDate_(r.date):new Date(String(r.date).slice(0,10)+'T00:00:00');
     var mi=parseFloat(r.distance)||0;
-    // Duration by the same rule the run card uses: seconds when stored, otherwise a FORMATTED string
-    // parsed properly. Never a unary plus on it - 0:44:13 through parseFloat is 44,213.
+    // DURATION: movingSecs, else the FORMATTED time string. Deliberately NOT r.duration.
+    //
+    // r.duration on these rows is a bare number in SECONDS, while parseDurToMin reads a bare number
+    // as MINUTES - so feeding it one turned the 2014 Chicago Marathon, 4:11:30, into 905,400
+    // seconds and the lifetime total into 36,891 hours against a true 2,828. Same family as the
+    // 0:44:13-becomes-44,213 bug: a duration whose UNIT is implied by its shape, read by a parser
+    // that assumes a different one. r.time carries the unambiguous formatted string, and every row
+    // sampled has either movingSecs or that.
     var sec=0;
     if(r.movingSecs!=null && isFinite(+r.movingSecs)) sec=+r.movingSecs;
-    else if(typeof parseDurToMin==='function'){ var m2=parseDurToMin(r.duration||r.time); if(m2>0) sec=m2*60; }
+    else if(typeof parseDurToMin==='function'){ var m2=parseDurToMin(r.time); if(m2>0) sec=m2*60; }
+    // Nobody runs for twelve hours. A row claiming to is a unit error, not a session, and it must
+    // not be allowed to carry a lifetime total on its own.
+    if(!(sec>0 && sec<=43200)) sec=0;
     var elev=parseFloat((r.elevation!=null)?r.elevation:r.elev)||0;
     // Identity travels, for the same reason it does on the cycling side - a projection that keeps the
     // numbers and drops the name renders as an unnamed, unclickable row wherever one is listed.
