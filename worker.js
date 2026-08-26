@@ -30286,6 +30286,102 @@ function _saLibBody_(){
 }
 // Detail. Everything here comes from the SAME _saEvaluate_ record the attack page uses - the model
 // is not re-run differently, and nothing new is derived for this view.
+// ==================== A SEGMENT'S MAP ============================================================
+//
+// The detail page was distance, grade, bearing and a time - no way to see WHERE the segment is.
+//
+// WHAT IS ACTUALLY STORED, because it decides what can honestly be drawn: 2,017 segments, of which
+// 1,942 carry startLat/startLon and endLat/endLon. NONE carries a polyline - checked across all
+// 2,017. So the route cannot simply be read off the segment record, and a straight line between the
+// two endpoints would be a drawing of something that does not exist: the 7-mile lakefront segment
+// is not a straight line, and a map that says it is, is worse than no map.
+//
+// So the route is RECOVERED where it can be. An effort carries the date it was ridden; the ride
+// from that date carries a GPS track; clipping that track between the stored endpoints gives real
+// geometry that was actually ridden. Where no such track exists, the map shows the two endpoints
+// and says the line between them is not the route.
+var _SEG_SNAP_M=140;          // how close a track point must come to an endpoint to count as it
+function _segGeo_(id){
+  try{ var g=(typeof st!=='undefined'&&st&&st.segments)?st.segments[id]:null;
+    if(g && g.startLat!=null && g.startLon!=null && g.endLat!=null && g.endLon!=null) return g; }catch(e){}
+  return null;
+}
+function _segMetres_(aLat,aLon,bLat,bLon){
+  var R=6371000, t=Math.PI/180;
+  var dLat=(bLat-aLat)*t, dLon=(bLon-aLon)*t;
+  var s1=Math.sin(dLat/2), s2=Math.sin(dLon/2);
+  var h=s1*s1+Math.cos(aLat*t)*Math.cos(bLat*t)*s2*s2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+// The best real track for this segment, or null. Newest effort first - a recent ride is the one most
+// likely to still carry a track, and the route is the same either way.
+function _segRoute_(seg){
+  try{
+    var effs=(seg.efforts||[]).slice().sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
+    var rides=(typeof st!=='undefined'&&st&&st.rides)?st.rides:[];
+    for(var ei=0; ei<effs.length && ei<12; ei++){
+      var day=String(effs[ei].d||'').slice(0,10); if(!day) continue;
+      for(var ri=0; ri<rides.length; ri++){
+        var r=rides[ri];
+        if(!r || r.deleted || String(r.date||'').slice(0,10)!==day) continue;
+        var la=r.lats||r.gpsLats, lo=r.lons||r.gpsLons;
+        if(!la || !lo || la.length<8 || la.length!==lo.length) continue;
+        var bi=-1, bd=1e12, ej=-1, ed=1e12, k;
+        for(k=0;k<la.length;k++){
+          var d1=_segMetres_(+la[k],+lo[k],+seg.startLat,+seg.startLon);
+          if(d1<bd){ bd=d1; bi=k; }
+          var d2=_segMetres_(+la[k],+lo[k],+seg.endLat,+seg.endLon);
+          if(d2<ed){ ed=d2; ej=k; }
+        }
+        // BOTH ends must actually be on this ride. One end matching is a ride that passed nearby,
+        // and clipping to it would draw a route that was never ridden.
+        if(bd>_SEG_SNAP_M || ed>_SEG_SNAP_M) continue;
+        var i0=Math.min(bi,ej), i1=Math.max(bi,ej);
+        if(i1-i0 < 2) continue;
+        var lats=la.slice(i0,i1+1), lons=lo.slice(i0,i1+1);
+        // And the clipped length must resemble the segment's stated distance, or the match is wrong.
+        var m=0; for(k=1;k<lats.length;k++) m+=_segMetres_(+lats[k-1],+lons[k-1],+lats[k],+lons[k]);
+        var mi=m/1609.34, want=+seg.distMi||0;
+        if(want>0 && (mi < want*0.6 || mi > want*1.6)) continue;
+        return { lats:lats, lons:lons, date:day, miles:Math.round(mi*100)/100, points:lats.length };
+      }
+    }
+  }catch(e){}
+  return null;
+}
+// The map block for the detail page. Returns HTML and schedules its own mount - the caller inserts
+// this string synchronously, so a setTimeout(0) runs after it is in the document.
+function _segMapHTML_(id){
+  var seg=_segGeo_(id);
+  if(!seg) return '<div style="margin-top:16px;font-size:11px;color:var(--d-dim)">No coordinates stored for this segment, so it cannot be placed on a map.</div>';
+  var mapId='seg-map-'+String(id).replace(/[^A-Za-z0-9_-]/g,'');
+  var route=_segRoute_(seg);
+  setTimeout(function(){
+    try{
+      if(typeof L==='undefined') return;
+      if(route && typeof renderRideMap_==='function'){
+        renderRideMap_(mapId, route.lats, route.lons, { fit:true });
+        return;
+      }
+      var m=(typeof _mountMap_==='function')?_mountMap_(mapId,{zoomControl:true,scrollWheelZoom:false,attributionControl:false}):null;
+      if(!m) return;
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(m);
+      var a=[+seg.startLat,+seg.startLon], b=[+seg.endLat,+seg.endLon];
+      L.circleMarker(a,{radius:6,color:'#22c55e',fillColor:'#22c55e',fillOpacity:1,weight:2}).addTo(m).bindTooltip('Start');
+      L.circleMarker(b,{radius:6,color:'#ef4444',fillColor:'#ef4444',fillOpacity:1,weight:2}).addTo(m).bindTooltip('Finish');
+      // DASHED, and captioned as not-the-route. A solid line here would read as the path ridden.
+      L.polyline([a,b],{color:'#8b97ab',weight:2,dashArray:'5,6',opacity:.8}).addTo(m);
+      m.fitBounds(L.latLngBounds([a,b]).pad(0.35));
+    }catch(err){ try{ console.error('[seg-map] '+((err&&err.message)||err)); }catch(e2){} }
+  },0);
+  var note=route
+    ? ('Route from your ride on '+route.date+', clipped between the segment ends &middot; '+route.miles+' mi across '+route.points+' track points.')
+    : ('Start and finish only. No stored polyline for this segment and no GPS track from a day you rode it, '
+       +'so the dashed line is the direct line between the ends &mdash; not the route.');
+  return '<div id="'+mapId+'" style="height:220px;margin-top:16px;border-radius:12px;overflow:hidden;border:1px solid var(--d-edge);background:var(--d-inset)"></div>'
+    +'<div style="font-size:10px;color:var(--d-dim);margin-top:5px;line-height:1.45">'+note+'</div>';
+}
+try{ if(typeof window!=='undefined'){ window._segMapHTML_=_segMapHTML_; window._segRoute_=_segRoute_; } }catch(e){}
 function _saDetail_(e, ctx){
   var esc=aiEsc_, LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   var H='<div><button onclick="saClose_()" style="background:none;border:1px solid #232a38;color:var(--d-t3);font-size:11.5px;border-radius:8px;padding:6px 11px;cursor:pointer;font-family:inherit">&lsaquo; All segments</button></div>';
@@ -30296,6 +30392,9 @@ function _saDetail_(e, ctx){
     +(e.grade!=null?(' &middot; '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')
     +(e.bearing!=null?(' &middot; bearing '+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')'):'')
     +'</div>';
+  // WHERE IT IS, before what it costs. This is the first question the page was not answering.
+  try{ H+=(typeof _segMapHTML_==='function')?_segMapHTML_(e.id):''; }
+  catch(_me){ try{ console.error('[seg-map] '+((_me&&_me.message)||_me)); }catch(_e2){} }
   // standing time + how it was set
   H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px">';
   H+='<div><div style="'+LBL+'">'+(e.prFromHistory?'Best recorded':'Strava PR')+'</div>'

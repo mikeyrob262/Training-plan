@@ -63,8 +63,13 @@ console.log('\n' + Y + '=== EVERY mount routes through the guard, not just the r
   const bare = (noCmt(src).match(/=L\.map\(/g) || []).length;
   ok('exactly one L.map() construction remains, inside the helper (' + bare + ')', bare === 1);
   ok('...and it is the helper\'s', /m=L\.map\(el/.test(MOUNT));
+  // The count is a tripwire, not the guarantee - the guarantee is the single bare L.map() above,
+  // which cannot be satisfied by an unguarded mount however many sites there are. Five now: the
+  // segment detail page gained one when it stopped being text-only. Raise this deliberately when a
+  // real mount site is added; never to make a failure go away.
   const routed = (noCmt(src).match(/_mountMap_\(/g) || []).length - 1;   // minus the definition
-  ok('all four mount sites route through it (' + routed + ')', routed === 4);
+  ok('all five mount sites route through it (' + routed + ')', routed === 5);
+  ok('...including the segment detail map', /_mountMap_\(mapId,\{zoomControl:true,scrollWheelZoom:false,attributionControl:false\}\)/.test(noCmt(src)));
   ok('the ride renderer uses it and bails on null', /var map=_mountMap_\(mapId,/.test(RENDER) && /if\(!map\) return null;/.test(RENDER));
   ok('the segment map now also removes its previous instance', /if\(_saMap && _saMap!==map\) _saMap\.remove\(\)/.test(noCmt(src)));
   ok('the wind map reports a failed mount instead of swallowing it', /WM: mount failed/.test(noCmt(src)));
