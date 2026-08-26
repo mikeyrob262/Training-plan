@@ -1666,6 +1666,22 @@ try {
     fail('the analysis tab is giving an activity the wrong sport metrics (see above).');
   }
 
+  // STEP 104 - a short effort next to a long block is not evidence of a shortfall. Reported on a 4x4:
+  //           the last rep came back as 1:41 beside a 13:49 block at 122W and the debrief graded the
+  //           session as a 3x4. The segmentation is Intervals.icu's - power surges, not device laps -
+  //           so a dip mid-effort can end one segment and start another. Pins that it REFUSES to
+  //           grade rather than asserting a shortfall, and that a genuinely short session is still
+  //           not excused.
+  console.log(`${D}. checking a split interval is not reported as a shortfall...${X}`);
+  try {
+    const so = execSync('node scripts/interval-split-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the interval matcher is grading a split effort as a missed one (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

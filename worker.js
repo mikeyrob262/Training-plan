@@ -35737,8 +35737,17 @@ function _icuFetchIntervals_(r, cb){
         if(!j || !Array.isArray(j.icu_intervals)){ cb(null); return; }
         var work=j.icu_intervals.filter(function(v){ return v.type==='WORK'; }).map(function(v){
           return { dur:(v.moving_time||v.elapsed_time||0), watts:(v.average_watts!=null?Math.round(v.average_watts):null), hr:(v.average_heartrate!=null?Math.round(v.average_heartrate):null) }; });
+        // EVERY SEGMENT, IN ORDER - not just the WORK ones. The matcher needs to see what SITS NEXT TO
+        // a short effort to tell a session that stopped early from one whose segmentation split it.
+        // Keeping only WORK threw away exactly the evidence needed and left the shortfall unexplained.
+        var all=j.icu_intervals.map(function(v){
+          return { type:String(v.type||''), dur:(v.moving_time||v.elapsed_time||0),
+                   watts:(v.average_watts!=null?Math.round(v.average_watts):null),
+                   hr:(v.average_heartrate!=null?Math.round(v.average_heartrate):null) }; });
         var groups=(j.icu_groups||[]).map(function(g){ return { count:g.count||1, dur:(g.moving_time||0), watts:(g.average_watts!=null?Math.round(g.average_watts):null) }; });
-        r._icuIv={ work:work, groups:groups, at:Date.now() };
+        // v:2 carries the full segment list. Anything cached before this stamp has only the WORK
+        // assume the segment list is there - an absent list means "cannot tell", never "nothing next".
+        r._icuIv={ v:2, work:work, all:all, groups:groups, at:Date.now() };
         try{ sv(); }catch(e){}
         cb(r._icuIv);
       }).catch(function(){ cb(null); });
@@ -35765,7 +35774,43 @@ function _debriefMatch_(steps, icu){
   var targetSec=M*60, tol=Math.max(45, Math.round(targetSec*0.35));
   var work=(icu.work||[]);
   var near=work.filter(function(w){ return Math.abs(w.dur-targetSec)<=tol; });
-  if(!(near.length>=N-1 && near.length<=N+1)) return { mapped:false, reason:'no-structure', found:work.length, targetN:N, targetM:M };
+
+  // A SHORT EFFORT NEXT TO A LONG BLOCK IS NOT EVIDENCE OF A SHORTFALL.
+  //
+  // Reported on a 4x4: the last rep came back as 1:41 at 208W followed by a 13:49 block averaging
+  // 122W, and the debrief graded the session as a 3x4 - the short rep fell outside the duration
+  // tolerance, was dropped from the matched set, and three efforts were reported as if that were the
+  // session. The athlete had ridden the full four.
+  //
+  // THE SEGMENTATION IS NOT OURS. These come from Intervals.icu's icu_intervals, which are power
+  // surges rather than device laps, so a brief dip mid-effort can end one segment and start another.
+  // We were repeating their split as though it were a finding of our own.
+  //
+  // WHAT THIS CAN AND CANNOT DECIDE. It cannot confirm the effort resumed: that needs the raw power
+  // stream, and the stored streams run 57-129 points for a whole ride - about fifty seconds a sample
+  // - which cannot resolve a dip of a few seconds. So this does NOT claim the rep was completed. It
+  // refuses to claim the opposite, which is what it was doing. The numbers are handed to the reader,
+  // who can see what the app cannot: a 13:49 block at 122W is arithmetically what 2:19 at 208W
+  // followed by 11:30 at 105W averages out to.
+  var segs=(icu.all&&icu.all.length)?icu.all:null;
+  var split=null;
+  if(segs && near.length<N){
+    for(var si=0; si<segs.length-1; si++){
+      var a=segs[si], b=segs[si+1];
+      if(!a || a.type!=='WORK') continue;
+      if(a.dur>=targetSec-tol) continue;                 // long enough to be counted already
+      if(!b || b.type==='WORK') continue;                // a WORK-WORK pair is a different question
+      if(a.dur+b.dur < targetSec) continue;              // no room for the rest of the rep inside it
+      split={ shortSec:a.dur, shortWatts:a.watts, nextSec:b.dur, nextWatts:b.watts, nextType:b.type };
+      break;
+    }
+  }
+  if(split) return { mapped:false, reason:'split-effort', found:work.length, targetN:N, targetM:M,
+                     near:near.length, split:split, lo:lo, hi:hi };
+  // Short of the prescribed count with no such signature, and no segment list to look for one in, is
+  // still not something to grade silently - report it as unresolved rather than as a clean N-1.
+  if(near.length<N && !segs) return { mapped:false, reason:'unresolved', found:work.length, targetN:N, targetM:M, near:near.length };
+  if(!(near.length>=N && near.length<=N+1)) return { mapped:false, reason:'no-structure', found:work.length, targetN:N, targetM:M };
   var pairs=near.slice(0,N).map(function(w,i){
     return { i:i+1, actual:{ sec:w.dur, watts:w.watts, hr:w.hr },
              inBand:(w.watts!=null && lo!=null && hi!=null && w.watts>=lo && w.watts<=hi),
@@ -35777,6 +35822,25 @@ function _debriefRender_(m, ACC){
   var head=_debriefHead_(ACC);
   if(!m || !m.mapped){
     if(m && m.reason==='not-structured') return head+'<div style="font-size:12px;color:var(--t3);line-height:1.5">A continuous ride, not an interval session — nothing to break down effort by effort.</div>';
+    if(m && m.reason==='split-effort'){
+      var sp=m.split, mm=function(s){ return (typeof _fmtMMSS_==='function')?_fmtMMSS_(s):(Math.round(s/60)+'m'); };
+      return head+'<div style="font-size:12px;color:var(--t3);line-height:1.55">'
+        +'Not graded, because the recording cannot settle it. Your '+m.targetN+'&times;'+m.targetM
+        +' came back with one effort of only <b style="color:var(--t2)">'+mm(sp.shortSec)+'</b>'
+        +(sp.shortWatts!=null?(' at '+sp.shortWatts+'W'):'')
+        +', immediately followed by <b style="color:var(--t2)">'+mm(sp.nextSec)+'</b>'
+        +(sp.nextWatts!=null?(' averaging '+sp.nextWatts+'W'):'')+'. '
+        +'These segments come from Intervals, which splits on power surges rather than on your laps, '
+        +'so a short dip mid-effort can end one segment and start another &mdash; and the rest of that '
+        +'rep would then sit inside the block after it, pulling its average up. '
+        +'The stored power trace here is too coarse to tell the two apart, so nothing is scored: '
+        +'this is not a shortfall, and it is not a completed set either.</div>';
+    }
+    if(m && m.reason==='unresolved') return head+'<div style="font-size:12px;color:var(--t3);line-height:1.55">'
+      +'Not graded. Your '+m.targetN+'&times;'+m.targetM+' came back with '+m.near+' effort'+(m.near===1?'':'s')
+      +' at the prescribed length, and there is no segment detail on file to say whether the rest were '
+      +'ridden and recorded differently. Reporting '+m.near+' as the session would be a shortfall this '
+      +'app cannot actually see.</div>';
     return head+'<div style="font-size:12px;color:var(--t3);line-height:1.5">Your ride didn’t record a clean '+(m?m.targetN:'')+'×'+(m?m.targetM:'')+' — Intervals found '+(m?m.found:0)+' efforts that don’t line up to the prescription, so no forced comparison.</div>';
   }
   var nIn=m.pairs.filter(function(p){ return p.inBand; }).length;
