@@ -26155,7 +26155,17 @@ function _dnaCurveNarrative_(C){
       ? 'Your short-duration power is holding better than your long-duration power right now.'
       : 'Your long-duration power is holding better than your short-duration power right now.');
 }
-function _dnaRadarHTML_(){
+// COMPACT IS AN OPTION, NOT A CHANGE OF BEHAVIOUR. Three surfaces draw this radar: the DNA deep
+// dive, the DNA tab, and the Overview summary card. On the first two the chart IS the page and it
+// should be large. On the Overview it is one card among six, and at 764px it was 80% of the whole
+// card region - the single reason that page does not fit.
+//
+// So opts.compact shrinks the chart and drops the two long explainer paragraphs, and the default
+// with no argument is byte-for-byte what the other two surfaces already render. Only the Overview
+// passes it.
+function _dnaRadarHTML_(opts){
+  var cmp=!!(opts&&opts.compact);
+  var CHART_W=cmp?300:460;
   var P=_dnaPowerAxes_();
   if(!P || !P.ok){
     return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);line-height:1.55">Power profile needs a power curve on at least '
@@ -26168,7 +26178,7 @@ function _dnaRadarHTML_(){
       var W=430, CX=215, CY=196, R=120, n=rows.length;
       var ang=function(i){ return (-Math.PI/2)+(i*2*Math.PI/n); };
       var at=function(i,frac){ var a=ang(i), rr=R*Math.max(0,Math.min(1,frac)); return {x:CX+rr*Math.cos(a), y:CY+rr*Math.sin(a)}; };
-      var svg='<svg viewBox="0 0 '+W+' 392" style="width:100%;max-width:460px;height:auto" role="img" aria-label="Power curve: best power at ten durations, last '+C.days+' days against all time">';
+      var svg='<svg viewBox="0 0 '+W+' 392" style="width:100%;max-width:'+CHART_W+'px;height:auto" role="img" aria-label="Power curve: best power at ten durations, last '+C.days+' days against all time">';
       // rings at 25/50/75/100% of each spoke's own all-time best
       [0.25,0.5,0.75,1].forEach(function(f){
         var pts=[]; for(var i=0;i<n;i++){ var q=at(i,f); pts.push(q.x.toFixed(1)+','+q.y.toFixed(1)); }
@@ -26248,13 +26258,18 @@ function _dnaRadarHTML_(){
       // with the key stretched under it.
       return '<div style="margin-top:8px">'
         +'<div style="display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center">'
-        +'<div style="flex:0 1 460px;min-width:280px">'+svg+'</div>'
+        +'<div style="flex:0 1 '+CHART_W+'px;min-width:'+(cmp?220:280)+'px">'+svg+'</div>'
         +'<div style="flex:1 1 280px;min-width:250px">'+bandKey+legend+susNote+holdNote
-        +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.5">Every watt figure opens the ride that set it &mdash; the rim opens your all-time ride for that duration, the dot on the shape opens your best from the last '+C.days+' days.</div>'
+        +(cmp?'':'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.5">Every watt figure opens the ride that set it &mdash; the rim opens your all-time ride for that duration, the dot on the shape opens your best from the last '+C.days+' days.</div>')
         +'</div>'
         +'</div>'+narHTML
-        +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.55">Every spoke is its own scale &mdash; the rim is your all-time best AT THAT DURATION and the filled shape is the last '
-        +C.days+' days as a share of it, so a 782 W sprint never dwarfs a 186 W hour. Ten durations because ten is what the imports actually store; 3m, 15m and 45m are not recorded and are not invented.</div></div>';
+        // THE SCALE NOTE IS NOT OPTIONAL INFORMATION - without it the shape reads as if a 782 W
+        // sprint and a 186 W hour were on one scale. Compact keeps the claim and drops the
+        // provenance sentence about which durations are stored, which is a deep-dive concern.
+        +(cmp
+           ? ('<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:7px;line-height:1.45">Every spoke is its own scale &mdash; the rim is your all-time best at that duration, the shape is the last '+C.days+' days as a share of it.</div></div>')
+           : ('<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.55">Every spoke is its own scale &mdash; the rim is your all-time best AT THAT DURATION and the filled shape is the last '
+              +C.days+' days as a share of it, so a 782 W sprint never dwarfs a 186 W hour. Ten durations because ten is what the imports actually store; 3m, 15m and 45m are not recorded and are not invented.</div></div>'));
     }
   }
   var drawn=P.axes.filter(function(a){ return a.ratio>0; });
@@ -30646,7 +30661,9 @@ function aiRenderTab_(tab, ded){
   // your own best AT THAT DURATION, so a 782 W sprint cannot dwarf a 265 W hour, which is
   // exactly the flaw that got the four-axis version demoted from a radar to bars.
   var dna=_aiSafe_('OvwDNA', function(){
-    var r=(typeof _dnaRadarHTML_==='function')?_dnaRadarHTML_():'';
+    // COMPACT HERE ONLY. This is the summary card - the deep dive and the DNA tab both call it with
+    // no argument and render exactly what they always did.
+    var r=(typeof _dnaRadarHTML_==='function')?_dnaRadarHTML_({compact:true}):'';
     if(!r) return '';
     return _ovwCard_(_ovwLbl_('Athlete DNA','<span onclick="aiSetTab_(&#39;dna&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">Explore DNA</span>')+r);
   });

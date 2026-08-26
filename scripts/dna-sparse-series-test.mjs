@@ -158,8 +158,14 @@ console.log('\n' + Y + '=== the power-curve radar is on the tab Overview links t
   ok('...through _aiSafe_ like every other section', /_aiSafe_\('DNAradar'/.test(dnaTab));
   ok('...and prints no heading when the radar returns empty', /if\(!_rad\) return;/.test(dnaTab));
   // It is the SAME component Overview uses, not a reimplementation.
-  const calls = (src.match(/_dnaRadarHTML_\(\)/g) || []).length;
+  // The Overview now passes {compact:true} - the chart at 460px was 764px of card and 80% of that
+  // page's whole card region. The claim here is unchanged and is the one that matters: ONE component,
+  // called from three surfaces, never reimplemented. The argument is a size, not a second radar.
+  const calls = (src.match(/_dnaRadarHTML_\((\)|\{)/g) || []).length;
   ok('_dnaRadarHTML_ is called from 3 surfaces, defined once (' + calls + ' calls)', calls >= 3);
+  // And the default must stay what the other two surfaces already render, so compact cannot leak.
+  const rad = src.slice(src.indexOf('function _dnaRadarHTML_('), src.indexOf('function _dnaRadarHTML_(') + 600);
+  ok('...with compact OFF unless asked for', /var cmp=!!\(opts&&opts\.compact\)/.test(rad));
   eq('defined exactly once', (src.match(/function _dnaRadarHTML_\(/g) || []).length, 1);
 }
 
