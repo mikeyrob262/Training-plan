@@ -18119,7 +18119,12 @@ function dataSourceNote_(which){
   var primed=false, n=0;
   try{ primed=!!(typeof STORE_V2_READS!=='undefined' && STORE_V2_READS && typeof _storeV2Rides!=='undefined' && _storeV2Rides);
        if(primed) n=_storeV2Rides.length; }catch(e){}
-  return primed ? ('Rides only, from the uploaded snapshot ('+n.toLocaleString()+' activities) plus rides synced since.') : LEG;
+  // Milestones now scores running as well as cycling, off the run library, so 'rides only' is no
+  // longer true of this page. Named per library rather than as one number, because they are two
+  // different sources with two different horizons.
+  var rn=0; try{ rn=(typeof _storeV2Runs!=='undefined' && _storeV2Runs)?_storeV2Runs.length:0; }catch(e){}
+  return primed ? ('Rides from the uploaded snapshot ('+n.toLocaleString()+' activities) plus rides synced since'
+    +(rn?(', and '+rn.toLocaleString()+' runs from the run library'):'')+'.') : LEG;
 }
 // ==================== corrupt-TSS repair (console-invoked, dry-run by default) ================
 // 40 live rides carry a physically impossible np — 2,556 to 7,413 W, every one with avgPwr 0 — and
@@ -22298,6 +22303,39 @@ function _msCycling_(){
              name:r.name, sportType:(r.sportType||r.type), stravaId:r.stravaId };
   }).filter(function(x){ return x.d && !isNaN(x.d.getTime()) && x.mi>0; }).sort(function(a,b){ return a.d-b.d; });
 }
+// THE RUNNING SIDE OF THE SAME LIBRARY.
+//
+// Milestones was cycling-only, and not by decision - _msCatalog_ was simply built entirely out of
+// _msCycling_, whose filter excludes runs by construction. There was no run branch and no note
+// saying there should not be one; the page also carries Nutrition, Recovery and Gear categories,
+// which are not cycling at all, so it was never conceptually a bike page. It was unfinished.
+//
+// Same row shape as _msCycling_ on purpose: milestoneRates_, milestoneProjections_ and _msCross_ are
+// already generic over {d, mi, sec, elev}, so the running side reuses all three rather than growing
+// a parallel set of engines that can drift.
+//
+// The run library is getRuns(), not st.rides. st.rides mixes every sport and carries the recent tail
+// only; getRuns serves the snapshot, which is where 2,210 runs and sixteen calendar years live.
+function _msRunning_(){
+  var runs=(typeof getRuns==='function')?(getRuns()||[]):[];
+  return runs.map(function(r){
+    if(!r || r.deleted || !r.date) return null;
+    var d=(typeof _ryDate_==='function')?_ryDate_(r.date):new Date(String(r.date).slice(0,10)+'T00:00:00');
+    var mi=parseFloat(r.distance)||0;
+    // Duration by the same rule the run card uses: seconds when stored, otherwise a FORMATTED string
+    // parsed properly. Never a unary plus on it - 0:44:13 through parseFloat is 44,213.
+    var sec=0;
+    if(r.movingSecs!=null && isFinite(+r.movingSecs)) sec=+r.movingSecs;
+    else if(typeof parseDurToMin==='function'){ var m2=parseDurToMin(r.duration||r.time); if(m2>0) sec=m2*60; }
+    var elev=parseFloat((r.elevation!=null)?r.elevation:r.elev)||0;
+    // Identity travels, for the same reason it does on the cycling side - a projection that keeps the
+    // numbers and drops the name renders as an unnamed, unclickable row wherever one is listed.
+    return { d:d, mi:mi, sec:sec, elev:elev, date:String(r.date).slice(0,10),
+             name:r.name, sportType:(r.sportType||r.type||'Run'), stravaId:r.stravaId };
+  }).filter(function(x){ return x && x.d && !isNaN(x.d.getTime()) && x.mi>0; })
+    .sort(function(a,b){ return a.d-b.d; });
+}
+try{ if(typeof window!=='undefined'){ window._msRunning_=_msRunning_; } }catch(e){}
 // PURE + testable. rides = cycling rides sorted asc by date; nowRef = today. Everything is scoped to
 // the trailing 3-year window; nothing reaches earlier, nothing is lifetime.
 function milestonesCompute_(rides, nowRef){
@@ -22387,6 +22425,52 @@ function _msCatalog_(nowRef){
   push('Nutrition','nutdays',nutDays,[10,30,60,100,180,365],function(t){return t+' Days Logged';},'days');
   var restDays=0; try{ var pl=st.plan||{}; Object.keys(pl).forEach(function(k){ var day=pl[k]; if(day&&Array.isArray(day.sessions)&&day.sessions.some(function(s){return s&&!s.deleted&&s.type==='rest';})) restDays++; }); }catch(e){}
   push('Recovery','restdays',restDays,[10,30,60,100,200],function(t){return t+' Rest Days';},'days');
+  // ---- RUNNING. Same engines, run library. -------------------------------------------------------
+  // Tiers are chosen against the real history, never a round number that looks tidy: 2,210 runs,
+  // 16,363 lifetime miles, 498,940 ft of climbing and 2,828 hours across sixteen calendar years. So
+  // the mileage ladder tops out at 50,000 rather than mirroring the bike's 100,000, and the climbing
+  // ladder has a 500k rung that is about a thousand feet away rather than one already long past.
+  var run=(typeof _msRunning_==='function')?_msRunning_():[];
+  var runMi=0, runFt=0, runSec=0;
+  run.forEach(function(r){ runMi+=r.mi; runFt+=r.elev; runSec+=r.sec; });
+  var runHrs=Math.round(runSec/3600);
+  var runAtLeast=function(x){ var c=0; run.forEach(function(r){ if(r.mi>=x) c++; }); return c; };
+  // Best run of consecutive calendar weeks containing at least one run - the streak that HELD, not
+  // the one running now, because a milestone is something earned rather than something in progress.
+  var runStreak=(function(){
+    var weeks={}, best=0, cur=0, prev=null;
+    run.forEach(function(r){
+      var d=new Date(r.d.getTime());
+      d.setDate(d.getDate()-((d.getDay()===0)?6:(d.getDay()-1)));   // Monday of that week
+      d.setHours(0,0,0,0);
+      weeks[d.getTime()]=1;
+    });
+    Object.keys(weeks).map(Number).sort(function(a,b){ return a-b; }).forEach(function(t){
+      if(prev!=null && (t-prev)===604800000) cur++; else cur=1;
+      if(cur>best) best=cur;
+      prev=t;
+    });
+    return best;
+  })();
+  push('Running','runmiles',runMi,[1000,5000,10000,25000,50000],function(t){return num(t)+' Run Miles';},'mi');
+  push('Running','runs',run.length,[100,500,1000,2500,5000],function(t){return num(t)+' Runs';},'runs');
+  push('Running','runft',runFt,[29029,290290,500000,1000000],function(t,i){return ['Everest on Foot','10x Everest on Foot','500k ft on Foot','1 Million ft on Foot'][i]||num(t)+' ft';},'ft');
+  push('Running','runhours',runHrs,[100,500,1000,2500,5000],function(t){return num(t)+' Hours on Feet';},'hrs');
+  // DISTANCE-CLASS BADGES, NAMED FOR WHAT THEY MEASURE. 186 runs clear 13.1 miles and 4 clear 26.2,
+  // but those are RUNS at that distance, not races entered - the app has no record of which were
+  // races. Calling them half marathons and marathons would be a fabrication of exactly the kind this
+  // app keeps removing, so they are named as what was actually measured.
+  push('Running','longrun13',runAtLeast(13.1),[1,5,10,25,50,100],function(t){return t+' Run'+(t>1?'s':'')+' of 13.1+ mi';},'');
+  push('Running','longrun26',runAtLeast(26.2),[1,5,10],function(t){return t+' Run'+(t>1?'s':'')+' of 26.2+ mi';},'');
+  push('Running','runstreak',runStreak,[4,12,26,52,104],function(t){return t+'-Week Run Streak';},'wk');
+  // Run rates ride alongside the cycling ones so the projections engine can price both. Metrics with
+  // no rate here - the distance badges and the streak - get no projected date, which is correct: a
+  // weekly mileage rate cannot tell you when you will next run 26 miles.
+  var runRates=milestoneRates_(run, now, 10);
+  rates.runMilesPerWeek=runRates.milesPerWeek;
+  rates.runFtPerWeek=runRates.ftPerWeek;
+  rates.runsPerWeek=runRates.ridesPerWeek;
+  rates.runHoursPerWeek=runRates.hoursPerWeek;
   var bikeN=((st&&st.bikes)||[]).filter(function(b){return b&&!b.deleted;}).length;
   push('Gear','bikes',bikeN,[1,2,3,5,8],function(t){return t+' Bike'+(t>1?'s':'');},'');
   var proj=milestoneProjections_(defs, rates, now);
@@ -22395,7 +22479,14 @@ function _msCatalog_(nowRef){
   var crossFt=_msCross_(cyc,'ft',[29029,290290,500000,1000000]);
   var crossRd=_msCross_(cyc,'rides',[100,500,1000,2500,5000]);
   var crossCe=_msCross_(cyc,'centuries',[1,5,10,25,50,100]);
-  proj.forEach(function(p){ if(!p.unlocked) return; var m=(p.metric==='miles')?crossMi:(p.metric==='ft')?crossFt:(p.metric==='rides')?crossRd:(p.metric==='centuries')?crossCe:null; if(m && m[p.target]) p.date=m[p.target]; });
+  // _msCross_ is generic over the row shape, so the running rows scan with the same metric names.
+  var crossRunMi=_msCross_(run,'miles',[1000,5000,10000,25000,50000]);
+  var crossRunFt=_msCross_(run,'ft',[29029,290290,500000,1000000]);
+  var crossRunN=_msCross_(run,'rides',[100,500,1000,2500,5000]);
+  proj.forEach(function(p){ if(!p.unlocked) return;
+    var m=(p.metric==='miles')?crossMi:(p.metric==='ft')?crossFt:(p.metric==='rides')?crossRd:(p.metric==='centuries')?crossCe
+      :(p.metric==='runmiles')?crossRunMi:(p.metric==='runft')?crossRunFt:(p.metric==='runs')?crossRunN:null;
+    if(m && m[p.target]) p.date=m[p.target]; });
   // category rollup (unlocked / total)
   var cats={}; proj.forEach(function(p){ var c=cats[p.category]||(cats[p.category]={cat:p.category,total:0,done:0}); c.total++; if(p.unlocked) c.done++; });
   return { now:now, proj:proj, lifetime:{miles:lifeMi,ft:lifeFt,rides:lifeRides,hours:lifeSec/3600,centuries:cent}, cats:cats };
@@ -22570,7 +22661,9 @@ function milestoneRates_(rides, nowRef, weeksBack){
 // with pct/remaining/unlocked/ratePerWeek/projectedDate (null when unlocked or rate<=0 -> not projectable).
 function milestoneProjections_(defs, rates, nowRef){
   var now=nowRef?new Date(nowRef):new Date();
-  var rateFor=function(m){ return m==='miles'?rates.milesPerWeek : m==='ft'?rates.ftPerWeek : m==='rides'?rates.ridesPerWeek : m==='hours'?rates.hoursPerWeek : m==='centuries'?rates.centuriesPerWeek : 0; };
+  var rateFor=function(m){ return m==='miles'?rates.milesPerWeek : m==='ft'?rates.ftPerWeek : m==='rides'?rates.ridesPerWeek : m==='hours'?rates.hoursPerWeek : m==='centuries'?rates.centuriesPerWeek
+    : m==='runmiles'?(rates.runMilesPerWeek||0) : m==='runft'?(rates.runFtPerWeek||0)
+    : m==='runs'?(rates.runsPerWeek||0) : m==='runhours'?(rates.runHoursPerWeek||0) : 0; };
   var key=function(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); };
   return (defs||[]).map(function(d){
     var cur=+d.current||0, tgt=+d.target||0;

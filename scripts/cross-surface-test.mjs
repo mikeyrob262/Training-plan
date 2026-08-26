@@ -222,7 +222,15 @@ check('the unsupported-browser note names the browsers that work', /One-click se
 check('...and still gives the manual path', /Download it and drop it in '\+_zwiftPathHint_\(\)/.test(src), true);
 check('the calendar names its data source', /dataSourceNote_\('legacy'\)/.test(src), true);
 check('Athlete Intelligence names its data source', /dataSourceNote_\('deduped'\)/.test(src), true);
-check('and the note distinguishes the two libraries', /Rides only, from the uploaded snapshot/.test(src) && /All activity types, from your device library/.test(src), true);
+// The 'deduped' wording changed when Milestones began scoring running as well as cycling - "rides
+// only" stopped being true of that page. What this pins is the PROPERTY, not the sentence: the two
+// branches must still say different things, and each must still name the library it counted, because
+// the whole point is that two surfaces reporting different totals for the same month can be read as
+// two questions rather than one of them being broken.
+check('and the note distinguishes the two libraries',
+  /from the uploaded snapshot/.test(src) && /All activity types, from your device library/.test(src), true);
+check('...and the snapshot branch names the run library too, now that Milestones scores runs',
+  /runs from the run library/.test(src), true);
 
 // ── 6. .zwo EXPORT: an interval session must never flatten ────────────────────────────────────
 console.log('\n'+C+'=== 6. a VO2/Threshold export is a STRUCTURE, or it is nothing ==='+X);
