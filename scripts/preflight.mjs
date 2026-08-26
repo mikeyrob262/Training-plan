@@ -1651,6 +1651,21 @@ try {
     fail('max HR derivation regressed - a strap spike or a stale maximum can reach the zones (see above).');
   }
 
+  // STEP 103 - the AI Analysis tab must know what sport it is looking at. Reported on a 6.3-mile run:
+  //           it compared to a 2017 RIDE, quoted watts, and said it could not tell whether the same
+  //           HR was buying more or less watts. The comparison set was filtered on avgPwr - which only
+  //           cycling carries - and the activity line hardcoded power fields. Pins that a run gets pace
+  //           and no watts, that a ride is unchanged, and that neither is offered the other's history.
+  console.log(`${D}. checking the analysis tab reads the activity's sport...${X}`);
+  try {
+    const so = execSync('node scripts/analysis-tab-sport-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the analysis tab is giving an activity the wrong sport metrics (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

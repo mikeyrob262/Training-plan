@@ -46694,26 +46694,91 @@ function renderRideEquipmentTab(body, r, idx){
 function renderRideAnalysisTab(body, r, idx, FTP, BWT){
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:14px 16px';
-  wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">Analyzing this ride against your history&hellip;</div>';
+  var _profEarly=(typeof _actProfile_==='function')?_actProfile_(r):{noun:'ride'};
+  wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">Analyzing this '
+    +String(_profEarly.noun||'activity')+' against your history&hellip;</div>';
   body.appendChild(wrap);
 
-  // Compare this ride to past rides on similar distance, and gather bike
-  // context, so the prompt can produce genuine cross-signal comparisons
-  // rather than restating this ride's own numbers back.
+  // THIS TAB NEVER ASKED WHAT SPORT IT WAS LOOKING AT.
+  //
+  // Reported on a 6.3-mile run in Central Park: the debrief compared it to a 2017 RIDE, quoted watts,
+  // and said "without avg or NP I can't tell you whether the same HR is now buying more or less
+  // watts". Every word of that was the prompt's doing, not the model's.
+  //
+  // The comparison set was filtered on ride.avgPwr being present, which ONLY cycling activities
+  // carry - so for a run it could return nothing but rides. The activity line then hardcoded "avg
+  // power ...W, NP ...W", which for a run resolves to "?", which is exactly why the model reported
+  // missing power. And the whole thing was labelled THIS RIDE regardless.
+  //
+  // _actProfile_ already resolves this correctly and is used by the ride debrief, the coach panel and
+  // the activity header - this surface was simply the one that never called it. Same shape as the
+  // other misses today: the fix existed, it just had not reached here.
+  var _prof=(typeof _actProfile_==='function')?_actProfile_(r):{noun:'ride',cyclingPower:true,foot:false};
+  var _isFoot=!!_prof.foot;                       // run, trail run, hike, walk - paced, never watted
+  var _noun=String(_prof.noun||'activity');
+  var _NOUN=_noun.toUpperCase();
+  // Pace, computed the same way the ride debrief does it: distance over moving time, never a stored
+  // formatted string parsed back into a number.
+  var _paceOf=function(a){
+    if(!a) return null;
+    var mi=parseFloat(a.distance)||0;
+    var secs=(a.movingSecs!=null)?(+a.movingSecs)
+      :((a.duration && typeof parseDurToMin==='function')?(parseDurToMin(a.duration)*60):0);
+    if(!(mi>0 && secs>0)) return null;
+    var s=Math.round(secs/mi);
+    return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2);
+  };
+  // SAME SPORT FAMILY, and a distance window proportional to the activity. A flat 5-mile window is
+  // most of a 6-mile run, so "similar distance" meant almost anything; on a 40-mile ride it is tight.
+  var _sameFamily=function(a){
+    if(typeof _actProfile_!=='function') return true;
+    var p=_actProfile_(a);
+    return (!!p.foot===_isFoot) && (!!p.cyclingPower===!!_prof.cyclingPower);
+  };
+  var _win=Math.max(1.5, (parseFloat(r.distance)||0)*0.25);
   var similarRides = (st.rides||[]).filter(function(ride, i){
-    return i!==idx && !ride.deleted && ride.distance && r.distance && Math.abs(ride.distance-r.distance)<5 && ride.avgPwr;
+    if(i===idx || !ride || ride.deleted || !ride.distance || !r.distance) return false;
+    if(Math.abs(ride.distance-r.distance) >= (_isFoot?_win:5)) return false;
+    if(!_sameFamily(ride)) return false;
+    // Each family needs the metric its comparison is actually made on. Requiring avgPwr was what
+    // restricted this to bikes; a run is compared on pace and heart rate.
+    return _isFoot ? (!!_paceOf(ride) || ride.avgHR>0) : !!ride.avgPwr;
   }).slice(0,5);
 
+  var _thisLine = _isFoot
+    ? ('THIS '+_NOUN+': '+(r.distance||'?')+'mi, pace '+(_paceOf(r)||'?')+' per mile, avg HR '
+       +(r.avgHR||'?')+'bpm, cadence '+(r.cadence||'?')+'spm, TSS '+(r.tss||'?')+', elevation '+_smElev_(r)+'. ')
+    : ('THIS RIDE: '+(r.distance||'?')+'mi, avg power '+(r.avgPwr||'?')+'W, NP '+(r.np||'?')+'W, avg HR '
+       +(r.avgHR||'?')+'bpm, TSS '+(r.tss||'?')+', elevation '+_smElev_(r)+'. ');
+  var _pastLine = 'YOUR SIMILAR PAST '+(_isFoot?(_NOUN+'S'):'RIDES')+' (similar distance): '
+    + (similarRides.length
+        ? similarRides.map(function(sr){
+            return _isFoot
+              ? (sr.date+': '+sr.distance+'mi, pace '+(_paceOf(sr)||'?')+'/mi, avg HR '+(sr.avgHR||'?')+'bpm')
+              : (sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm');
+          }).join('; ')
+        : 'none on file at a comparable distance')
+    + '. ';
+  // THE FENCE. Stated rather than assumed, because the failure was the model reaching for a metric
+  // nobody had told it did not exist here.
+  var _fence = _isFoot
+    ? ('This activity is a '+_noun+'. This app holds NO power data for runs - there is no wattage, no '
+       +'FTP and no NP for this activity or for any of the comparisons above, and none is missing or '
+       +'unavailable: it does not apply. Do NOT mention watts, power, FTP, NP, or intensity factor, '
+       +'and do not say you lack them. Compare on pace, heart rate, cadence and elevation. ')
+    : '';
+
   var prompt = _SM_PERSONA+String.fromCharCode(10)+String.fromCharCode(10)
-    +'Analyze this ride and produce genuine cross-signal insights, not just a restatement of the numbers. '
+    +'Analyze this '+_noun+' and produce genuine cross-signal insights, not just a restatement of the numbers. '
     +'Speak directly to the athlete as "you" — never third person ("the rider", "the athlete"). '
-    +'THIS RIDE: '+(r.distance||'?')+'mi, avg power '+(r.avgPwr||'?')+'W, NP '+(r.np||'?')+'W, avg HR '+(r.avgHR||'?')+'bpm, TSS '+(r.tss||'?')+', elevation '+_smElev_(r)+'. '
-    +'YOUR SIMILAR PAST RIDES (similar distance): '+similarRides.map(function(sr){
-      return sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm';
-    }).join('; ')+'. '
+    +_thisLine
+    +_pastLine
+    +_fence
     +' '+_SM_LEAD+' '
     +'Give 3-4 short bullet-style insights (each starting with "- "), each one connecting two different signals '
-    +'(e.g. comparing this ride to a similar past one, noting if power was higher despite similar effort, or any other genuine pattern in the data provided). '
+    +(_isFoot
+        ? '(e.g. comparing this run to a similar past one, noting if pace was quicker at the same heart rate, or any other genuine pattern in the data provided). '
+        : '(e.g. comparing this ride to a similar past one, noting if power was higher despite similar effort, or any other genuine pattern in the data provided). ')
     +'Be specific and use the actual numbers given. If there is not enough data for a genuine comparison, say so plainly rather than inventing detail.';
 
   // Same settled-verdict rule as the other two coach calls: this analyses a COMPLETED ride, so it
