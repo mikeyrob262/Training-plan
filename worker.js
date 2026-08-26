@@ -19356,54 +19356,26 @@ function aiCardRecords_(){
 }
 
 // ---- Power Zone Distribution (real z1s..z6s only, via the shared dsPowerDist_) ----
-// WHERE RUNNING TIME GOES, the counterpart of the power-zone card beside it.
+// THERE IS NO RUNNING ZONE DISTRIBUTION CARD, AND THAT IS THE FINDING.
 //
-// Not a duplicate of the Run Training HR zones card: that one is a REFERENCE - what the five bands
-// are, in bpm, off your max HR. This is a DISTRIBUTION - how the time actually fell across them.
-// Different question, and the Trends tab is where distribution questions live.
+// One was built to sit beside the power-zone card. It rendered, off r.z1pct..r.z5pct - the same
+// per-run breakdown the drift card reads - weighted by duration, across 1,146 runs. It reported
+// 60.9% of running time at threshold and 18.3% above it: 79% of eleven years of running spent at or
+// beyond threshold, which no one trains through and which contradicts every other reading on the
+// app. So the numbers were checked instead of shipped, and they do not survive it:
 //
-// Built from _runZonePct_, the per-run breakdown the drift card already reads, weighted by each
-// run's duration so a 20-minute jog does not count the same as a two-hour long run. Returns ''
-// when no run carries a breakdown - a five-way split of nothing is not a finding.
-var _RUN_ZONE_COLS=['#3b82f6','#22c55e','#eab308','#f97316','#ef4444'];
-var _RUN_ZONE_LBL=['Z1 Recovery','Z2 Easy','Z3 Steady','Z4 Threshold','Z5 Hard'];
-function aiCardRunZones_(){
-  var runs=[];
-  try{ runs=(typeof _runAll_==='function')?(_runAll_()||[]):[]; }catch(e){ return ''; }
-  if(!runs.length) return '';
-  var acc=[0,0,0,0,0], n=0, secs=0;
-  runs.forEach(function(r){
-    if(!r || r.deleted) return;
-    var z=[+r.z1pct||0,+r.z2pct||0,+r.z3pct||0,+r.z4pct||0,+r.z5pct||0];
-    var sum=z[0]+z[1]+z[2]+z[3]+z[4];
-    if(!(sum>0)) return;
-    // WEIGHTED BY TIME, not by run. movingSecs where stored, else the formatted string parsed
-    // properly - never a unary plus, which is how 0:44:13 becomes 44,213.
-    var t=0;
-    if(r.movingSecs!=null && isFinite(+r.movingSecs)) t=+r.movingSecs;
-    else if(typeof parseDurToMin==='function'){ var m=parseDurToMin(r.time||r.duration); if(m>0) t=m*60; }
-    if(!(t>0 && t<=43200)) t=0;
-    if(!t) return;
-    for(var i=0;i<5;i++) acc[i]+=(z[i]/sum)*t;
-    n++; secs+=t;
-  });
-  if(!n || !(secs>0)) return '';
-  var pct=acc.map(function(v){ return Math.round(v/secs*1000)/10; });
-  var inner=aiLbl_('RUNNING ZONE DISTRIBUTION','<span style="font-size:11px;color:var(--d-dim)">'
-    +n.toLocaleString()+' runs with zone data</span>');
-  inner+='<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:14px;background:var(--d-inset)">';
-  pct.forEach(function(v,i){ if(v>0) inner+='<div style="width:'+v+'%;background:'+_RUN_ZONE_COLS[i]+'"></div>'; });
-  inner+='</div>';
-  pct.forEach(function(v,i){
-    inner+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">'
-      +'<span style="width:9px;height:9px;border-radius:2px;background:'+_RUN_ZONE_COLS[i]+';flex-shrink:0"></span>'
-      +'<span style="flex:1;font-size:12px;color:var(--d-t3)">'+_RUN_ZONE_LBL[i]+'</span>'
-      +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+v+'%</span>'
-    +'</div>';
-  });
-  return aiCard_(inner);
-}
-try{ if(typeof window!=='undefined'){ window.aiCardRunZones_=aiCardRunZones_; } }catch(e){}
+//   THEY DO NOT PARTITION. Three consecutive August runs store 42+29+32+18, 20+37+43+29 and
+//   20+45+45+23 - sums of 121%, 129% and 133%. These were never a five-way split of one run's time,
+//   so normalising them produces a distribution of nothing.
+//
+//   THEY CANNOT BE REBUILT. 19 of 2,238 runs carry a heart-rate stream. The other 1,127 rows with
+//   zone data have nothing to recompute from, which is the same wall the run-zone recalibration hit
+//   when it reached 11 of 1,169 rows.
+//
+// A caveat under the card would not have fixed this: a caveat still puts the number on the page. The
+// honest version of this card needs the underlying field repaired first, and that needs HR streams
+// this library does not have. Written here rather than left as an absence so the next person to
+// notice the gap finds the reason instead of rebuilding it.
 function aiCardZones_(ded){
   var rides=ded||allRidesDeduped_();
   var ftp=parseInt((typeof st!=='undefined'&&st.ftp)||186)||186;
@@ -24806,8 +24778,7 @@ function aiRenderTrends_(ded){
     // there is nothing to show, so a cycling-only stretch collapses back to the old layout.
     _aiSafe_('RunAdherence',      function(){return (typeof aiCardRunAdherence_==='function')?aiCardRunAdherence_():'';}),
     _aiSafe_('StrengthProgress',  function(){return aiCardStrengthProgress_();}),
-    _aiSafe_('Zones',             function(){return aiCardZones_(ded);}),
-    _aiSafe_('RunZones',          function(){return (typeof aiCardRunZones_==='function')?aiCardRunZones_():'';})
+    _aiSafe_('Zones',             function(){return aiCardZones_(ded);})
   ].filter(function(h){return h;});
   var _trMovedHTML=_trMoved.length?('<div class="ai-ov-grid" style="margin-bottom:14px">'+_trMoved.join('')+'</div>'):'';
   if(!story && series.length<2){

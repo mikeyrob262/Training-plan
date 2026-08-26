@@ -51,11 +51,13 @@ const DECLARED = {
   // accessor directly and the run library one level down, which is exactly the shape this guard
   // cannot see. Nothing was built; the record was corrected.
   aiRenderRacing_: 'multisport already - sport picker, _yvyRunPop_ via getRuns, _prSection_ and _rgSection_ mounted; reviewed 2026-08-26',
-  aiRenderTrends_: 'mounts aiCardRunAdherence_ and aiCardRunZones_ beside their cycling '
-    + 'counterparts - reviewed 2026-08-26. The fitness story, drivers and predictions stay all-sport '
-    + 'off fitnessSeries_, which is a KNOWN separate issue: only 175 of 2,371 runs carry a stored '
-    + 'tss, so running load is under-counted in the PMC. Papering over that with a second trend card '
-    + 'would duplicate the Run Training trajectory and hide the real defect.'
+  aiRenderTrends_: 'mounts aiCardRunAdherence_ beside the ride one - reviewed 2026-08-26. Two things '
+    + 'are deliberately NOT here. The fitness story, drivers and predictions stay all-sport off '
+    + 'fitnessSeries_, because only 175 of 2,371 runs carry a stored tss and a second trend card '
+    + 'would duplicate the Run Training trajectory AND hide that. And there is no running zone '
+    + 'distribution: the stored per-run z1..z5 fields sum to 121-133%, so they never partitioned, '
+    + 'and 19 of 2,238 runs carry an HR stream to rebuild them from. See the comment where that card '
+    + 'would have gone.'
 };
 
 // What counts as reading each library.
