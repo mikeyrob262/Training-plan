@@ -45,8 +45,17 @@ const DECLARED = {
   // rather than living in someone memory.
   aiRenderOverview_: 'the page shell; the cards are assembled in aiRenderTab_, which now mounts '
     + '_ovwRunCardHTML_ alongside the cycling ones - closed 2026-08-26',
-  aiRenderRacing_: 'OPEN: You vs. You is cycling-scoped. Unreviewed.',
-  aiRenderTrends_: 'OPEN: Trends is cycling-scoped. Unreviewed.'
+  // REVIEWED 2026-08-26 and it was a FALSE ALARM - the delegation limitation, not a gap. You vs.
+  // You has a sport picker, runs the same _yvyVM_ engine over _yvyRunPop_ (which reads getRuns), and
+  // mounts the PR board and the running growth chart as run-only exhibits. It reads the ride
+  // accessor directly and the run library one level down, which is exactly the shape this guard
+  // cannot see. Nothing was built; the record was corrected.
+  aiRenderRacing_: 'multisport already - sport picker, _yvyRunPop_ via getRuns, _prSection_ and _rgSection_ mounted; reviewed 2026-08-26',
+  aiRenderTrends_: 'mounts aiCardRunAdherence_ and aiCardRunZones_ beside their cycling '
+    + 'counterparts - reviewed 2026-08-26. The fitness story, drivers and predictions stay all-sport '
+    + 'off fitnessSeries_, which is a KNOWN separate issue: only 175 of 2,371 runs carry a stored '
+    + 'tss, so running load is under-counted in the PMC. Papering over that with a second trend card '
+    + 'would duplicate the Run Training trajectory and hide the real defect.'
 };
 
 // What counts as reading each library.
