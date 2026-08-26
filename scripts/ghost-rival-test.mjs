@@ -21,7 +21,13 @@ const NL = String.fromCharCode(10);
 const THIS_YEAR = String(new Date().getFullYear());
 const st = { rides: [], fitSeries: [] };
 let SERIES = [];
-const M = new Function('st', 'SERIES', asServed(
+const RUNS = [];        // {date, mi} rows the _msRunning_ stub serves
+const RUNSERIES = [];   // {date, ctl} rows the _rtSeries_ stub serves
+const M = new Function('st', 'SERIES', 'RUNS', 'RUNSERIES', asServed(
+  'function _msRunning_(){ return RUNS.map(function(r){ return {date:r.date, mi:r.mi}; }); }' + NL +
+  'function _rtSeries_(){ return RUNSERIES.slice(); }' + NL +
+  exFn('_ghostRunMiles_') +
+  exFn('_ghostRunCtl_') +
   // Ghost Rival counts from allRidesDeduped_, not st.rides - reading the raw library
   // double-counted a FIT import and its Strava twin and put 2025 at 7,050 miles against
   // Strava's own 5,484. The harness supplies a dedupe so the fixtures exercise the real path.
@@ -32,7 +38,7 @@ const M = new Function('st', 'SERIES', asServed(
   exVar('GHOST_MIN_MILES') +
   exFn('_ghostRides_') + exFn('_ghostDoy_') + exFn('ghostYears_') + exFn('_ghostMiles_') + exFn('_ghostCtl_') + exFn('ghostRival_') +
   ';return { _ghostDoy_, ghostYears_, _ghostMiles_, _ghostCtl_, ghostRival_, GHOST_MIN_MILES };'
-))(st, SERIES);
+))(st, SERIES, RUNS, RUNSERIES);
 
 const R = '\x1b[31m', G = '\x1b[32m', Y = '\x1b[33m', X = '\x1b[0m';
 let fails = 0;
@@ -158,6 +164,41 @@ console.log('\n' + Y + '=== the race itself ===' + X);
   eq('no CTL for either rider -> null, not zero', g.ctl.delta, null);
   ok('...and the values themselves are null', g.ctl.me === null && g.ctl.rival === null);
 }
+
+console.log('');
+console.log(Y + '=== the running race is drawn from the RUN library, not the ride one ===' + X);
+{
+  // Ghost Rival raced cycling only on a page meant to represent the whole athlete - the same gap
+  // found on Milestones and the Overview. This pins that running is actually raced, that it is raced
+  // against RUNNING fitness rather than the all-sport figure, and that a year with no running is not
+  // dressed up as a contest.
+  st.rides.length = 0; SERIES.length = 0; RUNS.length = 0; RUNSERIES.length = 0;
+  const Y0 = THIS_YEAR, Y1 = String(+THIS_YEAR - 1);
+  // Enough cycling in both years that they qualify as rival seasons at all.
+  for (let i = 1; i <= 60; i++) {
+    st.rides.push({ date: Y0 + '-01-' + String((i % 28) + 1).padStart(2, '0'), distance: 30, sportType: 'Ride' });
+    st.rides.push({ date: Y1 + '-01-' + String((i % 28) + 1).padStart(2, '0'), distance: 30, sportType: 'Ride' });
+  }
+  RUNS.push({ date: Y0 + '-01-05', mi: 12 }, { date: Y0 + '-01-06', mi: 8 });
+  RUNS.push({ date: Y1 + '-01-05', mi: 4 });
+  RUNSERIES.push({ date: Y0 + '-01-06', ctl: 31.5 }, { date: Y1 + '-01-06', ctl: 22.0 });
+  const g = M.ghostRival_(Y1);
+  ok('run miles are raced', !!g && g.runMiles && g.runMiles.me === 20 && g.runMiles.rival === 4);
+  ok('...with the lead stated', g.runMiles.delta === 16);
+  ok('running fitness is raced, and it is the RUNNING series', g.runCtl && g.runCtl.me === 31.5 && g.runCtl.rival === 22);
+  ok('...and is not the all-sport CTL', g.runCtl.me !== g.ctl.me);
+  ok('the running series are returned for the chart', !!g.series.meRunMiles && !!g.series.rivalRunCtl);
+  // NEGATIVE CONTROL: no running in either year must not draw an empty race.
+  RUNS.length = 0; RUNSERIES.length = 0;
+  const g2 = M.ghostRival_(Y1);
+  ok('NEG: with no running at all, both sides are zero rather than invented', g2.runMiles.me === 0 && g2.runMiles.rival === 0);
+  ok('NEG: and running CTL is null, not zero', g2.runCtl.me == null && g2.runCtl.rival == null);
+  const page = exFn('aiRenderGhost_');
+  ok('the page only draws the run race when there is one', /_rivalRan \|\| _meRan/.test(page));
+  ok('...and says so when there is not', /no run race to draw/.test(page));
+  ok('the footnote names the running series as running-only', /counts running only/.test(page));
+}
+
 
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'ghost rival: all checks passed' + X));
 process.exit(fails ? 1 : 0);

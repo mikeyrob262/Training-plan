@@ -1682,6 +1682,21 @@ try {
     fail('the interval matcher is grading a split effort as a missed one (see above).');
   }
 
+  // STEP 105 - a surface that counts both sports must read both sports. Milestones cited 2,210 runs
+  //           and scored only cycling; the Overview reads the run library once, for its header, and
+  //           never again. Neither was a decision - both were unfinished, and nothing was watching.
+  //           Declaration-based on purpose: correctly-single-sport cannot be told from never-finished
+  //           by reading code, so a NEW single-sport surface fails until someone writes down which.
+  console.log(`${D}. checking every surface reads both sports, or declares why not...${X}`);
+  try {
+    const so = execSync('node scripts/sport-parity-guard.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a render surface covers one sport and has not said why (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

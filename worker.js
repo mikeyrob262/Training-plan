@@ -24528,6 +24528,49 @@ function _ghostCtl_(year){
 }
 // The race as of today. Returns nulls rather than zeros where a rider has no reading, so a missing
 // value is never rendered as a defeat.
+// THE RUNNING SIDE OF THE GHOST. Same two questions, same two years, the other library.
+//
+// Ghost Rival raced cycling only - miles from the ride library and CTL from the all-sport fitness
+// series - on a page that is supposed to represent the whole athlete. Runs were absent, exactly as
+// they were on Milestones and the Overview.
+//
+// Run miles come from _msRunning_, which is already the run library projected into {d, mi} rows and
+// is what the run milestones are scored from - one source, so the two pages cannot disagree about
+// how far he ran in a year.
+function _ghostRunMiles_(year){
+  var out=new Array(367), i;
+  for(i=0;i<367;i++) out[i]=0;
+  try{
+    ((typeof _msRunning_==='function')?_msRunning_():[]).forEach(function(r){
+      if(!r || !r.date) return;
+      if(String(r.date).slice(0,4)!==String(year)) return;
+      var doy=_ghostDoy_(r.date); if(!doy) return;
+      out[doy]+=(parseFloat(r.mi)||0);
+    });
+  }catch(e){}
+  var run=0;
+  for(i=1;i<367;i++){ run+=out[i]; out[i]=Math.round(run); }
+  return out;
+}
+// RUNNING fitness, not the all-sport figure. _rtSeries_ is the Run Training page's own CTL - scored
+// from heart rate against LTHR, running only - so this races running fitness against running
+// fitness. Racing a run year against an all-sport CTL would be comparing two different quantities
+// and calling the difference progress.
+function _ghostRunCtl_(year){
+  var out=new Array(367), i;
+  for(i=0;i<367;i++) out[i]=null;
+  var ser=[];
+  try{ ser=(typeof _rtSeries_==='function')?(_rtSeries_()||[]):[]; }catch(e){ return out; }
+  ser.forEach(function(pt){
+    if(!pt || !pt.date) return;
+    if(String(pt.date).slice(0,4)!==String(year)) return;
+    var doy=_ghostDoy_(pt.date); if(!doy) return;
+    if(pt.ctl!=null && isFinite(pt.ctl)) out[doy]=Math.round(pt.ctl*10)/10;
+  });
+  var last=null;
+  for(i=1;i<367;i++){ if(out[i]==null) out[i]=last; else last=out[i]; }
+  return out;
+}
 function ghostRival_(rivalYear){
   var years=ghostYears_();
   if(!years.length) return null;
@@ -24548,6 +24591,14 @@ function ghostRival_(rivalYear){
   var doy=_ghostDoy_(_gt);
   if(!doy) return null;
   var meM=_ghostMiles_(nowY), riM=_ghostMiles_(rival);
+  // Guarded, like every other cross-block read here: this function is served in a different
+  // script block from the run helpers, and the test harness loads it in isolation. A missing
+  // helper must mean 'no running race', never a thrown page.
+  var _empty=function(){ var a=new Array(367); for(var i=0;i<367;i++) a[i]=0; return a; };
+  var _rnM=(typeof _ghostRunMiles_==='function')?_ghostRunMiles_(nowY):_empty();
+  var _riRnM=(typeof _ghostRunMiles_==='function')?_ghostRunMiles_(rival):_empty();
+  var _rnC=(typeof _ghostRunCtl_==='function')?_ghostRunCtl_(nowY):_empty();
+  var _riRnC=(typeof _ghostRunCtl_==='function')?_ghostRunCtl_(rival):_empty();
   var meC=_ghostCtl_(nowY), riC=_ghostCtl_(rival);
   var mMi=meM[doy], rMi=riM[doy];
   var mCtl=meC[doy], rCtl=riC[doy];
@@ -24555,8 +24606,13 @@ function ghostRival_(rivalYear){
     rivalYear:rival, meYear:nowY, doy:doy,
     availableYears:years,
     miles:{ me:mMi, rival:rMi, delta:(mMi!=null&&rMi!=null)?(mMi-rMi):null },
+    runMiles:{ me:_rnM[doy], rival:_riRnM[doy],
+               delta:(_rnM[doy]!=null&&_riRnM[doy]!=null)?(_rnM[doy]-_riRnM[doy]):null },
+    runCtl:{ me:_rnC[doy], rival:_riRnC[doy],
+             delta:(_rnC[doy]!=null&&_riRnC[doy]!=null)?(Math.round((_rnC[doy]-_riRnC[doy])*10)/10):null },
     ctl:{ me:mCtl, rival:rCtl, delta:(mCtl!=null&&rCtl!=null)?(Math.round((mCtl-rCtl)*10)/10):null },
-    series:{ meMiles:meM, rivalMiles:riM, meCtl:meC, rivalCtl:riC }
+    series:{ meMiles:meM, rivalMiles:riM, meCtl:meC, rivalCtl:riC,
+             meRunMiles:_rnM, rivalRunMiles:_riRnM, meRunCtl:_rnC, rivalRunCtl:_riRnC }
   };
 }
 function ghostSetRival_(y){ try{ st.ghostRival=String(y); sv(); }catch(e){} try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
@@ -24642,12 +24698,31 @@ function aiRenderGhost_(){
       +'<span style="margin-left:auto">to day '+g.doy+' of the season</span></div>';
   };
 
-  H+=race('Miles this season', g.miles.me, g.miles.rival, ' mi', false)+chart(g.series.meMiles, g.series.rivalMiles)+'</div>';
-  H+=race('Fitness (CTL) today', g.ctl.me, g.ctl.rival, '', true)+chart(g.series.meCtl, g.series.rivalCtl)+'</div>';
+  H+=race('Ride miles this season', g.miles.me, g.miles.rival, ' mi', false)+chart(g.series.meMiles, g.series.rivalMiles)+'</div>';
+  H+=race('Cycling fitness (CTL) today', g.ctl.me, g.ctl.rival, '', true)+chart(g.series.meCtl, g.series.rivalCtl)+'</div>';
+  // THE RUNNING HALF. Same two questions against the same rival year, off the run library and the
+  // Run Training page's own running CTL. Drawn only when the rival year actually ran - racing a
+  // running year against a year with no running is not a contest, and an empty pair of lines
+  // would read as a collapse rather than as an absence.
+  var _rivalRan=(g.runMiles && g.runMiles.rival>0), _meRan=(g.runMiles && g.runMiles.me>0);
+  if(_rivalRan || _meRan){
+    H+=race('Run miles this season', g.runMiles.me, g.runMiles.rival, ' mi', false)
+      +chart(g.series.meRunMiles, g.series.rivalRunMiles)+'</div>';
+    if(g.runCtl && (g.runCtl.me!=null || g.runCtl.rival!=null)){
+      H+=race('Running fitness (CTL) today', g.runCtl.me, g.runCtl.rival, '', true)
+        +chart(g.series.meRunCtl, g.series.rivalRunCtl)+'</div>';
+    }
+  } else {
+    H+='<div style="font-size:11px;color:var(--d-dim);margin-top:6px;line-height:1.5">'
+      +'No running in either '+g.meYear+' or '+g.rivalYear+', so there is no run race to draw.</div>';
+  }
 
   H+='<div style="font-size:10.5px;color:var(--d-dim);line-height:1.55;margin-top:6px">'
-    +'Both riders measured the same way on the same day of the year &mdash; miles from the ride '
-    +'library, CTL from the one fitness series. There is no FTP axis: the FTP log holds seven '
+    +'Both years measured the same way on the same day of the year &mdash; ride miles from the ride '
+    +'library and cycling CTL from the one fitness series; run miles from the run library and '
+    +'running CTL from the running series, which is scored from heart rate against your LTHR and '
+    +'counts running only. The two fitness numbers are different quantities and are never mixed. '
+    +'There is no FTP axis: the FTP log holds seven '
     +'entries and all of them fall inside a single ten-day window, which is data entry, not a '
     +'trajectory to race.</div>';
   return H+'</div>';
